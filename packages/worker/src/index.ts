@@ -46,12 +46,23 @@ export default {
     const html = (body: string) =>
       new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 
-    // Local development — path-based routing
+    // Local development — path-based routing (no subdomains on localhost)
     if (hostname === "localhost" || hostname === "127.0.0.1") {
       const apiPrefixes = ["/publish", "/finalize", "/sites", "/health"];
       if (apiPrefixes.some((p) => path === p || path.startsWith(p + "/"))) {
         return api.fetch(request, env, ctx);
       }
+
+      // /s/:slug — view a published site locally
+      const siteMatch = path.match(/^\/s\/([a-z0-9][a-z0-9-]+[a-z0-9])(\/.*)?$/);
+      if (siteMatch) {
+        const localSlug = siteMatch[1];
+        // Rewrite the URL so serveSite sees the correct sub-path
+        const subPath = siteMatch[2] ?? "/";
+        const rewritten = new Request(new URL(subPath, request.url), request);
+        return serveSite(rewritten, env, localSlug);
+      }
+
       return html(landingPageHtml(env.DOMAIN));
     }
 

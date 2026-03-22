@@ -20,6 +20,7 @@ compatibility_flags = ["nodejs_compat"]
 [[kv_namespaces]]
 binding = "SITES_KV"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# Local dev uses .wrangler/state — no remote ID needed
 
 [[r2_buckets]]
 binding = "CONTENT"

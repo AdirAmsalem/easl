@@ -6,6 +6,25 @@ import { getContentType } from "../lib/mime";
 
 const app = new Hono<{ Bindings: Env }>();
 
+/** Build site URL — uses /s/:slug on localhost, subdomain in production */
+function siteUrl(c: { req: { url: string }; env: Env }, slug: string): string {
+  const host = new URL(c.req.url).hostname;
+  if (host === "localhost" || host === "127.0.0.1") {
+    const port = new URL(c.req.url).port;
+    return `http://${host}${port ? `:${port}` : ""}/s/${slug}`;
+  }
+  return `https://${slug}.${c.env.DOMAIN}`;
+}
+
+/** Build API URL — uses localhost origin or production API_HOST */
+function apiUrl(c: { req: { url: string }; env: Env }, path: string): string {
+  const origin = new URL(c.req.url);
+  if (origin.hostname === "localhost" || origin.hostname === "127.0.0.1") {
+    return `${origin.origin}${path}`;
+  }
+  return `https://${c.env.API_HOST}${path}`;
+}
+
 const ANON_MAX_FILES = 50;
 const ANON_MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50 MB per site total
 const ANON_MAX_SITE_SIZE = 200 * 1024 * 1024; // 200 MB per site
@@ -96,12 +115,12 @@ app.post("/publish", async (c) => {
 
   return c.json({
     slug,
-    url: `https://${slug}.${c.env.DOMAIN}`,
+    url: siteUrl(c, slug),
     claimToken,
     upload: {
       versionId,
       uploads,
-      finalizeUrl: `https://${c.env.API_HOST}/finalize/${slug}`,
+      finalizeUrl: apiUrl(c, `/finalize/${slug}`),
       expiresInSeconds: UPLOAD_EXPIRY_SECONDS,
     },
     expiresAt,
@@ -185,15 +204,15 @@ app.post("/publish/inline", async (c) => {
     expirationTtl: ANON_TTL_SECONDS + 3600,
   });
 
-  const siteUrl = `https://${slug}.${c.env.DOMAIN}`;
+  const url = siteUrl(c, slug);
   return c.json({
-    url: siteUrl,
+    url,
     slug,
     claimToken,
     ogImage: null,
-    qrCode: `https://${slug}.${c.env.DOMAIN}/qr.svg`,
-    embed: `<iframe src="${siteUrl}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
-    shareText: `${body.title || fileName}: ${siteUrl}`,
+    qrCode: `${url}/qr.svg`,
+    embed: `<iframe src="${url}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
+    shareText: `${body.title || fileName}: ${url}`,
     expiresAt,
     anonymous: true,
   }, 201);
@@ -250,14 +269,14 @@ app.post("/finalize/:slug", async (c) => {
       : undefined,
   });
 
-  const siteUrl = `https://${slug}.${c.env.DOMAIN}`;
+  const url = siteUrl(c, slug);
   return c.json({
-    url: siteUrl,
+    url,
     slug,
     ogImage: null,
-    qrCode: `https://${slug}.${c.env.DOMAIN}/qr.svg`,
-    embed: `<iframe src="${siteUrl}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
-    shareText: `Check out: ${siteUrl}`,
+    qrCode: `${url}/qr.svg`,
+    embed: `<iframe src="${url}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
+    shareText: `Check out: ${url}`,
   });
 });
 
