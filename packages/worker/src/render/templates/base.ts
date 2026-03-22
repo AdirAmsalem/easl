@@ -218,7 +218,7 @@ const VIEWER_JS: Record<ViewerType, string> = {
           return '<pre><code class="language-' + (lang||'') + '">' + esc(code.trim()) + '</code></pre>';
         });
         // Inline code
-        html = html.replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+        html = html.replace(/\`([^\`]+)\`/g, function(_, c) { return '<code>' + esc(c) + '</code>'; });
         // Headers
         html = html.replace(/^######\\s+(.+)$/gm, '<h6>$1</h6>');
         html = html.replace(/^#####\\s+(.+)$/gm, '<h5>$1</h5>');
@@ -230,9 +230,9 @@ const VIEWER_JS: Record<ViewerType, string> = {
         html = html.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');
         html = html.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
         html = html.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
-        // Links & images
-        html = html.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<img src="$2" alt="$1">');
-        html = html.replace(/\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>');
+        // Links & images (escape href/src to prevent javascript: injection)
+        html = html.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, function(_, alt, src) { return '<img src="' + esc(src) + '" alt="' + esc(alt) + '">'; });
+        html = html.replace(/\\[([^\\]]*)\\]\\(([^)]+)\\)/g, function(_, text, href) { return '<a href="' + esc(href) + '">' + esc(text) + '</a>'; });
         // Blockquotes
         html = html.replace(/^>\\s+(.+)$/gm, '<blockquote><p>$1</p></blockquote>');
         // Horizontal rule
@@ -314,7 +314,21 @@ const VIEWER_JS: Record<ViewerType, string> = {
       const container = document.getElementById('tc-viewer');
       const wrap = document.createElement('div');
       wrap.className = 'tc-svg-viewer';
-      wrap.innerHTML = raw;
+      // Sanitize SVG: parse in inert context, strip scripts and event handlers
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(raw, 'image/svg+xml');
+      const svg = doc.documentElement;
+      function sanitize(el) {
+        if (el.tagName === 'script' || el.tagName === 'SCRIPT') { el.remove(); return; }
+        for (const attr of [...el.attributes]) {
+          if (attr.name.startsWith('on') || attr.name === 'href' && attr.value.trim().toLowerCase().startsWith('javascript:')) {
+            el.removeAttribute(attr.name);
+          }
+        }
+        for (const child of [...el.children]) sanitize(child);
+      }
+      sanitize(svg);
+      wrap.appendChild(document.importNode(svg, true));
       container.appendChild(wrap);
     })();
   `,

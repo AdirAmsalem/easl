@@ -7,7 +7,7 @@ import { getContentType } from "../lib/mime";
 const app = new Hono<{ Bindings: Env }>();
 
 const ANON_MAX_FILES = 50;
-const ANON_MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50 MB per file
+const ANON_MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50 MB per site total
 const ANON_MAX_SITE_SIZE = 200 * 1024 * 1024; // 200 MB per site
 const ANON_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const UPLOAD_EXPIRY_SECONDS = 600; // 10 minutes
@@ -53,11 +53,18 @@ app.post("/publish", async (c) => {
   const ttlSeconds = body.ttl ?? ANON_TTL_SECONDS;
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
-  // Insert site
-  await c.env.DB.prepare(
-    `INSERT OR FAIL INTO sites (slug, title, template, claim_token, is_anonymous, created_at, expires_at, file_count, total_bytes)
-     VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)`
-  ).bind(slug, body.title ?? null, body.template ?? null, claimToken, now, expiresAt, body.files.length, totalSize).run();
+  // Insert site (INSERT OR FAIL catches race condition on custom slugs)
+  try {
+    await c.env.DB.prepare(
+      `INSERT OR FAIL INTO sites (slug, title, template, claim_token, is_anonymous, created_at, expires_at, file_count, total_bytes)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)`
+    ).bind(slug, body.title ?? null, body.template ?? null, claimToken, now, expiresAt, body.files.length, totalSize).run();
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
+      return c.json({ error: "Slug already taken" }, 409);
+    }
+    throw e;
+  }
 
   // Insert version
   const filesJson = JSON.stringify(body.files.map((f) => ({
