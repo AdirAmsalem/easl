@@ -233,6 +233,22 @@ const VIEWER_JS: Record<ViewerType, string> = {
         // Links & images (escape href/src to prevent javascript: injection)
         html = html.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, function(_, alt, src) { return '<img src="' + esc(src) + '" alt="' + esc(alt) + '">'; });
         html = html.replace(/\\[([^\\]]*)\\]\\(([^)]+)\\)/g, function(_, text, href) { return '<a href="' + esc(href) + '">' + esc(text) + '</a>'; });
+        // Tables
+        html = html.replace(/(^\\|.+\\|\\n)(\\|[\\s:|-]+\\|\\n)((?:\\|.+\\|\\n?)+)/gm, function(match, headerLine, sepLine, bodyLines) {
+          var cols = headerLine.trim().replace(/^\\||\\|$/g,'').split('|').map(function(c){return c.trim();});
+          var aligns = sepLine.trim().replace(/^\\||\\|$/g,'').split('|').map(function(c){
+            c = c.trim();
+            if (c.startsWith(':') && c.endsWith(':')) return 'center';
+            if (c.endsWith(':')) return 'right';
+            return 'left';
+          });
+          var thead = '<thead><tr>' + cols.map(function(c,i){return '<th style="text-align:'+aligns[i]+'">'+esc(c)+'</th>';}).join('') + '</tr></thead>';
+          var rows = bodyLines.trim().split('\\n').map(function(line){
+            var cells = line.trim().replace(/^\\||\\|$/g,'').split('|').map(function(c){return c.trim();});
+            return '<tr>' + cells.map(function(c,i){return '<td style="text-align:'+(aligns[i]||'left')+'">'+esc(c)+'</td>';}).join('') + '</tr>';
+          }).join('');
+          return '<table>' + thead + '<tbody>' + rows + '</tbody></table>';
+        });
         // Blockquotes
         html = html.replace(/^>\\s+(.+)$/gm, '<blockquote><p>$1</p></blockquote>');
         // Horizontal rule
@@ -268,13 +284,13 @@ const VIEWER_JS: Record<ViewerType, string> = {
           if (val.length === 0) return '<span class="tc-json-bracket">[]</span>';
           const id = 'n' + Math.random().toString(36).slice(2,8);
           const items = val.map((v, i) => '<div style="padding-left:1.5rem">' + renderJson(v, depth+1) + (i < val.length-1 ? ',' : '') + '</div>').join('');
-          return '<span class="tc-json-toggle" onclick="this.parentElement.classList.toggle(\'tc-json-collapsed\')"><span class="tc-json-bracket">[</span></span><span class="tc-json-preview">[' + val.length + ' items]</span><div class="tc-json-children">' + items + '</div><span class="tc-json-bracket">]</span>';
+          return '<span class="tc-json-toggle" onclick="this.parentElement.classList.toggle(&quot;tc-json-collapsed&quot;)"><span class="tc-json-bracket">[</span></span><span class="tc-json-preview">[' + val.length + ' items]</span><div class="tc-json-children">' + items + '</div><span class="tc-json-bracket">]</span>';
         }
         if (typeof val === 'object') {
           const keys = Object.keys(val);
           if (keys.length === 0) return '<span class="tc-json-bracket">{}</span>';
           const entries = keys.map((k, i) => '<div style="padding-left:1.5rem"><span class="tc-json-key">"' + esc(k) + '"</span>: ' + renderJson(val[k], depth+1) + (i < keys.length-1 ? ',' : '') + '</div>').join('');
-          return '<span class="tc-json-toggle" onclick="this.parentElement.classList.toggle(\'tc-json-collapsed\')"><span class="tc-json-bracket">{</span></span><span class="tc-json-preview">{' + keys.length + ' keys}</span><div class="tc-json-children">' + entries + '</div><span class="tc-json-bracket">}</span>';
+          return '<span class="tc-json-toggle" onclick="this.parentElement.classList.toggle(&quot;tc-json-collapsed&quot;)"><span class="tc-json-bracket">{</span></span><span class="tc-json-preview">{' + keys.length + ' keys}</span><div class="tc-json-children">' + entries + '</div><span class="tc-json-bracket">}</span>';
         }
         return String(val);
       }
