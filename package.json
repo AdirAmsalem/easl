@@ -1,0 +1,19 @@
+{
+  "name": "tinycloud",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent-native static hosting with beautiful auto-rendering",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "deploy": "turbo deploy"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.20"
+  }
+}

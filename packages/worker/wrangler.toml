@@ -1,0 +1,40 @@
+# tinycloud — Agent-native hosting with beautiful auto-rendering
+name = "tinycloud"
+main = "src/index.ts"
+compatibility_date = "2026-02-21"
+compatibility_flags = ["nodejs_compat"]
+
+# Uncomment when deploying:
+# [[routes]]
+# pattern = "api.tinycloud.dev/*"
+# zone_name = "tinycloud.dev"
+#
+# [[routes]]
+# pattern = "*.tinycloud.dev/*"
+# zone_name = "tinycloud.dev"
+#
+# [[routes]]
+# pattern = "tinycloud.dev/*"
+# zone_name = "tinycloud.dev"
+
+[[kv_namespaces]]
+binding = "SITES_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[[r2_buckets]]
+binding = "CONTENT"
+bucket_name = "tinycloud-content"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tinycloud-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+DOMAIN = "tinycloud.dev"
+API_HOST = "api.tinycloud.dev"
+
+# Secrets (set via `wrangler secret put <NAME>`):
+# R2_ACCESS_KEY_ID
+# R2_SECRET_ACCESS_KEY
+# R2_ACCOUNT_ID
