@@ -21,11 +21,8 @@ Test full publish flow (POST /publish → PUT file → POST /finalize → GET re
 - **Effort:** M (human: ~1 day / CC: ~45 min)
 - **Depends on:** Unit tests (in scope for current work)
 
-### Replace regex markdown renderer with marked.js
-Current markdown viewer uses hand-rolled regex for headings, bold, italic, links, lists, code blocks, and blockquotes. This misses nested formatting, tables, footnotes, task lists, and edge cases (e.g. bold inside list items). Replace with marked.js (~40KB, loaded from CDN like Mermaid) for full GFM support including tables and task lists.
-- **Effort:** S (human: ~2 hours / CC: ~15 min)
-- **Depends on:** Nothing
-- **Context:** Current regex renderer in `packages/worker/src/render/templates/base.ts` VIEWER_JS['markdown']. marked.js is the standard choice — small, fast, GFM-compatible. Load from CDN (`cdn.jsdelivr.net/npm/marked/marked.min.js`) with same pattern as Mermaid. Keep regex as inline fallback if CDN fails.
+### ~~Replace regex markdown renderer with marked.js~~ DONE
+Replaced with marked.js v15 from CDN. Regex fallback kept for offline/CDN-unavailable.
 
 ## P3 — Nice to Have
 

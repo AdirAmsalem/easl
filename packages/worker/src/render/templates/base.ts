@@ -207,56 +207,43 @@ const VIEWER_JS: Record<ViewerType, string> = {
   `,
   markdown: `
     (function() {
-      const raw = document.getElementById('tc-data').textContent;
-      const container = document.getElementById('tc-viewer');
-      container.innerHTML = '<div class="tc-prose">' + renderMarkdown(raw) + '</div>';
+      var raw = document.getElementById('tc-data').textContent;
+      var container = document.getElementById('tc-viewer');
 
-      function renderMarkdown(md) {
-        let html = md;
-        // Code blocks
+      // Try loading marked.js from CDN for full GFM support
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/marked@15/marked.min.js';
+      script.onload = function() {
+        marked.setOptions({ gfm: true, breaks: false });
+        container.innerHTML = '<div class="tc-prose">' + marked.parse(raw) + '</div>';
+      };
+      script.onerror = function() {
+        // Fallback: basic regex renderer if CDN is unavailable
+        container.innerHTML = '<div class="tc-prose">' + fallbackRender(raw) + '</div>';
+      };
+      document.head.appendChild(script);
+
+      function fallbackRender(md) {
+        var html = md;
         html = html.replace(/\`\`\`(\\w*)?\\n([\\s\\S]*?)\`\`\`/g, function(_, lang, code) {
-          return '<pre><code class="language-' + (lang||'') + '">' + esc(code.trim()) + '</code></pre>';
+          return '<pre><code>' + esc(code.trim()) + '</code></pre>';
         });
-        // Inline code
         html = html.replace(/\`([^\`]+)\`/g, function(_, c) { return '<code>' + esc(c) + '</code>'; });
-        // Headers
         html = html.replace(/^######\\s+(.+)$/gm, '<h6>$1</h6>');
         html = html.replace(/^#####\\s+(.+)$/gm, '<h5>$1</h5>');
         html = html.replace(/^####\\s+(.+)$/gm, '<h4>$1</h4>');
         html = html.replace(/^###\\s+(.+)$/gm, '<h3>$1</h3>');
         html = html.replace(/^##\\s+(.+)$/gm, '<h2>$1</h2>');
         html = html.replace(/^#\\s+(.+)$/gm, '<h1>$1</h1>');
-        // Bold & italic
         html = html.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');
         html = html.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
         html = html.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
-        // Links & images (escape href/src to prevent javascript: injection)
         html = html.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, function(_, alt, src) { return '<img src="' + esc(src) + '" alt="' + esc(alt) + '">'; });
         html = html.replace(/\\[([^\\]]*)\\]\\(([^)]+)\\)/g, function(_, text, href) { return '<a href="' + esc(href) + '">' + esc(text) + '</a>'; });
-        // Tables
-        html = html.replace(/(^\\|.+\\|\\n)(\\|[\\s:|-]+\\|\\n)((?:\\|.+\\|\\n?)+)/gm, function(match, headerLine, sepLine, bodyLines) {
-          var cols = headerLine.trim().replace(/^\\||\\|$/g,'').split('|').map(function(c){return c.trim();});
-          var aligns = sepLine.trim().replace(/^\\||\\|$/g,'').split('|').map(function(c){
-            c = c.trim();
-            if (c.startsWith(':') && c.endsWith(':')) return 'center';
-            if (c.endsWith(':')) return 'right';
-            return 'left';
-          });
-          var thead = '<thead><tr>' + cols.map(function(c,i){return '<th style="text-align:'+aligns[i]+'">'+esc(c)+'</th>';}).join('') + '</tr></thead>';
-          var rows = bodyLines.trim().split('\\n').map(function(line){
-            var cells = line.trim().replace(/^\\||\\|$/g,'').split('|').map(function(c){return c.trim();});
-            return '<tr>' + cells.map(function(c,i){return '<td style="text-align:'+(aligns[i]||'left')+'">'+esc(c)+'</td>';}).join('') + '</tr>';
-          }).join('');
-          return '<table>' + thead + '<tbody>' + rows + '</tbody></table>';
-        });
-        // Blockquotes
         html = html.replace(/^>\\s+(.+)$/gm, '<blockquote><p>$1</p></blockquote>');
-        // Horizontal rule
         html = html.replace(/^---$/gm, '<hr>');
-        // Unordered lists
         html = html.replace(/^[\\-\\*]\\s+(.+)$/gm, '<li>$1</li>');
         html = html.replace(/(<li>.*<\\/li>\\n?)+/g, '<ul>$&</ul>');
-        // Paragraphs
         html = html.replace(/^(?!<[hupbloai]|<\\/)(\\S[^\\n]+)$/gm, '<p>$1</p>');
         return html;
       }
