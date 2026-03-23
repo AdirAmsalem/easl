@@ -150,48 +150,38 @@ function landingPageHtml(domain: string): string {
     .terminal pre .url{color:#fbbf24}
     .terminal pre .arrow{color:#525252}
 
-    /* Renderers */
-    .renderers{margin:0 auto 5rem}
-    .renderers h2{font-size:1.5rem;font-weight:700;color:#fff;text-align:center;margin-bottom:0.75rem}
-    .renderers .sub{text-align:center;color:#737373;margin-bottom:2rem;font-size:0.9375rem}
-    .render-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem}
-    .render-card{background:#141414;border:1px solid #262626;border-radius:10px;padding:1.25rem;text-align:center;transition:all .2s}
-    .render-card:hover{border-color:#333;transform:translateY(-2px)}
-    .render-card .icon{font-size:1.5rem;margin-bottom:0.5rem}
-    .render-card .from{font-size:0.8125rem;font-weight:600;color:#e5e5e5;margin-bottom:0.25rem}
-    .render-card .to{font-size:0.6875rem;color:#737373}
-
-    /* Demos */
+    /* Demos — before/after transformation */
     .demos{margin:0 auto 5rem}
     .demos h2{font-size:1.5rem;font-weight:700;color:#fff;text-align:center;margin-bottom:0.75rem}
     .demos .sub{text-align:center;color:#737373;margin-bottom:2rem;font-size:0.9375rem}
-    .demo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
-    .demo-card{background:#141414;border:1px solid #262626;border-radius:10px;overflow:hidden;transition:all .2s;text-decoration:none!important}
-    .demo-card:hover{border-color:#60a5fa;transform:translateY(-2px)}
-    .demo-card .demo-preview{height:120px;background:#111;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #262626;font-size:2rem;color:#525252}
-    .demo-card .demo-info{padding:1rem}
-    .demo-card .demo-type{font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#60a5fa;margin-bottom:0.25rem}
-    .demo-card .demo-title{font-size:0.875rem;font-weight:600;color:#e5e5e5;margin-bottom:0.25rem}
-    .demo-card .demo-desc{font-size:0.75rem;color:#737373}
-
-    /* Features */
-    .features{margin:0 auto 5rem}
-    .features h2{font-size:1.5rem;font-weight:700;color:#fff;text-align:center;margin-bottom:2rem}
-    .feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
-    .feat{background:#141414;border:1px solid #262626;border-radius:10px;padding:1.5rem;transition:border-color .2s}
-    .feat:hover{border-color:#333}
-    .feat h3{font-size:0.9375rem;font-weight:600;color:#fff;margin-bottom:0.375rem}
-    .feat p{font-size:0.8125rem;color:#737373;line-height:1.5}
-
-    /* How it works */
-    .how{margin:0 auto 5rem}
-    .how h2{font-size:1.5rem;font-weight:700;color:#fff;text-align:center;margin-bottom:2rem}
-    .steps{display:flex;flex-direction:column;gap:1.5rem;max-width:480px;margin:0 auto}
-    .step{display:flex;gap:1rem;align-items:flex-start}
-    .step-num{width:2rem;height:2rem;border-radius:50%;background:#1e3a5f;color:#60a5fa;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0}
-    .step-text{flex:1}
-    .step-text strong{display:block;font-size:0.9375rem;color:#e5e5e5;margin-bottom:0.125rem}
-    .step-text span{font-size:0.8125rem;color:#737373}
+    .demo-list{display:flex;flex-direction:column;gap:1.5rem}
+    .demo-row{display:grid;grid-template-columns:1fr auto 1fr;gap:0;align-items:stretch;background:#141414;border:1px solid #262626;border-radius:12px;overflow:hidden;transition:border-color .2s}
+    .demo-row:hover{border-color:#333}
+    .demo-raw,.demo-rendered{padding:1.25rem 1.5rem}
+    .demo-raw{background:#0f0f0f;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.6875rem;line-height:1.6;color:#737373;white-space:pre;overflow:hidden}
+    .demo-raw .label{display:block;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:0.625rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#525252;margin-bottom:0.75rem}
+    .demo-arrow{display:flex;align-items:center;justify-content:center;width:3rem;color:#525252;font-size:1.25rem;background:#141414;border-left:1px solid #262626;border-right:1px solid #262626;flex-shrink:0}
+    .demo-rendered{font-size:0.75rem;line-height:1.5;overflow:hidden}
+    .demo-rendered .label{display:block;font-size:0.625rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#60a5fa;margin-bottom:0.75rem}
+    /* Mini markdown preview */
+    .mini-md h3{font-size:0.8125rem;font-weight:700;color:#fff;margin-bottom:0.375rem}
+    .mini-md p{color:#a3a3a3;font-size:0.6875rem;margin-bottom:0.25rem}
+    .mini-md strong{color:#e5e5e5}
+    .mini-md code{background:#262626;padding:0.1rem 0.3rem;border-radius:3px;font-size:0.625rem;color:#34d399}
+    /* Mini table preview */
+    .mini-table{width:100%;border-collapse:collapse;font-size:0.625rem}
+    .mini-table th{text-align:left;color:#60a5fa;font-weight:600;padding:0.25rem 0.5rem;border-bottom:1px solid #262626}
+    .mini-table td{color:#a3a3a3;padding:0.25rem 0.5rem;border-bottom:1px solid #1a1a1a}
+    /* Mini JSON preview */
+    .mini-json{font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.625rem;line-height:1.6}
+    .mini-json .jk{color:#60a5fa}
+    .mini-json .js{color:#34d399}
+    .mini-json .jn{color:#fbbf24}
+    .mini-json .jb{color:#525252}
+    @media(max-width:600px){
+      .demo-row{grid-template-columns:1fr;grid-template-rows:auto auto auto}
+      .demo-arrow{width:auto;height:2rem;border-left:0;border-right:0;border-top:1px solid #262626;border-bottom:1px solid #262626}
+    }
 
     /* CTA */
     .cta{text-align:center;padding:4rem 0;border-top:1px solid #1a1a1a;margin-top:2rem}
@@ -211,15 +201,13 @@ function landingPageHtml(domain: string): string {
 
     /* Animations */
     @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-    .hero h1,.hero .sub,.hero .chips,.code-section,.renderers,.features,.how,.cta{animation:fadeUp .6s ease both}
+    .hero h1,.hero .sub,.hero .chips,.code-section,.demos,.cta{animation:fadeUp .6s ease both}
     .hero .sub{animation-delay:.1s}
     .hero .chips{animation-delay:.2s}
     .code-section{animation-delay:.3s}
 
     @media(max-width:600px){
       .hero{padding:6rem 0 3rem}
-      .render-grid{grid-template-columns:repeat(2,1fr)}
-      .feat-grid{grid-template-columns:1fr}
       .cta-buttons{flex-direction:column;align-items:center}
     }
   </style>
@@ -239,7 +227,7 @@ function landingPageHtml(domain: string): string {
   <div class="container">
     <section class="hero">
       <h1>Instant hosting for<br><span class="accent">AI agents</span></h1>
-      <p class="sub">Your agent creates a CSV, a report, a diagram. tinycloud turns it into a beautiful page you can share with anyone.</p>
+      <p class="sub">Upload a CSV, markdown doc, or diagram. tinycloud renders it beautifully and gives you a shareable URL.</p>
       <div class="chips">
         <span class="chip">CSV</span>
         <span class="chip">Markdown</span>
@@ -271,95 +259,46 @@ function landingPageHtml(domain: string): string {
       </div>
     </section>
 
-    <section class="renderers">
-      <h2>Every file type, rendered beautifully</h2>
-      <p class="sub">Auto-detected. No configuration needed.</p>
-      <div class="render-grid">
-        <div class="render-card"><div class="icon">&#x1F4CA;</div><div class="from">CSV</div><div class="to">Sortable, filterable table</div></div>
-        <div class="render-card"><div class="icon">&#x1F4DD;</div><div class="from">Markdown</div><div class="to">Styled prose with syntax highlighting</div></div>
-        <div class="render-card"><div class="icon">&#x1F333;</div><div class="from">JSON</div><div class="to">Collapsible tree viewer</div></div>
-        <div class="render-card"><div class="icon">&#x1F310;</div><div class="from">HTML</div><div class="to">Served exactly as-is</div></div>
-        <div class="render-card"><div class="icon">&#x1F5BC;</div><div class="from">Images</div><div class="to">Responsive gallery</div></div>
-        <div class="render-card"><div class="icon">&#x2B50;</div><div class="from">SVG</div><div class="to">Zoomable, sanitized viewer</div></div>
-        <div class="render-card"><div class="icon">&#x1F4C4;</div><div class="from">PDF</div><div class="to">Embedded document viewer</div></div>
-        <div class="render-card"><div class="icon">&#x1F4C8;</div><div class="from">Mermaid</div><div class="to">Rendered diagrams</div></div>
-      </div>
-    </section>
-
     <section class="demos" id="demos">
-      <h2>Live demos</h2>
-      <p class="sub">Real content, published via the API. Click to explore each renderer.</p>
-      <div class="demo-grid">
-        <a class="demo-card" href="/s/haze-chip-578a" target="_blank">
-          <div class="demo-preview">&#x1F4DD;</div>
-          <div class="demo-info">
-            <div class="demo-type">Markdown</div>
-            <div class="demo-title">Product Launch Recap</div>
-            <div class="demo-desc">Headings, tables, code blocks, blockquotes</div>
-          </div>
-        </a>
-        <a class="demo-card" href="/s/vine-node-9723" target="_blank">
-          <div class="demo-preview">&#x1F4CA;</div>
-          <div class="demo-info">
-            <div class="demo-type">CSV</div>
-            <div class="demo-title">Q1 2026 Sales Report</div>
-            <div class="demo-desc">Sortable table with 18 rows of sales data</div>
-          </div>
-        </a>
-        <a class="demo-card" href="/s/sage-dust-d42e" target="_blank">
-          <div class="demo-preview">&#x1F333;</div>
-          <div class="demo-info">
-            <div class="demo-type">JSON</div>
-            <div class="demo-title">API Response Explorer</div>
-            <div class="demo-desc">Nested user profile with collapsible tree</div>
-          </div>
-        </a>
-        <a class="demo-card" href="/s/rain-link-4853" target="_blank">
-          <div class="demo-preview">&#x2B50;</div>
-          <div class="demo-info">
-            <div class="demo-type">SVG</div>
-            <div class="demo-title">Revenue by Region</div>
-            <div class="demo-desc">Bar chart with gradients and labels</div>
-          </div>
-        </a>
-        <a class="demo-card" href="/s/warm-hawk-f63a" target="_blank">
-          <div class="demo-preview">&#x1F4C8;</div>
-          <div class="demo-info">
-            <div class="demo-type">Mermaid</div>
-            <div class="demo-title">System Architecture</div>
-            <div class="demo-desc">19-node flowchart with colored styles</div>
-          </div>
-        </a>
-      </div>
-    </section>
+      <h2>See the transformation</h2>
+      <p class="sub">Raw input on the left. What your users see on the right.</p>
+      <div class="demo-list">
 
-    <section class="how">
-      <h2>How it works</h2>
-      <div class="steps">
-        <div class="step">
-          <div class="step-num">1</div>
-          <div class="step-text"><strong>Agent creates content</strong><span>CSV report, markdown doc, JSON data, diagram — anything</span></div>
-        </div>
-        <div class="step">
-          <div class="step-num">2</div>
-          <div class="step-text"><strong>One API call to tinycloud</strong><span>MCP tool, REST API, or inline publish — zero config, no accounts</span></div>
-        </div>
-        <div class="step">
-          <div class="step-num">3</div>
-          <div class="step-text"><strong>Beautiful shareable URL</strong><span>Auto-rendered with the right viewer. Share anywhere instantly.</span></div>
-        </div>
-      </div>
-    </section>
+        <div class="demo-row">
+          <div class="demo-raw"><span class="label">Markdown input</span># Q1 Results
 
-    <section class="features">
-      <h2>Built for AI agents</h2>
-      <div class="feat-grid">
-        <div class="feat"><h3>MCP Native</h3><p>First-class tool integration. One call from Claude, GPT, or any agent &rarr; live URL.</p></div>
-        <div class="feat"><h3>Smart Rendering</h3><p>Auto-detects content type and picks the best interactive viewer. No config.</p></div>
-        <div class="feat"><h3>Zero Config</h3><p>No accounts, no API keys, no setup. Anonymous publish with 7-day TTL.</p></div>
-        <div class="feat"><h3>Edge Served</h3><p>Cloudflare Workers + R2. Cached at the edge, fast everywhere on earth.</p></div>
-        <div class="feat"><h3>Embeddable</h3><p>Add <code>?embed=1</code> to any URL for a clean iframe-ready view.</p></div>
-        <div class="feat"><h3>Open Source</h3><p>MIT licensed. Self-host on your own Cloudflare account in minutes.</p></div>
+Revenue grew **42%** YoY.
+
+Key wins:
+- Enterprise: \`+68%\`
+- Self-serve: \`+31%\`</div>
+          <div class="demo-arrow">&rarr;</div>
+          <div class="demo-rendered"><span class="label">Rendered page</span><div class="mini-md"><h3>Q1 Results</h3><p>Revenue grew <strong>42%</strong> YoY.</p><p>Key wins:</p><p>&bull; Enterprise: <code>+68%</code></p><p>&bull; Self-serve: <code>+31%</code></p></div></div>
+        </div>
+
+        <div class="demo-row">
+          <div class="demo-raw"><span class="label">CSV input</span>name,role,team,joined
+Alice,Engineer,Platform,2024
+Bob,Designer,Product,2023
+Carol,PM,Growth,2025
+Dave,Engineer,Infra,2024</div>
+          <div class="demo-arrow">&rarr;</div>
+          <div class="demo-rendered"><span class="label">Sortable table</span><table class="mini-table"><tr><th>name</th><th>role</th><th>team</th><th>joined</th></tr><tr><td>Alice</td><td>Engineer</td><td>Platform</td><td>2024</td></tr><tr><td>Bob</td><td>Designer</td><td>Product</td><td>2023</td></tr><tr><td>Carol</td><td>PM</td><td>Growth</td><td>2025</td></tr><tr><td>Dave</td><td>Engineer</td><td>Infra</td><td>2024</td></tr></table></div>
+        </div>
+
+        <div class="demo-row">
+          <div class="demo-raw"><span class="label">JSON input</span>{
+  "user": {
+    "name": "Alice",
+    "plan": "pro",
+    "usage": 8420,
+    "active": true
+  }
+}</div>
+          <div class="demo-arrow">&rarr;</div>
+          <div class="demo-rendered"><span class="label">Interactive tree</span><div class="mini-json"><span class="jb">{</span><br>&nbsp;&nbsp;<span class="jk">"user"</span>: <span class="jb">{</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"name"</span>: <span class="js">"Alice"</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"plan"</span>: <span class="js">"pro"</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"usage"</span>: <span class="jn">8420</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"active"</span>: <span class="jn">true</span><br>&nbsp;&nbsp;<span class="jb">}</span><br><span class="jb">}</span></div></div>
+        </div>
+
       </div>
     </section>
 
