@@ -4,22 +4,21 @@ main = "src/index.ts"
 compatibility_date = "2026-02-21"
 compatibility_flags = ["nodejs_compat"]
 
-# Uncomment when deploying:
-# [[routes]]
-# pattern = "api.easl.dev/*"
-# zone_name = "easl.dev"
-#
-# [[routes]]
-# pattern = "*.easl.dev/*"
-# zone_name = "easl.dev"
-#
-# [[routes]]
-# pattern = "easl.dev/*"
-# zone_name = "easl.dev"
+[[routes]]
+pattern = "api.easl.dev/*"
+zone_name = "easl.dev"
+
+[[routes]]
+pattern = "*.easl.dev/*"
+zone_name = "easl.dev"
+
+[[routes]]
+pattern = "easl.dev/*"
+zone_name = "easl.dev"
 
 [[kv_namespaces]]
 binding = "SITES_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "00c6d65754594b07bdbbc4265585aa77"
 # Local dev uses .wrangler/state — no remote ID needed
 
 [[r2_buckets]]
@@ -29,7 +28,7 @@ bucket_name = "easl-content"
 [[d1_databases]]
 binding = "DB"
 database_name = "easl-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "8b7c3c46-7517-4459-a024-7d22ca39e28d"
 
 [vars]
 DOMAIN = "easl.dev"
