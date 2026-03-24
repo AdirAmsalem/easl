@@ -64,14 +64,21 @@ jobs:
         run: |
           PREVIEW_NAME="easl-preview-${{ github.event.pull_request.number }}"
 
-          # Copy wrangler config and override for preview (no custom domain routes, enable workers.dev)
+          PREVIEW_HOST="preview-${{ github.event.pull_request.number }}.easl.dev"
+
+          # Copy wrangler config, replace name and routes for preview
           sed '/^\[\[routes\]\]/,/^$/d' wrangler.toml > wrangler.preview.toml
           sed -i "s/^name = .*/name = \"$PREVIEW_NAME\"/" wrangler.preview.toml
-          echo 'workers_dev = true' >> wrangler.preview.toml
+          cat >> wrangler.preview.toml << EOF
+
+[[routes]]
+pattern = "${PREVIEW_HOST}/*"
+zone_name = "easl.dev"
+EOF
 
           pnpm wrangler deploy --config wrangler.preview.toml
 
-          PREVIEW_URL="https://${PREVIEW_NAME}.workers.dev"
+          PREVIEW_URL="https://${PREVIEW_HOST}"
           echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
