@@ -3,6 +3,8 @@ name = "easl"
 main = "src/index.ts"
 compatibility_date = "2026-02-21"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
 
 [[routes]]
 pattern = "api.easl.dev/*"
