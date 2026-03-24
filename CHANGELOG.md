@@ -2,6 +2,28 @@
 
 All notable changes to tinycloud will be documented in this file.
 
+## [0.1.1.0] - 2026-03-24
+
+### Added
+- Localhost dev routing for testing without tinycloud.dev subdomain DNS
+- Markdown rendering via marked.js v15 CDN (replaces regex renderer)
+- Landing page redesign with before/after demos
+- D1 fallback in serveSite() — queries D1 when KV cache misses before returning 404
+- 5MB render cap — files >5MB served as raw download instead of smart-rendered
+- Shared URL helpers (`lib/url.ts`) extracted from publish routes
+- Unit tests for URL helpers (56 total tests)
+
+### Fixed
+- JSON viewer broken by escaped quotes in embedded data
+- Markdown tables not rendering due to regex limitations
+- XSS prevention: `escapeScriptClose()` prevents `</script>` injection in embedded JSON
+- Timing-safe claim token comparison to prevent timing attacks
+- JSON parse error handling on all 3 API endpoints (publish, inline, finalize)
+- Parallelized R2 head checks in finalize and R2 deletes in site deletion
+
+### Removed
+- Dead `ANON_MAX_TOTAL_SIZE` constant
+
 ## [0.1.0.0] - 2026-03-23
 
 ### Added
