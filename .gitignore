@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.wrangler/
+.turbo/
+*.tsbuildinfo
+.context/
+.playwright-mcp/
