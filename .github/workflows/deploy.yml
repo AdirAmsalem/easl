@@ -64,9 +64,10 @@ jobs:
         run: |
           PREVIEW_NAME="easl-preview-${{ github.event.pull_request.number }}"
 
-          # Copy wrangler config and override for preview (no custom domain routes)
+          # Copy wrangler config and override for preview (no custom domain routes, enable workers.dev)
           sed '/^\[\[routes\]\]/,/^$/d' wrangler.toml > wrangler.preview.toml
           sed -i "s/^name = .*/name = \"$PREVIEW_NAME\"/" wrangler.preview.toml
+          echo 'workers_dev = true' >> wrangler.preview.toml
 
           pnpm wrangler deploy --config wrangler.preview.toml
 
