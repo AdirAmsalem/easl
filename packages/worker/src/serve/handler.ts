@@ -9,7 +9,12 @@ export async function serveSite(
   env: Env,
   slug: string,
 ): Promise<Response> {
-  const meta = await env.SITES_KV.get<SiteMeta>(`site:${slug}`, "json");
+  let meta = await env.SITES_KV.get<SiteMeta>(`site:${slug}`, "json");
+
+  // D1 fallback: if KV missed (expired or evicted), rebuild from D1
+  if (!meta) {
+    meta = await rebuildMetaFromD1(env, slug);
+  }
 
   if (!meta) {
     return htmlResponse(notFoundHtml(slug, env.DOMAIN), 404);
@@ -38,7 +43,7 @@ export async function serveSite(
 
     // Single file → smart render with beautiful viewer
     if (decision.mode === "single-file" && decision.primaryFile) {
-      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType);
+      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request);
     }
 
     // Multi-file without index → auto-generated nav
@@ -51,7 +56,7 @@ export async function serveSite(
     // If requesting a raw file, check for ?render=true to smart-render it
     if (url.searchParams.has("render")) {
       const viewerType = detectViewerType(file.contentType, file.path);
-      return smartRender(env, slug, meta, file, viewerType);
+      return smartRender(env, slug, meta, file, viewerType, request);
     }
     return serveR2File(env, slug, meta.currentVersionId, file.path, request);
   }
@@ -65,13 +70,21 @@ export async function serveSite(
   return htmlResponse(fileNotFoundHtml(path, slug, env.DOMAIN), 404);
 }
 
+const RENDER_SIZE_LIMIT = 5 * 1024 * 1024; // 5 MB — files larger than this skip smart render
+
 async function smartRender(
   env: Env,
   slug: string,
   meta: SiteMeta,
   file: FileEntry,
   viewerType: ViewerType,
+  request: Request,
 ): Promise<Response> {
+  // Files >5MB skip smart render — serve as download instead of reading into memory
+  if (file.size > RENDER_SIZE_LIMIT) {
+    return serveR2File(env, slug, meta.currentVersionId, file.path, request);
+  }
+
   // Check KV cache for rendered HTML
   const cacheKey = `html:${slug}:${meta.currentVersionId}:${file.path}`;
   const cached = await env.SITES_KV.get(cacheKey);
@@ -151,6 +164,49 @@ async function serveR2File(
   }
 
   return new Response(object.body, { headers });
+}
+
+/** Rebuild SiteMeta from D1 when KV has expired/evicted */
+async function rebuildMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> {
+  const site = await env.DB.prepare("SELECT * FROM sites WHERE slug = ?").bind(slug).first();
+  if (!site) return null;
+
+  const version = await env.DB.prepare(
+    "SELECT * FROM versions WHERE slug = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1"
+  ).bind(slug).first();
+  if (!version) return null;
+
+  const files: FileEntry[] = JSON.parse(version.files_json as string).map(
+    (f: { path: string; contentType: string; size: number }) => ({
+      path: f.path,
+      size: f.size,
+      contentType: f.contentType,
+    })
+  );
+
+  const meta: SiteMeta = {
+    slug,
+    currentVersionId: version.id as string,
+    status: "active",
+    files,
+    title: site.title as string | null,
+    template: site.template as string | null,
+    expiresAt: site.expires_at as string | null,
+    createdAt: site.created_at as string,
+    updatedAt: site.created_at as string,
+  };
+
+  // Re-populate KV cache
+  const ttl = meta.expiresAt
+    ? Math.max(60, Math.floor((new Date(meta.expiresAt).getTime() - Date.now()) / 1000))
+    : undefined;
+  if (ttl === undefined || ttl > 0) {
+    await env.SITES_KV.put(`site:${slug}`, JSON.stringify(meta), {
+      expirationTtl: ttl ? ttl + 3600 : undefined,
+    });
+  }
+
+  return meta;
 }
 
 function getCacheHeaders(contentType: string): Record<string, string> {
