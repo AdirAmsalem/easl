@@ -14,8 +14,8 @@ export function docsPageHtml(domain: string): string {
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <script>(function(){var t=localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)})()</script>
   <style>
-    :root{--bg:#0a0a0a;--bg-sidebar:#0f0f0f;--bg-code:#111;--bg-code-inline:#1a1a1a;--border:#1a1a1a;--border-code:#1e1e1e;--border-hover:#333;--text:#e5e5e5;--text-heading:#fff;--text-muted:#a3a3a3;--text-faint:#737373;--text-faintest:#525252;--text-subtle:#d4d4d4;--accent:#60a5fa;--green:#34d399;--yellow:#fbbf24;--pink:#f472b6;--red:#f87171;--method-post-bg:#1e3a5f;--method-get-bg:#1a3f2a;--method-del-bg:#3f1a1a;--badge-req-bg:#3f1a1a;--badge-opt-bg:#1a1a1a;--sidebar-active-bg:#111;--sidebar-hover-bg:#1a1a1a;--nav-bg:rgba(10,10,10,0.95);--logo-invert:0}
-    [data-theme="light"]{--bg:#fafafa;--bg-sidebar:#f5f5f5;--bg-code:#f0f0f0;--bg-code-inline:#e8e8e8;--border:#e0e0e0;--border-code:#d4d4d4;--border-hover:#bbb;--text:#1a1a1a;--text-heading:#000;--text-muted:#525252;--text-faint:#737373;--text-faintest:#a3a3a3;--text-subtle:#333;--accent:#2563eb;--green:#059669;--yellow:#d97706;--pink:#db2777;--red:#dc2626;--method-post-bg:#dbeafe;--method-get-bg:#d1fae5;--method-del-bg:#fee2e2;--badge-req-bg:#fee2e2;--badge-opt-bg:#f0f0f0;--sidebar-active-bg:#e8e8e8;--sidebar-hover-bg:#ebebeb;--nav-bg:rgba(250,250,250,0.95);--logo-invert:1}
+    :root{--bg:#0a0a0a;--bg-sidebar:#0f0f0f;--bg-code:#111;--bg-code-inline:#1a1a1a;--border:#1a1a1a;--border-code:#1e1e1e;--border-hover:#333;--text:#e5e5e5;--text-heading:#fff;--text-muted:#a3a3a3;--text-faint:#737373;--text-faintest:#525252;--text-subtle:#d4d4d4;--accent:#60a5fa;--green:#34d399;--yellow:#fbbf24;--pink:#f472b6;--red:#f87171;--method-post-bg:#1e3a5f;--method-get-bg:#1a3f2a;--method-del-bg:#3f1a1a;--badge-req-bg:#3f1a1a;--badge-opt-bg:#1a1a1a;--sidebar-active-bg:#111;--sidebar-hover-bg:#1a1a1a;--nav-bg:rgba(10,10,10,0.95);--logo-color:#fff}
+    [data-theme="light"]{--bg:#fafafa;--bg-sidebar:#f5f5f5;--bg-code:#f0f0f0;--bg-code-inline:#e8e8e8;--border:#e0e0e0;--border-code:#d4d4d4;--border-hover:#bbb;--text:#1a1a1a;--text-heading:#000;--text-muted:#525252;--text-faint:#737373;--text-faintest:#a3a3a3;--text-subtle:#333;--accent:#2563eb;--green:#059669;--yellow:#d97706;--pink:#db2777;--red:#dc2626;--method-post-bg:#dbeafe;--method-get-bg:#d1fae5;--method-del-bg:#fee2e2;--badge-req-bg:#fee2e2;--badge-opt-bg:#f0f0f0;--sidebar-active-bg:#e8e8e8;--sidebar-hover-bg:#ebebeb;--nav-bg:rgba(250,250,250,0.95);--logo-color:#000}
     *{margin:0;padding:0;box-sizing:border-box}
     html{scroll-behavior:smooth}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased;transition:background .2s,color .2s}
@@ -27,7 +27,7 @@ export function docsPageHtml(domain: string): string {
     .wrapper{display:flex;min-height:100vh}
     .sidebar{width:240px;position:fixed;top:0;left:0;bottom:0;background:var(--bg-sidebar);border-right:1px solid var(--border);padding:1.5rem 0;overflow-y:auto;z-index:50}
     .sidebar .logo{padding:0 1.5rem;margin-bottom:1.5rem;display:block;text-decoration:none!important}
-    .sidebar .logo img{filter:invert(var(--logo-invert))}
+    .sidebar .logo img{color:var(--logo-color)}
     .sidebar nav{padding:0}
     .sidebar .group{margin-bottom:1rem}
     .sidebar .group-title{font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faintest);padding:0 1.5rem;margin-bottom:0.375rem}
@@ -92,7 +92,7 @@ export function docsPageHtml(domain: string): string {
       h1{font-size:1.5rem}
     }
     .mobile-nav{display:none;position:fixed;top:0;left:0;right:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(12px);padding:0.75rem 1.5rem;border-bottom:1px solid var(--border);align-items:center;justify-content:space-between}
-    .mobile-nav .logo img{filter:invert(var(--logo-invert))}
+    .mobile-nav .logo img{color:var(--logo-color)}
     .mobile-nav .theme-toggle{background:none;border:1px solid var(--border);border-radius:6px;padding:0.25rem 0.5rem;cursor:pointer;color:var(--text-muted);font-size:0.875rem;line-height:1}
     @media(max-width:768px){.mobile-nav{display:flex}.content{padding-top:4rem}}
   </style>
