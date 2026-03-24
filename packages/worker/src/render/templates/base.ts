@@ -8,6 +8,7 @@ export interface TemplateData {
   viewerType: ViewerType;
   dataJson: string;
   template: string | null;
+  siteBaseUrl: string;
 }
 
 // Base CSS shared across all templates
@@ -35,6 +36,11 @@ const BASE_CSS = `
     font-weight: 600;
     color: #1a1a1a;
   }
+  .el-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
   .el-badge {
     font-size: 0.6875rem;
     padding: 0.2rem 0.5rem;
@@ -44,6 +50,18 @@ const BASE_CSS = `
     text-decoration: none;
   }
   .el-badge:hover { background: #e5e5e5; }
+  .el-download-link {
+    font-size: 0.6875rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    background: #f0f0f0;
+    color: #737373;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .el-download-link:hover { background: #e5e5e5; color: #525252; }
   .el-body { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 `;
 
@@ -384,7 +402,10 @@ export function generateHtmlShell(data: TemplateData): string {
 <body>
   <div class="el-header">
     <h1>${escapeHtml(data.title)}</h1>
-    <a class="el-badge" href="https://${data.domain}">easl</a>
+    <div class="el-header-right">
+      <a class="el-download-link" href="${data.siteBaseUrl}/_easl/download" download title="Download">&#8595; Download</a>
+      <a class="el-badge" href="https://${data.domain}">easl</a>
+    </div>
   </div>
   <div class="el-body">
     <div id="el-viewer"></div>

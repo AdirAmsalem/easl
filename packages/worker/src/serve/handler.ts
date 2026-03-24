@@ -3,12 +3,14 @@ import { getContentType } from "../lib/mime";
 import { detectViewerType, type ViewerType } from "../lib/mime";
 import { decideRenderMode } from "../render/detect";
 import { generateHtmlShell } from "../render/templates/base";
+import { zipSync } from "fflate";
 
 export async function serveSite(
   request: Request,
   env: Env,
   slug: string,
   _ctx: ExecutionContext,
+  basePath = "",
 ): Promise<Response> {
   let meta = await env.SITES_KV.get<SiteMeta>(`site:${slug}`, "json");
 
@@ -48,6 +50,11 @@ export async function serveSite(
     });
   }
 
+  // Download — serve raw file(s) as attachment
+  if (path === "_easl/download") {
+    return downloadSite(env, slug, meta);
+  }
+
   // Render decision based on file manifest
   const decision = decideRenderMode(meta.files);
 
@@ -60,11 +67,11 @@ export async function serveSite(
 
     // Single file → smart render with beautiful viewer
     if (decision.mode === "single-file" && decision.primaryFile) {
-      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request);
+      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request, basePath);
     }
 
     // Multi-file without index → auto-generated nav
-    return htmlResponse(buildMultiFileNav(slug, meta, env.DOMAIN), 200);
+    return htmlResponse(buildMultiFileNav(slug, meta, env.DOMAIN, basePath), 200);
   }
 
   // Specific file path requested
@@ -73,7 +80,7 @@ export async function serveSite(
     // If requesting a raw file, check for ?render=true to smart-render it
     if (url.searchParams.has("render")) {
       const viewerType = detectViewerType(file.contentType, file.path);
-      return smartRender(env, slug, meta, file, viewerType, request);
+      return smartRender(env, slug, meta, file, viewerType, request, basePath);
     }
     return serveR2File(env, slug, meta.currentVersionId, file.path, request);
   }
@@ -96,14 +103,15 @@ async function smartRender(
   file: FileEntry,
   viewerType: ViewerType,
   request: Request,
+  basePath = "",
 ): Promise<Response> {
   // Files >5MB skip smart render — serve as download instead of reading into memory
   if (file.size > RENDER_SIZE_LIMIT) {
     return serveR2File(env, slug, meta.currentVersionId, file.path, request);
   }
 
-  // Check KV cache for rendered HTML
-  const cacheKey = `html:${slug}:${meta.currentVersionId}:${file.path}`;
+  // Check KV cache for rendered HTML (include basePath to avoid cache poisoning between routing modes)
+  const cacheKey = `html:${slug}:${meta.currentVersionId}:${file.path}:${basePath || "root"}`;
   const cached = await env.SITES_KV.get(cacheKey);
   if (cached) {
     return htmlResponse(cached, 200);
@@ -146,6 +154,7 @@ async function smartRender(
     viewerType,
     dataJson,
     template: meta.template,
+    siteBaseUrl: basePath,
   });
 
   // Cache for 1 hour
@@ -226,6 +235,52 @@ async function rebuildMetaFromD1(env: Env, slug: string): Promise<SiteMeta | nul
   return meta;
 }
 
+async function downloadSite(env: Env, slug: string, meta: SiteMeta): Promise<Response> {
+  const versionId = meta.currentVersionId;
+
+  // Single file — serve directly as attachment
+  if (meta.files.length === 1) {
+    const file = meta.files[0];
+    const r2Key = `${slug}/${versionId}/${file.path}`;
+    const object = await env.CONTENT.get(r2Key);
+    if (!object) return new Response("File not found", { status: 404 });
+    const safeName = file.path.replace(/[^a-zA-Z0-9._-]/g, "_");
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": file.contentType,
+        "Content-Disposition": `attachment; filename="${safeName}"`,
+      },
+    });
+  }
+
+  // Multi-file — build zip
+  const zipData: Record<string, Uint8Array> = {};
+  const missing: string[] = [];
+  await Promise.all(
+    meta.files.map(async (file) => {
+      const r2Key = `${slug}/${versionId}/${file.path}`;
+      const object = await env.CONTENT.get(r2Key);
+      if (object) {
+        zipData[file.path] = new Uint8Array(await object.arrayBuffer());
+      } else {
+        missing.push(file.path);
+      }
+    })
+  );
+
+  if (Object.keys(zipData).length === 0) {
+    return new Response("No files available for download", { status: 404 });
+  }
+
+  const zipped = zipSync(zipData);
+  return new Response(zipped, {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${slug}.zip"`,
+    },
+  });
+}
+
 function getCacheHeaders(contentType: string): Record<string, string> {
   if (contentType.startsWith("font/") || contentType === "application/wasm") {
     return { "Cache-Control": "public, max-age=31536000, immutable" };
@@ -247,7 +302,7 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function buildMultiFileNav(slug: string, meta: SiteMeta, domain: string): string {
+function buildMultiFileNav(slug: string, meta: SiteMeta, domain: string, basePath = ""): string {
   const title = meta.title || slug;
   const fileList = meta.files
     .map((f) => {
@@ -275,10 +330,12 @@ function buildMultiFileNav(slug: string, meta: SiteMeta, domain: string): string
   .footer{margin-top:2rem;padding-top:1rem;border-top:1px solid #e5e5e5;color:#a3a3a3;font-size:0.75rem}
   .footer a{color:#a3a3a3;text-decoration:none}
   .footer a:hover{color:#4f46e5}
+  .dl{color:#4f46e5;text-decoration:none;font-weight:500}
+  .dl:hover{text-decoration:underline}
 </style></head><body>
 <div class="container">
   <h1>${escapeHtml(title)}</h1>
-  <p class="meta">${meta.files.length} file${meta.files.length === 1 ? "" : "s"}</p>
+  <p class="meta">${meta.files.length} file${meta.files.length === 1 ? "" : "s"} · <a href="${basePath}/_easl/download" download class="dl">Download all</a></p>
   <ul class="files">${fileList}</ul>
   <div class="footer">Shared via <a href="https://${domain}">easl</a></div>
 </div></body></html>`;

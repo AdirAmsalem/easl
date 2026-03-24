@@ -2,6 +2,14 @@
 
 All notable changes to easl will be documented in this file.
 
+## [0.1.3.0] - 2026-03-24
+
+### Added
+- Download button on every rendered easl site (header bar, next to "easl" badge)
+- `/_easl/download` endpoint: single-file sites serve raw file as attachment, multi-file sites return a zip archive
+- "Download all" link on multi-file navigation pages
+- `fflate` dependency for zip generation in Cloudflare Workers
+
 ## [0.1.2.0] - 2026-03-24
 
 ### Added
