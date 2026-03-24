@@ -14,8 +14,8 @@ export function docsPageHtml(domain: string): string {
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <script>(function(){var t=localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)})()</script>
   <style>
-    :root{--bg:#0a0a0a;--bg-sidebar:#0f0f0f;--bg-code:#111;--bg-code-inline:#1a1a1a;--border:#1a1a1a;--border-code:#1e1e1e;--border-hover:#333;--text:#e5e5e5;--text-heading:#fff;--text-muted:#a3a3a3;--text-faint:#737373;--text-faintest:#525252;--text-subtle:#d4d4d4;--accent:#60a5fa;--green:#34d399;--yellow:#fbbf24;--pink:#f472b6;--red:#f87171;--method-post-bg:#1e3a5f;--method-get-bg:#1a3f2a;--method-del-bg:#3f1a1a;--badge-req-bg:#3f1a1a;--badge-opt-bg:#1a1a1a;--sidebar-active-bg:#111;--sidebar-hover-bg:#1a1a1a;--nav-bg:rgba(10,10,10,0.95);--logo-color:#fff}
-    [data-theme="light"]{--bg:#fafafa;--bg-sidebar:#f5f5f5;--bg-code:#f0f0f0;--bg-code-inline:#e8e8e8;--border:#e0e0e0;--border-code:#d4d4d4;--border-hover:#bbb;--text:#1a1a1a;--text-heading:#000;--text-muted:#525252;--text-faint:#737373;--text-faintest:#a3a3a3;--text-subtle:#333;--accent:#2563eb;--green:#059669;--yellow:#d97706;--pink:#db2777;--red:#dc2626;--method-post-bg:#dbeafe;--method-get-bg:#d1fae5;--method-del-bg:#fee2e2;--badge-req-bg:#fee2e2;--badge-opt-bg:#f0f0f0;--sidebar-active-bg:#e8e8e8;--sidebar-hover-bg:#ebebeb;--nav-bg:rgba(250,250,250,0.95);--logo-color:#000}
+    :root{--bg:#0a0a0a;--bg-sidebar:#0f0f0f;--bg-code:#111;--bg-code-inline:#1a1a1a;--border:#1a1a1a;--border-medium:#262626;--border-code:#1e1e1e;--border-hover:#333;--text:#e5e5e5;--text-heading:#fff;--text-muted:#a3a3a3;--text-faint:#737373;--text-faintest:#525252;--text-subtle:#d4d4d4;--accent:#60a5fa;--green:#34d399;--yellow:#fbbf24;--pink:#f472b6;--red:#f87171;--method-post-bg:#1e3a5f;--method-get-bg:#1a3f2a;--method-del-bg:#3f1a1a;--badge-req-bg:#3f1a1a;--badge-opt-bg:#1a1a1a;--sidebar-active-bg:#111;--sidebar-hover-bg:#1a1a1a;--nav-bg:rgba(10,10,10,0.95);--logo-color:#fff}
+    [data-theme="light"]{--bg:#fafafa;--bg-sidebar:#f5f5f5;--bg-code:#f0f0f0;--bg-code-inline:#e8e8e8;--border:#e0e0e0;--border-medium:#d4d4d4;--border-code:#d4d4d4;--border-hover:#bbb;--text:#1a1a1a;--text-heading:#000;--text-muted:#525252;--text-faint:#737373;--text-faintest:#a3a3a3;--text-subtle:#333;--accent:#2563eb;--green:#059669;--yellow:#d97706;--pink:#db2777;--red:#dc2626;--method-post-bg:#dbeafe;--method-get-bg:#d1fae5;--method-del-bg:#fee2e2;--badge-req-bg:#fee2e2;--badge-opt-bg:#f0f0f0;--sidebar-active-bg:#e8e8e8;--sidebar-hover-bg:#ebebeb;--nav-bg:rgba(250,250,250,0.95);--logo-color:#000}
     *{margin:0;padding:0;box-sizing:border-box}
     html{scroll-behavior:smooth}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased;transition:background .2s,color .2s}
@@ -26,15 +26,19 @@ export function docsPageHtml(domain: string): string {
     /* Layout */
     .wrapper{display:flex;min-height:100vh}
     .sidebar{width:240px;position:fixed;top:0;left:0;bottom:0;background:var(--bg-sidebar);border-right:1px solid var(--border);padding:1.5rem 0;overflow-y:auto;z-index:50}
-    .sidebar .logo{padding:0 1.5rem;margin-bottom:1.5rem;display:block;text-decoration:none!important}
+    .sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;margin-bottom:1.5rem}
+    .sidebar .logo{display:inline-flex;text-decoration:none!important;padding:0!important;border:none!important;background:none!important}
     .sidebar .logo img{color:var(--logo-color)}
     .sidebar nav{padding:0}
     .sidebar .group{margin-bottom:1rem}
     .sidebar .group-title{font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faintest);padding:0 1.5rem;margin-bottom:0.375rem}
     .sidebar a{display:block;padding:0.3125rem 1.5rem;font-size:0.8125rem;color:var(--text-muted);transition:all .1s;text-decoration:none!important;border-left:2px solid transparent}
+    .sidebar a:visited{color:var(--text-muted)}
+    .sidebar a.sub{padding-left:2.5rem;font-size:0.75rem;color:var(--text-faint)}
     .sidebar a:hover{color:var(--text-heading);background:var(--sidebar-hover-bg)}
     .sidebar a.active{color:var(--accent);border-left-color:var(--accent);background:var(--sidebar-active-bg)}
-    .sidebar .theme-toggle{margin:1rem 1.5rem 0;background:none;border:1px solid var(--border);border-radius:6px;padding:0.3rem 0.75rem;cursor:pointer;color:var(--text-muted);font-size:0.75rem;transition:all .15s;display:flex;align-items:center;gap:0.375rem}
+    h1[id],h2[id],h3[id],h4[id]{scroll-margin-top:1rem}
+    .sidebar .theme-toggle{background:none;border:1px solid var(--border);border-radius:6px;padding:0.25rem 0.5rem;cursor:pointer;color:var(--text-muted);font-size:0.875rem;line-height:1;transition:all .15s}
     .sidebar .theme-toggle:hover{border-color:var(--border-hover);color:var(--text-heading)}
     .main{margin-left:240px;flex:1;min-width:0}
     .content{max-width:760px;padding:2.5rem 3rem 4rem}
@@ -68,7 +72,8 @@ export function docsPageHtml(domain: string): string {
     .endpoint .auth{font-size:0.75rem;color:var(--text-faintest);margin-top:0.375rem}
 
     /* Tables */
-    table{width:100%;border-collapse:collapse;margin:1rem 0 1.5rem;font-size:0.8125rem}
+    .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:1rem 0 1.5rem}
+    table{width:100%;border-collapse:collapse;font-size:0.8125rem}
     th,td{text-align:left;padding:0.625rem 1rem;border-bottom:1px solid var(--border)}
     th{color:var(--text-faint);font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em}
     td{color:var(--text-muted)}
@@ -91,21 +96,23 @@ export function docsPageHtml(domain: string): string {
       .content{padding:1.5rem}
       h1{font-size:1.5rem}
     }
-    .mobile-nav{display:none;position:fixed;top:0;left:0;right:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(12px);padding:0.75rem 1.5rem;border-bottom:1px solid var(--border);align-items:center;justify-content:space-between}
+    .mobile-nav{display:none;position:fixed;top:0;left:0;right:0;z-index:100;height:56px;background:var(--nav-bg);backdrop-filter:blur(12px);padding:0 1.5rem;border-bottom:1px solid var(--border);align-items:center;justify-content:space-between}
     .mobile-nav .logo img{color:var(--logo-color)}
-    .mobile-nav .theme-toggle{background:none;border:1px solid var(--border);border-radius:6px;padding:0.25rem 0.5rem;cursor:pointer;color:var(--text-muted);font-size:0.875rem;line-height:1}
-    @media(max-width:768px){.mobile-nav{display:flex}.content{padding-top:4rem}}
+    .mobile-nav .logo{display:inline-flex}
+    .mobile-nav .theme-toggle{background:none;border:1px solid var(--border-medium);border-radius:6px;padding:0.3rem 0.5rem;cursor:pointer;color:var(--text-muted);font-size:0.875rem;line-height:1;transition:all .15s}
+    .mobile-nav .theme-toggle:hover{border-color:var(--border-hover);color:var(--text-heading)}
+    @media(max-width:768px){.mobile-nav{display:flex}.content{padding-top:calc(56px + 1rem)}}
   </style>
 </head>
 <body>
   <div class="mobile-nav">
-    <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="18" class="nav-logo"></a>
+    <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="24" class="nav-logo"></a>
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn-mobile"></button>
   </div>
 
   <div class="wrapper">
     <aside class="sidebar">
-      <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="20" class="nav-logo"></a>
+      <div class="sidebar-header"><a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="20" class="nav-logo"></a><button class="theme-toggle" onclick="toggleTheme()" id="theme-btn-sidebar"></button></div>
       <nav>
         <div class="group">
           <div class="group-title">Getting Started</div>
@@ -117,19 +124,16 @@ export function docsPageHtml(domain: string): string {
           <div class="group-title">Integrations</div>
           <a href="#mcp-server">MCP Server</a>
           <a href="#rest-api">REST API</a>
+          <a href="#publish-endpoints" class="sub">Publishing</a>
+          <a href="#finalize-endpoint" class="sub">Finalize</a>
+          <a href="#site-endpoints" class="sub">Site Management</a>
           <a href="#curl">cURL Examples</a>
-        </div>
-        <div class="group">
-          <div class="group-title">API Reference</div>
-          <a href="#publish-endpoints">Publishing</a>
-          <a href="#finalize-endpoint">Finalize</a>
-          <a href="#site-endpoints">Site Management</a>
         </div>
         <div class="group">
           <div class="group-title">Renderers</div>
           <a href="#smart-rendering">Smart Rendering</a>
-          <a href="#supported-types">Supported Types</a>
-          <a href="#embed-mode">Embed Mode</a>
+          <a href="#supported-types" class="sub">Supported Types</a>
+          <a href="#embed-mode" class="sub">Embed Mode</a>
         </div>
         <div class="group">
           <div class="group-title">Concepts</div>
@@ -138,7 +142,6 @@ export function docsPageHtml(domain: string): string {
           <a href="#errors">Error Codes</a>
         </div>
       </nav>
-      <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn-sidebar"></button>
     </aside>
 
     <div class="main">
@@ -148,14 +151,14 @@ export function docsPageHtml(domain: string): string {
 
         <p>easl is a smart rendering layer for AI agents. Upload a CSV, Markdown file, JSON blob, or any supported content — easl detects the type and renders it with the best interactive viewer. No accounts required.</p>
 
-        <table>
+        <div class="table-wrap"><table>
           <tbody>
             <tr><td><strong>API Base</strong></td><td><code>https://${api}</code></td></tr>
             <tr><td><strong>Sites served at</strong></td><td><code>https://{slug}.${domain}</code></td></tr>
             <tr><td><strong>Anonymous limit</strong></td><td>50 files, 200 MB, expires in 7 days</td></tr>
             <tr><td><strong>Inline limit</strong></td><td>256 KB content, single file</td></tr>
           </tbody>
-        </table>
+        </table></div>
 
         <!-- ───── Quick Start ───── -->
         <h2 id="quickstart">Quick Start</h2>
@@ -183,7 +186,7 @@ export function docsPageHtml(domain: string): string {
         <p>The simplest publish method. Send content as a string, get a URL back instantly. No file uploads, no finalize step.</p>
 
         <h3>Supported content types</h3>
-        <table>
+        <div class="table-wrap"><table>
           <thead><tr><th>contentType</th><th>Rendered as</th></tr></thead>
           <tbody>
             <tr><td><code>text/markdown</code></td><td>Styled prose with headings, code, tables, blockquotes</td></tr>
@@ -194,7 +197,7 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>text/x-mermaid</code></td><td>Rendered Mermaid diagram (flowchart, sequence, etc.)</td></tr>
             <tr><td><code>text/plain</code></td><td>Monospaced text viewer</td></tr>
           </tbody>
-        </table>
+        </table></div>
 
         <h3>Examples</h3>
 
@@ -241,7 +244,7 @@ export function docsPageHtml(domain: string): string {
 }</pre>
 
         <h3>Available tools</h3>
-        <table>
+        <div class="table-wrap"><table>
           <thead><tr><th>Tool</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>publish_content</code></td><td>Publish raw content (string) &rarr; beautiful URL. The killer tool.</td></tr>
@@ -250,7 +253,7 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>list_sites</code></td><td>List published sites in this session</td></tr>
             <tr><td><code>delete_site</code></td><td>Delete a published site</td></tr>
           </tbody>
-        </table>
+        </table></div>
 
         <h3>Usage</h3>
         <p>Once configured, just ask your AI agent naturally:</p>
@@ -273,7 +276,7 @@ export function docsPageHtml(domain: string): string {
         </div>
 
         <h4>Request body</h4>
-        <table>
+        <div class="table-wrap"><table>
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>content</code></td><td>string <span class="badge badge-required">required</span></td><td>Raw content string (max 256 KB)</td></tr>
@@ -281,7 +284,7 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>title</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Page title shown in header &amp; browser tab</td></tr>
             <tr><td><code>template</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Template: <code>minimal</code>, <code>report</code>, or <code>dashboard</code></td></tr>
           </tbody>
-        </table>
+        </table></div>
 
         <h4>Response (201)</h4>
 <pre>{
@@ -301,7 +304,7 @@ export function docsPageHtml(domain: string): string {
         </div>
 
         <h4>Request body</h4>
-        <table>
+        <div class="table-wrap"><table>
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>files</code></td><td>array <span class="badge badge-required">required</span></td><td>Array of <code>{path, size, contentType}</code></td></tr>
@@ -310,7 +313,7 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>template</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Template name</td></tr>
             <tr><td><code>ttl</code></td><td>number <span class="badge badge-optional">optional</span></td><td>TTL in seconds (default: 7 days)</td></tr>
           </tbody>
-        </table>
+        </table></div>
 
         <h4>Response (201)</h4>
 <pre>{
@@ -344,12 +347,12 @@ export function docsPageHtml(domain: string): string {
         </div>
 
         <h4>Request body</h4>
-        <table>
+        <div class="table-wrap"><table>
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>versionId</code></td><td>string <span class="badge badge-required">required</span></td><td>The version ID from the publish response</td></tr>
           </tbody>
-        </table>
+        </table></div>
 
         <!-- Site Management -->
         <h3 id="site-endpoints">Site Management</h3>
@@ -400,7 +403,7 @@ export function docsPageHtml(domain: string): string {
         <p>easl's core feature. When a site is served, the Worker detects the file type and generates an HTML shell with the right interactive viewer. The raw data is embedded as JSON in a <code>&lt;script&gt;</code> tag, and client-side JavaScript hydrates it into a rich viewer.</p>
 
         <h3 id="supported-types">Supported Types</h3>
-        <table>
+        <div class="table-wrap"><table>
           <thead><tr><th>File Type</th><th>Detection</th><th>Viewer</th></tr></thead>
           <tbody>
             <tr><td>CSV</td><td><code>.csv</code> or <code>text/csv</code></td><td>Sortable table with column click-to-sort, alternating rows, sticky header</td></tr>
@@ -412,7 +415,7 @@ export function docsPageHtml(domain: string): string {
             <tr><td>PDF</td><td><code>.pdf</code></td><td>Embedded iframe viewer</td></tr>
             <tr><td>Mermaid</td><td><code>.mmd</code> or <code>text/x-mermaid</code></td><td>Rendered diagram via Mermaid.js CDN</td></tr>
           </tbody>
-        </table>
+        </table></div>
 
         <h3 id="embed-mode">Embed Mode</h3>
         <p>Add <code>?embed=1</code> to any site URL to get a clean, headerless version suitable for iframes:</p>
@@ -427,7 +430,7 @@ export function docsPageHtml(domain: string): string {
         <!-- ───── Concepts ───── -->
         <h2 id="anonymous-sites">Anonymous Sites</h2>
         <p>No account needed. Publish instantly and get a live URL.</p>
-        <table>
+        <div class="table-wrap"><table>
           <thead><tr><th>Limit</th><th>Value</th></tr></thead>
           <tbody>
             <tr><td>Lifetime</td><td>7 days</td></tr>
@@ -435,21 +438,21 @@ export function docsPageHtml(domain: string): string {
             <tr><td>Max total size</td><td>200 MB</td></tr>
             <tr><td>Inline content limit</td><td>256 KB</td></tr>
           </tbody>
-        </table>
+        </table></div>
         <p>Each publish returns a <code>claimToken</code> — save it if you need to delete the site later. Send it as the <code>X-Claim-Token</code> header on <code>DELETE /sites/:slug</code>.</p>
 
         <h2 id="rate-limits">Rate Limits</h2>
         <p>Publish endpoints are rate-limited per IP.</p>
-        <table>
+        <div class="table-wrap"><table>
           <thead><tr><th>Endpoint</th><th>Limit</th><th>Window</th></tr></thead>
           <tbody>
             <tr><td><code>/publish</code></td><td>5 requests</td><td>1 hour</td></tr>
             <tr><td><code>/publish/inline</code></td><td>10 requests</td><td>1 hour</td></tr>
           </tbody>
-        </table>
+        </table></div>
 
         <h2 id="errors">Error Codes</h2>
-        <table>
+        <div class="table-wrap"><table>
           <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
           <tbody>
             <tr><td><code>400</code></td><td>Bad request — missing or invalid parameters</td></tr>
@@ -459,7 +462,7 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>429</code></td><td>Rate limited — try again later</td></tr>
             <tr><td><code>500</code></td><td>Server error</td></tr>
           </tbody>
-        </table>
+        </table></div>
 
       </div>
     </div>
@@ -469,6 +472,56 @@ export function docsPageHtml(domain: string): string {
     function applyTheme(t){document.documentElement.setAttribute('data-theme',t);var icon=t==='dark'?'\u263E':'\u2600';document.querySelectorAll('[id^="theme-btn"]').forEach(function(b){b.textContent=icon});document.querySelectorAll('.nav-logo').forEach(function(img){img.src=t==='dark'?'/logo.svg':'/logo-light.svg'})}
     function toggleTheme(){var t=getTheme()==='dark'?'light':'dark';localStorage.setItem('easl-theme',t);applyTheme(t)}
     applyTheme(getTheme());
+    (function(){
+      var links=document.querySelectorAll('.sidebar nav a[href^=\"#\"]');
+      var ids=[];
+      links.forEach(function(a){var id=a.getAttribute('href').slice(1);if(document.getElementById(id))ids.push(id)});
+      var activeId=null;
+      var paused=false;
+      var hashTimer=null;
+
+      function setActive(id){
+        if(id===activeId)return;
+        activeId=id;
+        links.forEach(function(a){a.classList.remove('active')});
+        var m=document.querySelector('.sidebar nav a[href=\"#'+id+'\"]');
+        if(m){m.classList.add('active');m.scrollIntoView({block:'nearest',behavior:'smooth'})}
+      }
+
+      function getCurrent(){
+        var top=window.scrollY+100;
+        var active=ids[0];
+        for(var i=0;i<ids.length;i++){
+          var el=document.getElementById(ids[i]);
+          if(el&&el.offsetTop<=top)active=ids[i];
+        }
+        if(window.innerHeight+window.scrollY>=document.body.scrollHeight-10)active=ids[ids.length-1];
+        return active;
+      }
+
+      function onScroll(){
+        if(paused)return;
+        var id=getCurrent();
+        setActive(id);
+        clearTimeout(hashTimer);
+        hashTimer=setTimeout(function(){if(activeId)history.replaceState(null,null,'#'+activeId)},300);
+      }
+
+      window.addEventListener('scroll',onScroll,{passive:true});
+
+      links.forEach(function(a){
+        a.addEventListener('click',function(e){
+          var id=this.getAttribute('href').slice(1);
+          paused=true;
+          setActive(id);
+          history.replaceState(null,null,'#'+id);
+          setTimeout(function(){paused=false},800);
+        });
+      });
+
+      if(location.hash){var id=location.hash.slice(1);if(document.getElementById(id))setActive(id)}
+      else{onScroll()}
+    })();
   </script>
 </body>
 </html>`;
