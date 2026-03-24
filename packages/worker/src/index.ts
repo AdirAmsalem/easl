@@ -68,7 +68,7 @@ export default {
       // Deploy preview proxy: preview-pr-N.easl.dev → easl-preview-N.workers.dev
       const previewMatch = subdomain.match(/^preview-pr-(\d+)$/);
       if (previewMatch) {
-        const workerHost = `easl-preview-${previewMatch[1]}.workers.dev`;
+        const workerHost = `easl-preview-${previewMatch[1]}.${env.WORKERS_DEV_SUBDOMAIN}.workers.dev`;
         const proxyUrl = new URL(request.url);
         proxyUrl.hostname = workerHost;
         proxyUrl.port = "";
