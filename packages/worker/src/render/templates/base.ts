@@ -385,7 +385,7 @@ export function generateHtmlShell(data: TemplateData): string {
   <div class="tc-body">
     <div id="tc-viewer"></div>
   </div>
-  <script type="application/json" id="tc-data">${data.dataJson}</script>
+  <script type="application/json" id="tc-data">${escapeScriptClose(data.dataJson)}</script>
   <script>${viewerJs}</script>
 </body>
 </html>`;
@@ -397,4 +397,9 @@ function escapeHtml(str: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Prevent </script> in embedded content from breaking out of the JSON block */
+function escapeScriptClose(str: string): string {
+  return str.replace(/<\//g, "<\\/");
 }

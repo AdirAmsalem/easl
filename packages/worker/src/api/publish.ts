@@ -3,30 +3,19 @@ import type { Env, CreateSiteRequest, InlinePublishRequest, SiteMeta, SiteRow } 
 import { generateSlug, generateVersionId, generateClaimToken, isValidCustomSlug } from "../lib/slug";
 import { generateUploadUrls } from "../lib/presign";
 import { getContentType } from "../lib/mime";
+import { siteUrl as buildSiteUrl, apiUrl as buildApiUrl } from "../lib/url";
 
 const app = new Hono<{ Bindings: Env }>();
 
-/** Build site URL — uses /s/:slug on localhost, subdomain in production */
 function siteUrl(c: { req: { url: string }; env: Env }, slug: string): string {
-  const host = new URL(c.req.url).hostname;
-  if (host === "localhost" || host === "127.0.0.1") {
-    const port = new URL(c.req.url).port;
-    return `http://${host}${port ? `:${port}` : ""}/s/${slug}`;
-  }
-  return `https://${slug}.${c.env.DOMAIN}`;
+  return buildSiteUrl(c.req.url, c.env, slug);
 }
 
-/** Build API URL — uses localhost origin or production API_HOST */
 function apiUrl(c: { req: { url: string }; env: Env }, path: string): string {
-  const origin = new URL(c.req.url);
-  if (origin.hostname === "localhost" || origin.hostname === "127.0.0.1") {
-    return `${origin.origin}${path}`;
-  }
-  return `https://${c.env.API_HOST}${path}`;
+  return buildApiUrl(c.req.url, c.env, path);
 }
 
 const ANON_MAX_FILES = 50;
-const ANON_MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50 MB per site total
 const ANON_MAX_SITE_SIZE = 200 * 1024 * 1024; // 200 MB per site
 const ANON_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const UPLOAD_EXPIRY_SECONDS = 600; // 10 minutes
@@ -34,7 +23,12 @@ const INLINE_MAX_SIZE = 256 * 1024; // 256 KB
 
 // POST /publish — Create new site
 app.post("/publish", async (c) => {
-  const body = await c.req.json<CreateSiteRequest>();
+  let body: CreateSiteRequest;
+  try {
+    body = await c.req.json<CreateSiteRequest>();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
 
   if (!body.files || body.files.length === 0) {
     return c.json({ error: "files array is required and must not be empty" }, 400);
@@ -130,7 +124,12 @@ app.post("/publish", async (c) => {
 
 // POST /publish/inline — Inline content publish (one-call magic)
 app.post("/publish/inline", async (c) => {
-  const body = await c.req.json<InlinePublishRequest>();
+  let body: InlinePublishRequest;
+  try {
+    body = await c.req.json<InlinePublishRequest>();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
 
   if (!body.content || typeof body.content !== "string") {
     return c.json({ error: "content is required" }, 400);
@@ -221,7 +220,12 @@ app.post("/publish/inline", async (c) => {
 // POST /finalize/:slug — Activate uploaded site
 app.post("/finalize/:slug", async (c) => {
   const slug = c.req.param("slug");
-  const body = await c.req.json<{ versionId: string }>();
+  let body: { versionId: string };
+  try {
+    body = await c.req.json<{ versionId: string }>();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
 
   if (!body.versionId) {
     return c.json({ error: "versionId is required" }, 400);
@@ -237,11 +241,13 @@ app.post("/finalize/:slug", async (c) => {
 
   // Verify all files exist in R2
   const files = JSON.parse(version.files_json as string) as Array<{ path: string; r2Key: string }>;
-  const missing: string[] = [];
-  for (const file of files) {
-    const obj = await c.env.CONTENT.head(file.r2Key);
-    if (!obj) missing.push(file.path);
-  }
+  const checks = await Promise.all(
+    files.map(async (file) => {
+      const obj = await c.env.CONTENT.head(file.r2Key);
+      return obj ? null : file.path;
+    })
+  );
+  const missing = checks.filter((p): p is string => p !== null);
 
   if (missing.length > 0) {
     return c.json({ error: "Missing uploaded files", missing }, 422);

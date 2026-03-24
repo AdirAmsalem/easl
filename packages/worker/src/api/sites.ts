@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env, SiteRow } from "../types";
+import { siteUrl } from "../lib/url";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -21,7 +22,7 @@ app.get("/sites/:slug", async (c) => {
     slug: site.slug,
     title: site.title,
     template: site.template,
-    url: `https://${site.slug}.${c.env.DOMAIN}`,
+    url: siteUrl(c.req.url, c.env, site.slug),
     fileCount: site.file_count,
     totalBytes: site.total_bytes,
     expiresAt: site.expires_at,
@@ -46,7 +47,7 @@ app.delete("/sites/:slug", async (c) => {
     return c.json({ error: "Site not found" }, 404);
   }
 
-  if (site.claim_token !== claimToken) {
+  if (!constantTimeEqual(site.claim_token, claimToken)) {
     return c.json({ error: "Invalid claim token" }, 403);
   }
 
@@ -54,12 +55,11 @@ app.delete("/sites/:slug", async (c) => {
   const versions = await c.env.DB.prepare("SELECT files_json FROM versions WHERE slug = ?")
     .bind(slug).all();
 
-  for (const version of versions.results) {
+  const allR2Keys = versions.results.flatMap((version) => {
     const files = JSON.parse(version.files_json as string) as Array<{ r2Key: string }>;
-    for (const file of files) {
-      await c.env.CONTENT.delete(file.r2Key);
-    }
-  }
+    return files.map((f) => f.r2Key);
+  });
+  await Promise.all(allR2Keys.map((key) => c.env.CONTENT.delete(key)));
 
   // Delete from D1 (cascade deletes versions)
   await c.env.DB.prepare("DELETE FROM sites WHERE slug = ?").bind(slug).run();
@@ -69,5 +69,19 @@ app.delete("/sites/:slug", async (c) => {
 
   return c.json({ success: true, slug });
 });
+
+/** Constant-time string comparison to prevent timing attacks on tokens */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  // crypto.subtle.timingSafeEqual is available in Cloudflare Workers
+  let result = 0;
+  for (let i = 0; i < bufA.length; i++) {
+    result |= bufA[i] ^ bufB[i];
+  }
+  return result === 0;
+}
 
 export default app;
