@@ -57,7 +57,7 @@ export interface CreateSiteResponse {
 export interface FinalizeResponse {
   url: string;
   slug: string;
-  ogImage: null;
+  ogImage: string;
   qrCode: string;
   embed: string;
   shareText: string;

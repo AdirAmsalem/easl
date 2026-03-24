@@ -4,6 +4,8 @@ import { generateSlug, generateVersionId, generateClaimToken, isValidCustomSlug 
 import { generateUploadUrls } from "../lib/presign";
 import { getContentType } from "../lib/mime";
 import { siteUrl as buildSiteUrl, apiUrl as buildApiUrl } from "../lib/url";
+import { generateOgImage } from "../og";
+import { generateQrSvg } from "../lib/qr";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -20,6 +22,7 @@ const ANON_MAX_SITE_SIZE = 200 * 1024 * 1024; // 200 MB per site
 const ANON_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const UPLOAD_EXPIRY_SECONDS = 600; // 10 minutes
 const INLINE_MAX_SIZE = 256 * 1024; // 256 KB
+const SOCIAL_ASSET_BASE_PATH = "/_easl";
 
 // POST /publish — Create new site
 app.post("/publish", async (c) => {
@@ -204,12 +207,18 @@ app.post("/publish/inline", async (c) => {
   });
 
   const url = siteUrl(c, slug);
+
+  // Generate social assets in background (non-blocking)
+  c.executionCtx.waitUntil(
+    generateSocialAssets(c.env, slug, body.title || fileName, body.contentType, url)
+  );
+
   return c.json({
     url,
     slug,
     claimToken,
-    ogImage: null,
-    qrCode: `${url}/qr.svg`,
+    ogImage: `${url}${SOCIAL_ASSET_BASE_PATH}/og.png`,
+    qrCode: `${url}${SOCIAL_ASSET_BASE_PATH}/qr.svg`,
     embed: `<iframe src="${url}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
     shareText: `${body.title || fileName}: ${url}`,
     expiresAt,
@@ -276,15 +285,50 @@ app.post("/finalize/:slug", async (c) => {
   });
 
   const url = siteUrl(c, slug);
+
+  // Generate social assets in background (non-blocking)
+  const primaryFile = meta.files[0];
+  c.executionCtx.waitUntil(
+    generateSocialAssets(
+      c.env,
+      slug,
+      meta.title || slug,
+      primaryFile?.contentType || "text/plain",
+      url,
+    )
+  );
+
   return c.json({
     url,
     slug,
-    ogImage: null,
-    qrCode: `${url}/qr.svg`,
+    ogImage: `${url}${SOCIAL_ASSET_BASE_PATH}/og.png`,
+    qrCode: `${url}${SOCIAL_ASSET_BASE_PATH}/qr.svg`,
     embed: `<iframe src="${url}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
     shareText: `Check out: ${url}`,
   });
 });
+
+/** Generate OG image + QR code and upload to R2 (fire-and-forget via waitUntil) */
+async function generateSocialAssets(
+  env: Env,
+  slug: string,
+  title: string,
+  contentType: string,
+  siteUrlStr: string,
+): Promise<void> {
+  const [ogPng, qrSvg] = await Promise.all([
+    generateOgImage({ title, slug, contentType, domain: env.DOMAIN }),
+    Promise.resolve(generateQrSvg(siteUrlStr)),
+  ]);
+  await Promise.all([
+    env.CONTENT.put(`og/${slug}.png`, ogPng, {
+      httpMetadata: { contentType: "image/png" },
+    }),
+    env.CONTENT.put(`qr/${slug}.svg`, qrSvg, {
+      httpMetadata: { contentType: "image/svg+xml" },
+    }),
+  ]);
+}
 
 async function generateUniqueSlug(db: D1Database, maxRetries = 3): Promise<string> {
   for (let i = 0; i < maxRetries; i++) {

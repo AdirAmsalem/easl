@@ -8,6 +8,7 @@ export async function serveSite(
   request: Request,
   env: Env,
   slug: string,
+  _ctx: ExecutionContext,
 ): Promise<Response> {
   let meta = await env.SITES_KV.get<SiteMeta>(`site:${slug}`, "json");
 
@@ -30,6 +31,22 @@ export async function serveSite(
 
   const url = new URL(request.url);
   const path = url.pathname.slice(1);
+
+  // Social assets — served from R2 at deterministic keys
+  if (path === "_easl/og.png") {
+    const obj = await env.CONTENT.get(`og/${slug}.png`);
+    if (!obj) return new Response("Not found", { status: 404 });
+    return new Response(obj.body, {
+      headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400, immutable" },
+    });
+  }
+  if (path === "_easl/qr.svg") {
+    const obj = await env.CONTENT.get(`qr/${slug}.svg`);
+    if (!obj) return new Response("Not found", { status: 404 });
+    return new Response(obj.body, {
+      headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=86400, immutable" },
+    });
+  }
 
   // Render decision based on file manifest
   const decision = decideRenderMode(meta.files);

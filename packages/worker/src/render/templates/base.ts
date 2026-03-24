@@ -374,7 +374,11 @@ export function generateHtmlShell(data: TemplateData): string {
   <meta property="og:title" content="${escapeHtml(data.title)}">
   <meta property="og:description" content="Shared via easl">
   <meta property="og:url" content="https://${data.slug}.${data.domain}">
+  <meta property="og:image" content="https://${data.slug}.${data.domain}/_easl/og.png">
   <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${escapeHtml(data.title)}">
+  <meta name="twitter:image" content="https://${data.slug}.${data.domain}/_easl/og.png">
   <style>${BASE_CSS}${viewerCss}</style>
 </head>
 <body>

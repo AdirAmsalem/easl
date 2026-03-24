@@ -2,11 +2,8 @@
 
 ## P1 — High Priority
 
-### Social assets (OG images + QR codes)
-Generate branded OG images (Satori + resvg-wasm from R2) on first social crawler request. Generate QR code SVG at finalize time. Rich previews on Slack/Twitter/iMessage are a core differentiator. OG generation needs validation on Workers Paid plan — Satori + resvg-wasm may have compatibility issues.
-- **Effort:** L (human: ~1 week / CC: ~2 hours)
-- **Depends on:** Deployed Worker (need to test Satori on actual Workers runtime)
-- **Context:** Design doc specifies lazy OG generation on first social crawler request (User-Agent detection). QR codes are pure SVG computation at finalize. Both stored in R2 at deterministic keys (og/{slug}.png, qr/{slug}.svg).
+### ~~Social assets (OG images + QR codes)~~ DONE
+Eager generation at publish/finalize time via `ctx.waitUntil()`. OG images (Satori + resvg-wasm), QR codes (uqr). Stored in R2 at `og/{slug}.png` and `qr/{slug}.svg`. Served as static files — no crawler detection needed. OG meta tags + Twitter cards added to HTML shell.
 
 ## P2 — Medium Priority
 
@@ -26,7 +23,5 @@ Replaced with marked.js v15 from CDN. Regex fallback kept for offline/CDN-unavai
 
 ## P3 — Nice to Have
 
-### Dark mode toggle
-Dark/light mode toggle with localStorage persistence across all viewer types. CSS custom properties for theme switching. Toggle button in header.
-- **Effort:** S (human: ~2 hours / CC: ~15 min)
-- **Depends on:** Nothing
+### ~~Dark mode toggle~~ DONE
+Dark/light mode toggle with localStorage persistence. CSS custom properties for theme switching.
