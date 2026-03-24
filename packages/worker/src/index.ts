@@ -63,9 +63,20 @@ export default {
     // Wildcard subdomain → serve site with smart rendering
     const domainSuffix = `.${env.DOMAIN}`;
     if (hostname.endsWith(domainSuffix)) {
-      const slug = hostname.slice(0, -domainSuffix.length);
-      if (slug && !slug.includes(".")) {
-        return serveSite(request, env, slug);
+      const subdomain = hostname.slice(0, -domainSuffix.length);
+
+      // Deploy preview proxy: preview-pr-N.easl.dev → easl-preview-N.workers.dev
+      const previewMatch = subdomain.match(/^preview-pr-(\d+)$/);
+      if (previewMatch) {
+        const workerHost = `easl-preview-${previewMatch[1]}.workers.dev`;
+        const proxyUrl = new URL(request.url);
+        proxyUrl.hostname = workerHost;
+        proxyUrl.port = "";
+        return fetch(new Request(proxyUrl.toString(), request));
+      }
+
+      if (subdomain && !subdomain.includes(".")) {
+        return serveSite(request, env, subdomain);
       }
     }
 
