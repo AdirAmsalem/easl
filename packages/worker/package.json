@@ -12,6 +12,7 @@
   "dependencies": {
     "@resvg/resvg-wasm": "^2.6.2",
     "aws4fetch": "^1.0.20",
+    "fflate": "^0.8.2",
     "hono": "^4.7.0",
     "satori": "^0.26.0",
     "uqr": "^0.1.2"

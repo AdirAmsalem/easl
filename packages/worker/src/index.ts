@@ -106,7 +106,7 @@ async function pathBasedRouting(
     const slug = siteMatch[1];
     const subPath = siteMatch[2] ?? "/";
     const rewritten = new Request(new URL(subPath, request.url), request);
-    return serveSite(rewritten, env, slug, ctx);
+    return serveSite(rewritten, env, slug, ctx, `/s/${slug}`);
   }
 
   return html(landingPageHtml(env.DOMAIN));
