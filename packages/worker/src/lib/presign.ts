@@ -23,7 +23,7 @@ export async function generatePresignedPutUrl(
 ): Promise<string> {
   const client = getR2Client(env);
   const endpoint = `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
-  const url = `${endpoint}/tinycloud-content/${key}?X-Amz-Expires=${expiresInSeconds}`;
+  const url = `${endpoint}/easl-content/${key}?X-Amz-Expires=${expiresInSeconds}`;
 
   const signed = await client.sign(
     new Request(url, {

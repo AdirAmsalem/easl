@@ -7,7 +7,7 @@ import { serveSite } from "./serve/handler";
 import { docsPageHtml } from "./docs";
 
 // ─────────────────────────────────────────────
-// tinycloud — Beautiful auto-rendering for agent output
+// easl — Beautiful auto-rendering for agent output
 // ─────────────────────────────────────────────
 
 const api = new Hono<{ Bindings: Env }>();
@@ -20,7 +20,7 @@ api.use("/*", cors({
 }));
 
 api.get("/", (c) => c.json({
-  name: "tinycloud",
+  name: "easl",
   version: "0.1.0",
   description: "Agent-native hosting with beautiful auto-rendering",
   docs: `https://${c.env.DOMAIN}/docs`,
@@ -108,7 +108,7 @@ function landingPageHtml(domain: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>tinycloud — Instant hosting for AI agents</title>
+  <title>easl — Instant hosting for AI agents</title>
   <meta name="description" content="Upload any file, get a beautiful shareable URL. One API call turns CSV into sortable tables, Markdown into styled prose, JSON into interactive trees. Zero config.">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
@@ -215,11 +215,11 @@ function landingPageHtml(domain: string): string {
 <body>
   <nav>
     <div class="inner">
-      <div class="logo">tiny<span>cloud</span></div>
+      <div class="logo">eas<span>l</span></div>
       <div class="links">
         <a href="#demos">Demos</a>
         <a href="/docs">Docs</a>
-        <a href="https://github.com/nicepkg/tinycloud">GitHub</a>
+        <a href="https://github.com/AdirAmsalem/easl">GitHub</a>
       </div>
     </div>
   </nav>
@@ -227,7 +227,7 @@ function landingPageHtml(domain: string): string {
   <div class="container">
     <section class="hero">
       <h1>Instant hosting for<br><span class="accent">AI agents</span></h1>
-      <p class="sub">Upload a CSV, markdown doc, or diagram. tinycloud renders it beautifully and gives you a shareable URL.</p>
+      <p class="sub">Upload a CSV, markdown doc, or diagram. easl renders it beautifully and gives you a shareable URL.</p>
       <div class="chips">
         <span class="chip">CSV</span>
         <span class="chip">Markdown</span>
@@ -307,13 +307,13 @@ Dave,Engineer,Infra,2024</div>
       <p>Publish your first file in under 10 seconds.</p>
       <div class="cta-buttons">
         <a class="btn btn-primary" href="/docs">API Docs</a>
-        <a class="btn btn-secondary" href="https://github.com/nicepkg/tinycloud">View on GitHub</a>
+        <a class="btn btn-secondary" href="https://github.com/AdirAmsalem/easl">View on GitHub</a>
       </div>
     </section>
   </div>
 
   <footer>
-    <div class="container">tinycloud &mdash; open source, MIT licensed</div>
+    <div class="container">easl &mdash; open source, MIT licensed</div>
   </footer>
 </body>
 </html>`;
