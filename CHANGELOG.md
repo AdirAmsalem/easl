@@ -2,6 +2,21 @@
 
 All notable changes to easl will be documented in this file.
 
+## [0.1.2.0] - 2026-03-24
+
+### Added
+- SVG logo assets: favicon, wordmark, and easel-as-A combined mark served from `/public`
+- Static asset serving via Cloudflare Workers `[assets]` directive
+- Interactive hero demo with tab-switching (CSV/Markdown/JSON) and animated previews
+- "Start in seconds" setup section with MCP config and curl examples
+
+### Changed
+- Hero redesigned: "One API call. Beautiful URL." with agent conversation UI
+- Nav logo switched from styled text to SVG image for brand consistency
+- Docs page logo and favicon updated to use static SVG assets
+- Background darkened from `#0a0a0a` to `#050505` with refined nav blur
+- Wrangler route ordering: most-specific routes first
+
 ## [0.1.1.0] - 2026-03-24
 
 ### Added

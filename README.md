@@ -4,7 +4,7 @@
 
 **Instant hosting for AI agents. Upload any file, get a beautiful URL.**
 
-[![Version](https://img.shields.io/badge/version-0.1.1-blue?style=flat-square)](https://github.com/AdiRamsalem/easl/releases)
+[![Version](https://img.shields.io/badge/version-0.1.2-blue?style=flat-square)](https://github.com/AdiRamsalem/easl/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square)](https://nodejs.org)
 
@@ -53,7 +53,7 @@ Add to your MCP config (Claude Desktop, Cursor, Windsurf, etc.):
   "mcpServers": {
     "easl": {
       "command": "npx",
-      "args": ["-y", "@easl/mcp-server"]
+      "args": ["-y", "@easl/mcp"]
     }
   }
 }
