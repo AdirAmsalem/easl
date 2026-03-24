@@ -75,9 +75,7 @@ jobs:
           pnpm wrangler deploy --config wrangler.preview.toml
 
           PREVIEW_URL="https://${PREVIEW_HOST}"
-          WORKERS_DEV_URL="https://${PREVIEW_NAME}.adir.workers.dev"
           echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
-          echo "workers_dev_url=$WORKERS_DEV_URL" >> "$GITHUB_OUTPUT"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -87,13 +85,10 @@ jobs:
         with:
           script: |
             const url = '${{ steps.preview.outputs.url }}';
-            const workersDevUrl = '${{ steps.preview.outputs.workers_dev_url }}';
             const body = [
               '### Deploy Preview',
               '',
               url,
-              '',
-              `Direct: ${workersDevUrl}`,
               '',
               `_Updated at ${new Date().toISOString()}_`,
             ].join('\n');
