@@ -1,5 +1,5 @@
--- tinycloud D1 database schema
--- Run: wrangler d1 execute tinycloud-db --file=./schema.sql
+-- easl D1 database schema
+-- Run: wrangler d1 execute easl-db --file=./schema.sql
 
 -- Sites (publishes)
 CREATE TABLE IF NOT EXISTS sites (

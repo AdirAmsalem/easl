@@ -9,13 +9,13 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 
 type Json = Record<string, unknown>;
 
-const API_URL = (process.env.TINYCLOUD_API_URL ?? "https://api.tinycloud.dev").replace(/\/$/, "");
+const API_URL = (process.env.EASL_API_URL ?? "https://api.easl.dev").replace(/\/$/, "");
 
 // Session state: track published sites for list_sites
 const sessionSites: Array<{ slug: string; claimToken: string; url: string; createdAt: string }> = [];
 
 const server = new Server(
-  { name: "tinycloud", version: "0.1.0" },
+  { name: "easl", version: "0.1.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -41,7 +41,7 @@ const toolDefinitions = [
   {
     name: "publish_file",
     description:
-      "Publish a single file from disk as a beautiful shareable URL. tinycloud auto-detects the file type and renders it with the best viewer.",
+      "Publish a single file from disk as a beautiful shareable URL. easl auto-detects the file type and renders it with the best viewer.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -55,7 +55,7 @@ const toolDefinitions = [
   {
     name: "publish_site",
     description:
-      "Publish a directory of files as a site. If the directory has an index.html, it's served as-is. Otherwise, tinycloud auto-generates navigation.",
+      "Publish a directory of files as a site. If the directory has an index.html, it's served as-is. Otherwise, easl auto-generates navigation.",
     inputSchema: {
       type: "object" as const,
       properties: {

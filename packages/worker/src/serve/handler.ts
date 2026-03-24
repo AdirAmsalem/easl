@@ -263,7 +263,7 @@ function buildMultiFileNav(slug: string, meta: SiteMeta, domain: string): string
   <h1>${escapeHtml(title)}</h1>
   <p class="meta">${meta.files.length} file${meta.files.length === 1 ? "" : "s"}</p>
   <ul class="files">${fileList}</ul>
-  <div class="footer">Shared via <a href="https://${domain}">tinycloud</a></div>
+  <div class="footer">Shared via <a href="https://${domain}">easl</a></div>
 </div></body></html>`;
 }
 
@@ -271,14 +271,14 @@ function notFoundHtml(slug: string, domain: string): string {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not Found</title>
 <style>body{font-family:-apple-system,sans-serif;background:#fafafa;color:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.c{text-align:center}h1{font-size:4rem;font-weight:200}p{color:#737373;margin-top:1rem}a{color:#4f46e5;text-decoration:none}</style>
-</head><body><div class="c"><h1>404</h1><p><strong>${escapeHtml(slug)}</strong> doesn't exist.</p><p><a href="https://${domain}">Create with tinycloud →</a></p></div></body></html>`;
+</head><body><div class="c"><h1>404</h1><p><strong>${escapeHtml(slug)}</strong> doesn't exist.</p><p><a href="https://${domain}">Create with easl →</a></p></div></body></html>`;
 }
 
 function expiredHtml(slug: string, domain: string): string {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Expired</title>
 <style>body{font-family:-apple-system,sans-serif;background:#fafafa;color:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.c{text-align:center}h1{font-size:4rem;font-weight:200}p{color:#737373;margin-top:1rem}a{color:#4f46e5;text-decoration:none}</style>
-</head><body><div class="c"><h1>410</h1><p><strong>${escapeHtml(slug)}</strong> has expired.</p><p>Anonymous sites expire after 7 days.</p><p><a href="https://${domain}">Create with tinycloud →</a></p></div></body></html>`;
+</head><body><div class="c"><h1>410</h1><p><strong>${escapeHtml(slug)}</strong> has expired.</p><p>Anonymous sites expire after 7 days.</p><p><a href="https://${domain}">Create with easl →</a></p></div></body></html>`;
 }
 
 function pendingHtml(slug: string): string {

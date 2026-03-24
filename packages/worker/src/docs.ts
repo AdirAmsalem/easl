@@ -9,8 +9,8 @@ export function docsPageHtml(domain: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>tinycloud docs — API Reference &amp; Getting Started</title>
-  <meta name="description" content="Complete documentation for tinycloud: smart rendering for AI agent output. API reference, MCP server setup, inline publish.">
+  <title>easl docs — API Reference &amp; Getting Started</title>
+  <meta name="description" content="Complete documentation for easl: smart rendering for AI agent output. API reference, MCP server setup, inline publish.">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     html{scroll-behavior:smooth}
@@ -93,12 +93,12 @@ export function docsPageHtml(domain: string): string {
 </head>
 <body>
   <div class="mobile-nav">
-    <a href="https://${domain}" class="logo">tiny<span>cloud</span> <span style="font-weight:400;color:#525252;font-size:0.75rem">docs</span></a>
+    <a href="https://${domain}" class="logo">eas<span>l</span> <span style="font-weight:400;color:#525252;font-size:0.75rem">docs</span></a>
   </div>
 
   <div class="wrapper">
     <aside class="sidebar">
-      <a href="https://${domain}" class="logo">tiny<span>cloud</span></a>
+      <a href="https://${domain}" class="logo">eas<span>l</span></a>
       <nav>
         <div class="group">
           <div class="group-title">Getting Started</div>
@@ -135,10 +135,10 @@ export function docsPageHtml(domain: string): string {
 
     <div class="main">
       <div class="content">
-        <h1 id="overview">tinycloud docs</h1>
+        <h1 id="overview">easl docs</h1>
         <p class="lead">One API call turns raw agent output into a beautiful, shareable URL.</p>
 
-        <p>tinycloud is a smart rendering layer for AI agents. Upload a CSV, Markdown file, JSON blob, or any supported content — tinycloud detects the type and renders it with the best interactive viewer. No accounts required.</p>
+        <p>easl is a smart rendering layer for AI agents. Upload a CSV, Markdown file, JSON blob, or any supported content — easl detects the type and renders it with the best interactive viewer. No accounts required.</p>
 
         <table>
           <tbody>
@@ -225,9 +225,9 @@ export function docsPageHtml(domain: string): string {
         <p>Add to your MCP configuration (Claude Desktop, Cursor, etc.):</p>
 <pre>{
   <span class="s">"mcpServers"</span>: {
-    <span class="s">"tinycloud"</span>: {
+    <span class="s">"easl"</span>: {
       <span class="s">"command"</span>: <span class="s">"npx"</span>,
-      <span class="s">"args"</span>: [<span class="s">"-y"</span>, <span class="s">"@tinycloud/mcp-server"</span>]
+      <span class="s">"args"</span>: [<span class="s">"-y"</span>, <span class="s">"@easl/mcp-server"</span>]
     }
   }
 }</pre>
@@ -389,7 +389,7 @@ export function docsPageHtml(domain: string): string {
 
         <!-- ───── Smart Rendering ───── -->
         <h2 id="smart-rendering">Smart Rendering</h2>
-        <p>tinycloud's core feature. When a site is served, the Worker detects the file type and generates an HTML shell with the right interactive viewer. The raw data is embedded as JSON in a <code>&lt;script&gt;</code> tag, and client-side JavaScript hydrates it into a rich viewer.</p>
+        <p>easl's core feature. When a site is served, the Worker detects the file type and generates an HTML shell with the right interactive viewer. The raw data is embedded as JSON in a <code>&lt;script&gt;</code> tag, and client-side JavaScript hydrates it into a rich viewer.</p>
 
         <h3 id="supported-types">Supported Types</h3>
         <table>

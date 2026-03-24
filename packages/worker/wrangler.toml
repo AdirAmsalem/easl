@@ -1,21 +1,21 @@
-# tinycloud — Agent-native hosting with beautiful auto-rendering
-name = "tinycloud"
+# easl — Agent-native hosting with beautiful auto-rendering
+name = "easl"
 main = "src/index.ts"
 compatibility_date = "2026-02-21"
 compatibility_flags = ["nodejs_compat"]
 
 # Uncomment when deploying:
 # [[routes]]
-# pattern = "api.tinycloud.dev/*"
-# zone_name = "tinycloud.dev"
+# pattern = "api.easl.dev/*"
+# zone_name = "easl.dev"
 #
 # [[routes]]
-# pattern = "*.tinycloud.dev/*"
-# zone_name = "tinycloud.dev"
+# pattern = "*.easl.dev/*"
+# zone_name = "easl.dev"
 #
 # [[routes]]
-# pattern = "tinycloud.dev/*"
-# zone_name = "tinycloud.dev"
+# pattern = "easl.dev/*"
+# zone_name = "easl.dev"
 
 [[kv_namespaces]]
 binding = "SITES_KV"
@@ -24,16 +24,16 @@ id = "REPLACE_WITH_KV_NAMESPACE_ID"
 
 [[r2_buckets]]
 binding = "CONTENT"
-bucket_name = "tinycloud-content"
+bucket_name = "easl-content"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "tinycloud-db"
+database_name = "easl-db"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
 
 [vars]
-DOMAIN = "tinycloud.dev"
-API_HOST = "api.tinycloud.dev"
+DOMAIN = "easl.dev"
+API_HOST = "api.easl.dev"
 
 # Secrets (set via `wrangler secret put <NAME>`):
 # R2_ACCESS_KEY_ID

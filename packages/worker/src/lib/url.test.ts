@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { siteUrl, apiUrl } from "./url";
 
-const prodEnv = { DOMAIN: "tinycloud.dev", API_HOST: "api.tinycloud.dev" } as any;
+const prodEnv = { DOMAIN: "easl.dev", API_HOST: "api.easl.dev" } as any;
 
 describe("siteUrl", () => {
   it("returns subdomain URL in production", () => {
-    expect(siteUrl("https://api.tinycloud.dev/publish", prodEnv, "my-site"))
-      .toBe("https://my-site.tinycloud.dev");
+    expect(siteUrl("https://api.easl.dev/publish", prodEnv, "my-site"))
+      .toBe("https://my-site.easl.dev");
   });
 
   it("returns /s/:slug path on localhost", () => {
@@ -27,8 +27,8 @@ describe("siteUrl", () => {
 
 describe("apiUrl", () => {
   it("returns production API host URL", () => {
-    expect(apiUrl("https://api.tinycloud.dev/publish", prodEnv, "/finalize/abc"))
-      .toBe("https://api.tinycloud.dev/finalize/abc");
+    expect(apiUrl("https://api.easl.dev/publish", prodEnv, "/finalize/abc"))
+      .toBe("https://api.easl.dev/finalize/abc");
   });
 
   it("returns localhost origin URL on localhost", () => {

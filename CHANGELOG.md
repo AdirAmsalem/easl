@@ -1,11 +1,11 @@
 # Changelog
 
-All notable changes to tinycloud will be documented in this file.
+All notable changes to easl will be documented in this file.
 
 ## [0.1.1.0] - 2026-03-24
 
 ### Added
-- Localhost dev routing for testing without tinycloud.dev subdomain DNS
+- Localhost dev routing for testing without easl.dev subdomain DNS
 - Markdown rendering via marked.js v15 CDN (replaces regex renderer)
 - Landing page redesign with before/after demos
 - D1 fallback in serveSite() — queries D1 when KV cache misses before returning 404

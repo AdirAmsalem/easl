@@ -1,10 +1,10 @@
 {
-  "name": "@tinycloud/mcp",
+  "name": "@easl/mcp",
   "version": "0.1.0",
-  "description": "MCP server for tinycloud — publish agent output as beautiful URLs",
+  "description": "MCP server for easl — publish agent output as beautiful URLs",
   "type": "module",
   "bin": {
-    "tinycloud-mcp": "dist/index.js"
+    "easl-mcp": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
