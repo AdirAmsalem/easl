@@ -93,6 +93,11 @@ describe("isValidCustomSlug", () => {
     expect(isValidCustomSlug("a".repeat(48))).toBe(true);
   });
 
+  it("rejects preview- prefix (reserved for deploy previews)", () => {
+    expect(isValidCustomSlug("preview-pr-4")).toBe(false);
+    expect(isValidCustomSlug("preview-test")).toBe(false);
+  });
+
   it("rejects special characters", () => {
     expect(isValidCustomSlug("my_site")).toBe(false);
     expect(isValidCustomSlug("my.site")).toBe(false);

@@ -47,31 +47,6 @@ export default {
     const html = (body: string) =>
       new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 
-    // Local development — path-based routing (no subdomains on localhost)
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      const apiPrefixes = ["/publish", "/finalize", "/sites", "/health"];
-      if (apiPrefixes.some((p) => path === p || path.startsWith(p + "/"))) {
-        return api.fetch(request, env, ctx);
-      }
-
-      // /docs — documentation page
-      if (path === "/docs" || path === "/docs/") {
-        return html(docsPageHtml(env.DOMAIN));
-      }
-
-      // /s/:slug — view a published site locally
-      const siteMatch = path.match(/^\/s\/([a-z0-9][a-z0-9-]+[a-z0-9])(\/.*)?$/);
-      if (siteMatch) {
-        const localSlug = siteMatch[1];
-        // Rewrite the URL so serveSite sees the correct sub-path
-        const subPath = siteMatch[2] ?? "/";
-        const rewritten = new Request(new URL(subPath, request.url), request);
-        return serveSite(rewritten, env, localSlug);
-      }
-
-      return html(landingPageHtml(env.DOMAIN));
-    }
-
     // API subdomain
     if (hostname === env.API_HOST) {
       return api.fetch(request, env, ctx);
@@ -88,15 +63,58 @@ export default {
     // Wildcard subdomain → serve site with smart rendering
     const domainSuffix = `.${env.DOMAIN}`;
     if (hostname.endsWith(domainSuffix)) {
-      const slug = hostname.slice(0, -domainSuffix.length);
-      if (slug && !slug.includes(".")) {
-        return serveSite(request, env, slug);
+      const subdomain = hostname.slice(0, -domainSuffix.length);
+
+      // Deploy preview proxy: preview-pr-N.easl.dev → easl-preview-N.workers.dev
+      const previewMatch = subdomain.match(/^preview-pr-(\d+)$/);
+      if (previewMatch) {
+        const workerHost = `easl-preview-${previewMatch[1]}.${env.WORKERS_DEV_SUBDOMAIN}.workers.dev`;
+        const proxyUrl = new URL(request.url);
+        proxyUrl.hostname = workerHost;
+        proxyUrl.port = "";
+        return fetch(new Request(proxyUrl.toString(), request));
+      }
+
+      if (subdomain && !subdomain.includes(".")) {
+        return serveSite(request, env, subdomain);
       }
     }
 
-    return new Response("Not found", { status: 404 });
+    // Path-based routing fallback (localhost, workers.dev previews, etc.)
+    return pathBasedRouting(request, env, ctx, url, html);
   },
 };
+
+// ─────────────────────────────────────────────
+// Path-based routing (localhost, workers.dev previews)
+// ─────────────────────────────────────────────
+
+async function pathBasedRouting(
+  request: Request, env: Env, ctx: ExecutionContext,
+  url: URL, html: (body: string) => Response,
+): Promise<Response> {
+  const path = url.pathname;
+
+  const apiPrefixes = ["/publish", "/finalize", "/sites", "/health"];
+  if (apiPrefixes.some((p) => path === p || path.startsWith(p + "/"))) {
+    return api.fetch(request, env, ctx);
+  }
+
+  if (path === "/docs" || path === "/docs/") {
+    return html(docsPageHtml(env.DOMAIN));
+  }
+
+  // /s/:slug — view a published site
+  const siteMatch = path.match(/^\/s\/([a-z0-9][a-z0-9-]+[a-z0-9])(\/.*)?$/);
+  if (siteMatch) {
+    const slug = siteMatch[1];
+    const subPath = siteMatch[2] ?? "/";
+    const rewritten = new Request(new URL(subPath, request.url), request);
+    return serveSite(rewritten, env, slug);
+  }
+
+  return html(landingPageHtml(env.DOMAIN));
+}
 
 // ─────────────────────────────────────────────
 // Landing page

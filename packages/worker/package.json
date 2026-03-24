@@ -10,12 +10,12 @@
     "db:migrate": "wrangler d1 execute easl-db --file=./schema.sql"
   },
   "dependencies": {
-    "hono": "^4.7.0",
-    "aws4fetch": "^1.0.20"
+    "aws4fetch": "^1.0.20",
+    "hono": "^4.7.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250214.0",
+    "@cloudflare/workers-types": "^4.20260317.1",
     "typescript": "^5.7.0",
-    "wrangler": "^3.105.0"
+    "wrangler": "^4.77.0"
   }
 }

@@ -3,6 +3,8 @@ name = "easl"
 main = "src/index.ts"
 compatibility_date = "2026-02-21"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
 
 [[routes]]
 pattern = "api.easl.dev/*"
@@ -33,6 +35,7 @@ database_id = "8b7c3c46-7517-4459-a024-7d22ca39e28d"
 [vars]
 DOMAIN = "easl.dev"
 API_HOST = "api.easl.dev"
+WORKERS_DEV_SUBDOMAIN = "adir"
 
 # Secrets (set via `wrangler secret put <NAME>`):
 # R2_ACCESS_KEY_ID

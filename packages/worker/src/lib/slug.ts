@@ -53,5 +53,5 @@ export function generateClaimToken(): string {
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/;
 
 export function isValidCustomSlug(slug: string): boolean {
-  return SLUG_REGEX.test(slug) && !slug.includes("--");
+  return SLUG_REGEX.test(slug) && !slug.includes("--") && !slug.startsWith("preview-");
 }
