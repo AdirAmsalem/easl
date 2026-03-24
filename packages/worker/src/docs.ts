@@ -12,72 +12,77 @@ export function docsPageHtml(domain: string): string {
   <title>easl docs — API Reference &amp; Getting Started</title>
   <meta name="description" content="Complete documentation for easl: smart rendering for AI agent output. API reference, MCP server setup, inline publish.">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <script>(function(){var t=localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)})()</script>
   <style>
+    :root{--bg:#0a0a0a;--bg-sidebar:#0f0f0f;--bg-code:#111;--bg-code-inline:#1a1a1a;--border:#1a1a1a;--border-code:#1e1e1e;--border-hover:#333;--text:#e5e5e5;--text-heading:#fff;--text-muted:#a3a3a3;--text-faint:#737373;--text-faintest:#525252;--text-subtle:#d4d4d4;--accent:#60a5fa;--green:#34d399;--yellow:#fbbf24;--pink:#f472b6;--red:#f87171;--method-post-bg:#1e3a5f;--method-get-bg:#1a3f2a;--method-del-bg:#3f1a1a;--badge-req-bg:#3f1a1a;--badge-opt-bg:#1a1a1a;--sidebar-active-bg:#111;--sidebar-hover-bg:#1a1a1a;--nav-bg:rgba(10,10,10,0.95);--logo-invert:0}
+    [data-theme="light"]{--bg:#fafafa;--bg-sidebar:#f5f5f5;--bg-code:#f0f0f0;--bg-code-inline:#e8e8e8;--border:#e0e0e0;--border-code:#d4d4d4;--border-hover:#bbb;--text:#1a1a1a;--text-heading:#000;--text-muted:#525252;--text-faint:#737373;--text-faintest:#a3a3a3;--text-subtle:#333;--accent:#2563eb;--green:#059669;--yellow:#d97706;--pink:#db2777;--red:#dc2626;--method-post-bg:#dbeafe;--method-get-bg:#d1fae5;--method-del-bg:#fee2e2;--badge-req-bg:#fee2e2;--badge-opt-bg:#f0f0f0;--sidebar-active-bg:#e8e8e8;--sidebar-hover-bg:#ebebeb;--nav-bg:rgba(250,250,250,0.95);--logo-invert:1}
     *{margin:0;padding:0;box-sizing:border-box}
     html{scroll-behavior:smooth}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#0a0a0a;color:#e5e5e5;line-height:1.7;-webkit-font-smoothing:antialiased}
-    a{color:#60a5fa;text-decoration:none}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased;transition:background .2s,color .2s}
+    a{color:var(--accent);text-decoration:none}
     a:hover{text-decoration:underline}
-    code{font-family:'SF Mono',SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;font-size:0.875em;background:#1a1a1a;padding:2px 6px;border-radius:3px;color:#e5e5e5}
+    code{font-family:'SF Mono',SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;font-size:0.875em;background:var(--bg-code-inline);padding:2px 6px;border-radius:3px;color:var(--text)}
 
     /* Layout */
     .wrapper{display:flex;min-height:100vh}
-    .sidebar{width:240px;position:fixed;top:0;left:0;bottom:0;background:#0f0f0f;border-right:1px solid #1a1a1a;padding:1.5rem 0;overflow-y:auto;z-index:50}
+    .sidebar{width:240px;position:fixed;top:0;left:0;bottom:0;background:var(--bg-sidebar);border-right:1px solid var(--border);padding:1.5rem 0;overflow-y:auto;z-index:50}
     .sidebar .logo{padding:0 1.5rem;margin-bottom:1.5rem;display:block;text-decoration:none!important}
-    .sidebar .logo svg{height:20px;width:auto}
+    .sidebar .logo img{filter:invert(var(--logo-invert))}
     .sidebar nav{padding:0}
     .sidebar .group{margin-bottom:1rem}
-    .sidebar .group-title{font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#525252;padding:0 1.5rem;margin-bottom:0.375rem}
-    .sidebar a{display:block;padding:0.3125rem 1.5rem;font-size:0.8125rem;color:#a3a3a3;transition:all .1s;text-decoration:none!important;border-left:2px solid transparent}
-    .sidebar a:hover{color:#fff;background:#1a1a1a}
-    .sidebar a.active{color:#60a5fa;border-left-color:#60a5fa;background:#111}
+    .sidebar .group-title{font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faintest);padding:0 1.5rem;margin-bottom:0.375rem}
+    .sidebar a{display:block;padding:0.3125rem 1.5rem;font-size:0.8125rem;color:var(--text-muted);transition:all .1s;text-decoration:none!important;border-left:2px solid transparent}
+    .sidebar a:hover{color:var(--text-heading);background:var(--sidebar-hover-bg)}
+    .sidebar a.active{color:var(--accent);border-left-color:var(--accent);background:var(--sidebar-active-bg)}
+    .sidebar .theme-toggle{margin:1rem 1.5rem 0;background:none;border:1px solid var(--border);border-radius:6px;padding:0.3rem 0.75rem;cursor:pointer;color:var(--text-muted);font-size:0.75rem;transition:all .15s;display:flex;align-items:center;gap:0.375rem}
+    .sidebar .theme-toggle:hover{border-color:var(--border-hover);color:var(--text-heading)}
     .main{margin-left:240px;flex:1;min-width:0}
     .content{max-width:760px;padding:2.5rem 3rem 4rem}
 
     /* Typography */
-    h1{font-size:2rem;font-weight:800;letter-spacing:-0.03em;margin-bottom:0.5rem;color:#fff}
-    h2{font-size:1.375rem;font-weight:700;letter-spacing:-0.02em;margin:3rem 0 1rem;color:#fff;padding-top:1rem;border-top:1px solid #1a1a1a}
+    h1{font-size:2rem;font-weight:800;letter-spacing:-0.03em;margin-bottom:0.5rem;color:var(--text-heading)}
+    h2{font-size:1.375rem;font-weight:700;letter-spacing:-0.02em;margin:3rem 0 1rem;color:var(--text-heading);padding-top:1rem;border-top:1px solid var(--border)}
     h2:first-of-type{border-top:none;margin-top:2rem}
-    h3{font-size:1.0625rem;font-weight:600;margin:2rem 0 0.75rem;color:#e5e5e5}
-    h4{font-size:0.9375rem;font-weight:600;margin:1.5rem 0 0.5rem;color:#d4d4d4}
-    p{margin-bottom:1rem;color:#a3a3a3}
-    .lead{font-size:1.125rem;color:#737373;margin-bottom:2rem}
+    h3{font-size:1.0625rem;font-weight:600;margin:2rem 0 0.75rem;color:var(--text)}
+    h4{font-size:0.9375rem;font-weight:600;margin:1.5rem 0 0.5rem;color:var(--text-subtle)}
+    p{margin-bottom:1rem;color:var(--text-muted)}
+    .lead{font-size:1.125rem;color:var(--text-faint);margin-bottom:2rem}
 
     /* Code blocks */
-    pre{background:#111;border:1px solid #1e1e1e;border-radius:8px;padding:1rem 1.25rem;overflow-x:auto;margin:0 0 1.25rem;font-size:0.8125rem;line-height:1.7;color:#d4d4d4;tab-size:2}
-    pre .c{color:#525252}
-    pre .k{color:#60a5fa}
-    pre .s{color:#34d399}
-    pre .n{color:#fbbf24}
-    pre .h{color:#f472b6}
+    pre{background:var(--bg-code);border:1px solid var(--border-code);border-radius:8px;padding:1rem 1.25rem;overflow-x:auto;margin:0 0 1.25rem;font-size:0.8125rem;line-height:1.7;color:var(--text-subtle);tab-size:2}
+    pre .c{color:var(--text-faintest)}
+    pre .k{color:var(--accent)}
+    pre .s{color:var(--green)}
+    pre .n{color:var(--yellow)}
+    pre .h{color:var(--pink)}
 
     /* Endpoint blocks */
-    .endpoint{margin:1.5rem 0;padding:1.25rem;background:#111;border:1px solid #1e1e1e;border-radius:8px}
+    .endpoint{margin:1.5rem 0;padding:1.25rem;background:var(--bg-code);border:1px solid var(--border-code);border-radius:8px}
     .endpoint .method-path{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;font-size:0.9375rem}
     .method{font-size:0.75rem;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:0.03em;font-family:inherit}
-    .method-post{background:#1e3a5f;color:#60a5fa}
-    .method-get{background:#1a3f2a;color:#34d399}
-    .method-delete{background:#3f1a1a;color:#f87171}
-    .endpoint .path{font-family:'SF Mono',monospace;font-weight:600;color:#e5e5e5}
-    .endpoint .desc{font-size:0.8125rem;color:#737373;margin-bottom:0}
-    .endpoint .auth{font-size:0.75rem;color:#525252;margin-top:0.375rem}
+    .method-post{background:var(--method-post-bg);color:var(--accent)}
+    .method-get{background:var(--method-get-bg);color:var(--green)}
+    .method-delete{background:var(--method-del-bg);color:var(--red)}
+    .endpoint .path{font-family:'SF Mono',monospace;font-weight:600;color:var(--text)}
+    .endpoint .desc{font-size:0.8125rem;color:var(--text-faint);margin-bottom:0}
+    .endpoint .auth{font-size:0.75rem;color:var(--text-faintest);margin-top:0.375rem}
 
     /* Tables */
     table{width:100%;border-collapse:collapse;margin:1rem 0 1.5rem;font-size:0.8125rem}
-    th,td{text-align:left;padding:0.625rem 1rem;border-bottom:1px solid #1a1a1a}
-    th{color:#737373;font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em}
-    td{color:#a3a3a3}
+    th,td{text-align:left;padding:0.625rem 1rem;border-bottom:1px solid var(--border)}
+    th{color:var(--text-faint);font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em}
+    td{color:var(--text-muted)}
     td code{font-size:0.75rem}
 
     /* Badges */
     .badge{display:inline-block;font-size:0.6875rem;padding:2px 8px;border-radius:99px;font-weight:600}
-    .badge-required{background:#3f1a1a;color:#f87171}
-    .badge-optional{background:#1a1a1a;color:#737373}
+    .badge-required{background:var(--badge-req-bg);color:var(--red)}
+    .badge-optional{background:var(--badge-opt-bg);color:var(--text-faint)}
 
     /* Steps */
     .steps{counter-reset:step}
     .step{counter-increment:step;position:relative;padding-left:2.5rem;margin-bottom:1.5rem}
-    .step::before{content:counter(step);position:absolute;left:0;top:0;width:1.75rem;height:1.75rem;background:#111;border:1px solid #333;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;color:#60a5fa}
+    .step::before{content:counter(step);position:absolute;left:0;top:0;width:1.75rem;height:1.75rem;background:var(--bg-code);border:1px solid var(--border-hover);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;color:var(--accent)}
 
     /* Mobile */
     @media(max-width:768px){
@@ -86,14 +91,16 @@ export function docsPageHtml(domain: string): string {
       .content{padding:1.5rem}
       h1{font-size:1.5rem}
     }
-    .mobile-nav{display:none;position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,10,0.95);backdrop-filter:blur(12px);padding:0.75rem 1.5rem;border-bottom:1px solid #1a1a1a;align-items:center;justify-content:space-between}
-    .mobile-nav .logo svg{height:18px;width:auto}
+    .mobile-nav{display:none;position:fixed;top:0;left:0;right:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(12px);padding:0.75rem 1.5rem;border-bottom:1px solid var(--border);align-items:center;justify-content:space-between}
+    .mobile-nav .logo img{filter:invert(var(--logo-invert))}
+    .mobile-nav .theme-toggle{background:none;border:1px solid var(--border);border-radius:6px;padding:0.25rem 0.5rem;cursor:pointer;color:var(--text-muted);font-size:0.875rem;line-height:1}
     @media(max-width:768px){.mobile-nav{display:flex}.content{padding-top:4rem}}
   </style>
 </head>
 <body>
   <div class="mobile-nav">
     <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="18"></a>
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn-mobile"></button>
   </div>
 
   <div class="wrapper">
@@ -131,6 +138,7 @@ export function docsPageHtml(domain: string): string {
           <a href="#errors">Error Codes</a>
         </div>
       </nav>
+      <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn-sidebar"></button>
     </aside>
 
     <div class="main">
@@ -456,6 +464,12 @@ export function docsPageHtml(domain: string): string {
       </div>
     </div>
   </div>
+  <script>
+    function getTheme(){return localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark')}
+    function applyTheme(t){document.documentElement.setAttribute('data-theme',t);var icon=t==='dark'?'\u2600':'\u263E';document.querySelectorAll('[id^="theme-btn"]').forEach(function(b){b.textContent=icon})}
+    function toggleTheme(){var t=getTheme()==='dark'?'light':'dark';localStorage.setItem('easl-theme',t);applyTheme(t)}
+    applyTheme(getTheme());
+  </script>
 </body>
 </html>`;
 }
