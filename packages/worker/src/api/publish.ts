@@ -22,6 +22,7 @@ const ANON_MAX_SITE_SIZE = 200 * 1024 * 1024; // 200 MB per site
 const ANON_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const UPLOAD_EXPIRY_SECONDS = 600; // 10 minutes
 const INLINE_MAX_SIZE = 256 * 1024; // 256 KB
+const SOCIAL_ASSET_BASE_PATH = "/_easl";
 
 // POST /publish — Create new site
 app.post("/publish", async (c) => {
@@ -216,8 +217,8 @@ app.post("/publish/inline", async (c) => {
     url,
     slug,
     claimToken,
-    ogImage: `${url}/og.png`,
-    qrCode: `${url}/qr.svg`,
+    ogImage: `${url}${SOCIAL_ASSET_BASE_PATH}/og.png`,
+    qrCode: `${url}${SOCIAL_ASSET_BASE_PATH}/qr.svg`,
     embed: `<iframe src="${url}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
     shareText: `${body.title || fileName}: ${url}`,
     expiresAt,
@@ -300,8 +301,8 @@ app.post("/finalize/:slug", async (c) => {
   return c.json({
     url,
     slug,
-    ogImage: `${url}/og.png`,
-    qrCode: `${url}/qr.svg`,
+    ogImage: `${url}${SOCIAL_ASSET_BASE_PATH}/og.png`,
+    qrCode: `${url}${SOCIAL_ASSET_BASE_PATH}/qr.svg`,
     embed: `<iframe src="${url}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
     shareText: `Check out: ${url}`,
   });

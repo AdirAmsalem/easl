@@ -33,14 +33,14 @@ export async function serveSite(
   const path = url.pathname.slice(1);
 
   // Social assets — served from R2 at deterministic keys
-  if (path === "og.png") {
+  if (path === "_easl/og.png") {
     const obj = await env.CONTENT.get(`og/${slug}.png`);
     if (!obj) return new Response("Not found", { status: 404 });
     return new Response(obj.body, {
       headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400, immutable" },
     });
   }
-  if (path === "qr.svg") {
+  if (path === "_easl/qr.svg") {
     const obj = await env.CONTENT.get(`qr/${slug}.svg`);
     if (!obj) return new Response("Not found", { status: 404 });
     return new Response(obj.body, {
