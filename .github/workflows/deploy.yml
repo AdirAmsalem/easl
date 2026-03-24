@@ -69,12 +69,7 @@ jobs:
           # Copy wrangler config, replace name and routes for preview
           sed '/^\[\[routes\]\]/,/^$/d' wrangler.toml > wrangler.preview.toml
           sed -i "s/^name = .*/name = \"$PREVIEW_NAME\"/" wrangler.preview.toml
-          cat >> wrangler.preview.toml << EOF
-
-[[routes]]
-pattern = "${PREVIEW_HOST}/*"
-zone_name = "easl.dev"
-EOF
+          printf '\n[[routes]]\npattern = "%s/*"\nzone_name = "easl.dev"\n' "$PREVIEW_HOST" >> wrangler.preview.toml
 
           pnpm wrangler deploy --config wrangler.preview.toml
 
