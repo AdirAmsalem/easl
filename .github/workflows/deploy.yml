@@ -64,7 +64,7 @@ jobs:
         run: |
           PREVIEW_NAME="easl-preview-${{ github.event.pull_request.number }}"
 
-          PREVIEW_HOST="preview-${{ github.event.pull_request.number }}.easl.dev"
+          PREVIEW_HOST="${{ github.event.pull_request.number }}.preview.easl.dev"
 
           # Copy wrangler config, replace name and routes for preview
           sed '/^\[\[routes\]\]/,/^$/d' wrangler.toml > wrangler.preview.toml
