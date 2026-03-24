@@ -51,12 +51,9 @@ export default {
       return api.fetch(request, env, ctx);
     }
 
-    // Root domain → landing page or docs
+    // Root domain → landing page, docs, or path-based API routing
     if (hostname === env.DOMAIN || hostname === `www.${env.DOMAIN}`) {
-      if (path === "/docs" || path === "/docs/") {
-        return html(docsPageHtml(env.DOMAIN));
-      }
-      return html(landingPageHtml(env.DOMAIN));
+      return pathBasedRouting(request, env, ctx, url, html);
     }
 
     // Wildcard subdomain → serve site with smart rendering
@@ -75,7 +72,7 @@ export default {
       }
 
       if (subdomain && !subdomain.includes(".")) {
-        return serveSite(request, env, subdomain);
+        return serveSite(request, env, subdomain, ctx);
       }
     }
 
@@ -109,7 +106,7 @@ async function pathBasedRouting(
     const slug = siteMatch[1];
     const subPath = siteMatch[2] ?? "/";
     const rewritten = new Request(new URL(subPath, request.url), request);
-    return serveSite(rewritten, env, slug);
+    return serveSite(rewritten, env, slug, ctx);
   }
 
   return html(landingPageHtml(env.DOMAIN));
