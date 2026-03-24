@@ -138,8 +138,8 @@ function landingPageHtml(domain: string): string {
     /* Nav */
     nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(5,5,5,0.85);backdrop-filter:blur(16px);border-bottom:1px solid #141414}
     nav .inner{max-width:800px;margin:0 auto;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:56px}
-    nav .logo{font-size:1.125rem;font-weight:700;letter-spacing:-0.03em;color:#fff}
-    nav .logo span{color:#60a5fa}
+    nav .logo{display:flex;align-items:center}
+    nav .logo img{display:block}
     nav .links{display:flex;gap:1.5rem;align-items:center}
     nav .links a{font-size:0.8125rem;color:#a3a3a3;transition:color .15s}
     nav .links a:hover{color:#fff;text-decoration:none}
@@ -265,8 +265,8 @@ function landingPageHtml(domain: string): string {
   <div class="hero-wrap">
   <div class="container">
     <section class="hero">
-      <h1>One API call.<br><span class="accent">Beautiful URL.</span></h1>
-      <p class="sub">Your agent sends CSV, Markdown, or JSON. easl renders it into a shareable page — instantly.</p>
+      <h1>Instant hosting for<br><span class="accent">AI agents</span></h1>
+      <p class="sub">Your agent sends CSV, Markdown, or JSON. easl renders it beautifully and gives you a shareable URL.</p>
 
       <div class="hero-demo">
         <div class="agent-demo">
@@ -390,7 +390,7 @@ Dave,Engineer,Infra,2024</div>
         prompt:'Publish this CSV as a shareable table',
         response:'Done \\u2014 published to easl:',
         url:'https://warm-dawn.${domain}',
-        preview:'<table class="mini-table"><tr><th>name</th><th>role</th><th>team</th><th>started</th></tr><tr><td>Alice</td><td>Engineer</td><td>Platform</td><td>2024</td></tr><tr><td>Bob</td><td>Designer</td><td>Product</td><td>2023</td></tr><tr><td>Carol</td><td>PM</td><td>Growth</td><td>2025</td></tr><tr><td>Dave</td><td>Engineer</td><td>Infra</td><td>2024</td></tr></table>'
+        preview:'<table class="mini-table"><tr><th>name</th><th>role</th><th>team</th><th>joined</th></tr><tr><td>Alice</td><td>Engineer</td><td>Platform</td><td>2024</td></tr><tr><td>Bob</td><td>Designer</td><td>Product</td><td>2023</td></tr><tr><td>Carol</td><td>PM</td><td>Growth</td><td>2025</td></tr><tr><td>Dave</td><td>Engineer</td><td>Infra</td><td>2024</td></tr></table>'
       },
       markdown:{
         prompt:'Turn my notes into a shareable page',
