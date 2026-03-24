@@ -11,6 +11,7 @@ export function docsPageHtml(domain: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>easl docs — API Reference &amp; Getting Started</title>
   <meta name="description" content="Complete documentation for easl: smart rendering for AI agent output. API reference, MCP server setup, inline publish.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     html{scroll-behavior:smooth}
@@ -22,8 +23,8 @@ export function docsPageHtml(domain: string): string {
     /* Layout */
     .wrapper{display:flex;min-height:100vh}
     .sidebar{width:240px;position:fixed;top:0;left:0;bottom:0;background:#0f0f0f;border-right:1px solid #1a1a1a;padding:1.5rem 0;overflow-y:auto;z-index:50}
-    .sidebar .logo{padding:0 1.5rem;font-size:1.125rem;font-weight:700;letter-spacing:-0.03em;color:#fff;margin-bottom:1.5rem;display:block;text-decoration:none!important}
-    .sidebar .logo span{color:#60a5fa}
+    .sidebar .logo{padding:0 1.5rem;margin-bottom:1.5rem;display:block;text-decoration:none!important}
+    .sidebar .logo svg{height:20px;width:auto}
     .sidebar nav{padding:0}
     .sidebar .group{margin-bottom:1rem}
     .sidebar .group-title{font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#525252;padding:0 1.5rem;margin-bottom:0.375rem}
@@ -86,19 +87,18 @@ export function docsPageHtml(domain: string): string {
       h1{font-size:1.5rem}
     }
     .mobile-nav{display:none;position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,10,0.95);backdrop-filter:blur(12px);padding:0.75rem 1.5rem;border-bottom:1px solid #1a1a1a;align-items:center;justify-content:space-between}
-    .mobile-nav .logo{font-size:1rem;font-weight:700;color:#fff;letter-spacing:-0.03em}
-    .mobile-nav .logo span{color:#60a5fa}
+    .mobile-nav .logo svg{height:18px;width:auto}
     @media(max-width:768px){.mobile-nav{display:flex}.content{padding-top:4rem}}
   </style>
 </head>
 <body>
   <div class="mobile-nav">
-    <a href="https://${domain}" class="logo">eas<span>l</span> <span style="font-weight:400;color:#525252;font-size:0.75rem">docs</span></a>
+    <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="18"></a>
   </div>
 
   <div class="wrapper">
     <aside class="sidebar">
-      <a href="https://${domain}" class="logo">eas<span>l</span></a>
+      <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="20"></a>
       <nav>
         <div class="group">
           <div class="group-title">Getting Started</div>
