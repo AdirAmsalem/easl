@@ -99,13 +99,13 @@ export function docsPageHtml(domain: string): string {
 </head>
 <body>
   <div class="mobile-nav">
-    <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="18"></a>
+    <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="18" class="nav-logo"></a>
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn-mobile"></button>
   </div>
 
   <div class="wrapper">
     <aside class="sidebar">
-      <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="20"></a>
+      <a href="https://${domain}" class="logo"><img src="/logo.svg" alt="easl" height="20" class="nav-logo"></a>
       <nav>
         <div class="group">
           <div class="group-title">Getting Started</div>
@@ -466,7 +466,7 @@ export function docsPageHtml(domain: string): string {
   </div>
   <script>
     function getTheme(){return localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark')}
-    function applyTheme(t){document.documentElement.setAttribute('data-theme',t);var icon=t==='dark'?'\u2600':'\u263E';document.querySelectorAll('[id^="theme-btn"]').forEach(function(b){b.textContent=icon})}
+    function applyTheme(t){document.documentElement.setAttribute('data-theme',t);var icon=t==='dark'?'\u263E':'\u2600';document.querySelectorAll('[id^="theme-btn"]').forEach(function(b){b.textContent=icon});document.querySelectorAll('.nav-logo').forEach(function(img){img.src=t==='dark'?'/logo.svg':'/logo-light.svg'})}
     function toggleTheme(){var t=getTheme()==='dark'?'light':'dark';localStorage.setItem('easl-theme',t);applyTheme(t)}
     applyTheme(getTheme());
   </script>

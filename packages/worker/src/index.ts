@@ -258,7 +258,7 @@ function landingPageHtml(domain: string): string {
 <body>
   <nav>
     <div class="inner">
-      <a href="/" class="logo"><img src="/logo.svg" alt="easl" height="24"></a>
+      <a href="/" class="logo"><img src="/logo.svg" alt="easl" height="24" class="nav-logo"></a>
       <div class="links">
         <a href="#demos">Demos</a>
         <a href="/docs">Docs</a>
@@ -392,7 +392,7 @@ Dave,Engineer,Infra,2024</div>
   </footer>
   <script>
     function getTheme(){return localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark')}
-    function applyTheme(t){document.documentElement.setAttribute('data-theme',t);document.getElementById('theme-btn').textContent=t==='dark'?'\u2600':'\u263E'}
+    function applyTheme(t){document.documentElement.setAttribute('data-theme',t);document.getElementById('theme-btn').textContent=t==='dark'?'\u263E':'\u2600';document.querySelectorAll('.nav-logo').forEach(function(img){img.src=t==='dark'?'/logo.svg':'/logo-light.svg'})}
     function toggleTheme(){var t=getTheme()==='dark'?'light':'dark';localStorage.setItem('easl-theme',t);applyTheme(t)}
     applyTheme(getTheme());
   </script><script>
