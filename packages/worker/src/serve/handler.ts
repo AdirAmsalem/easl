@@ -12,9 +12,8 @@ export async function serveSite(
   _ctx: ExecutionContext,
   basePath = "",
 ): Promise<Response> {
-  // robots.txt — block all crawlers on site subdomains
-  const url0 = new URL(request.url);
-  if (url0.pathname === "/robots.txt") {
+  const url = new URL(request.url);
+  if (url.pathname === "/robots.txt") {
     return new Response("User-agent: *\nDisallow: /\n", {
       headers: { "Content-Type": "text/plain" },
     });
