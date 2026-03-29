@@ -12,6 +12,26 @@ export async function serveSite(
   _ctx: ExecutionContext,
   basePath = "",
 ): Promise<Response> {
+  // robots.txt — block all crawlers on site subdomains
+  const url0 = new URL(request.url);
+  if (url0.pathname === "/robots.txt") {
+    return new Response("User-agent: *\nDisallow: /\n", {
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+
+  const response = await serveSiteInner(request, env, slug, _ctx, basePath);
+  response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  return response;
+}
+
+async function serveSiteInner(
+  request: Request,
+  env: Env,
+  slug: string,
+  _ctx: ExecutionContext,
+  basePath = "",
+): Promise<Response> {
   let meta = await env.SITES_KV.get<SiteMeta>(`site:${slug}`, "json");
 
   // D1 fallback: if KV missed (expired or evicted), rebuild from D1
