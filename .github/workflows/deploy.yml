@@ -98,13 +98,15 @@ jobs:
           PREVIEW_DB="easl-db-preview-${PR_NUM}"
           PREVIEW_KV="easl-kv-preview-${PR_NUM}"
 
-          # Create per-PR D1 database (idempotent)
+          # Create per-PR D1 database (idempotent — may already exist)
           pnpm wrangler d1 create "$PREVIEW_DB" 2>&1 || true
           DB_ID=$(pnpm wrangler d1 list --json | jq -r ".[] | select(.name == \"$PREVIEW_DB\") | .uuid")
+          if [ -z "$DB_ID" ]; then echo "ERROR: Failed to get D1 database ID for $PREVIEW_DB"; exit 1; fi
 
-          # Create per-PR KV namespace (idempotent)
+          # Create per-PR KV namespace (idempotent — may already exist)
           pnpm wrangler kv namespace create "$PREVIEW_KV" 2>&1 || true
           KV_ID=$(pnpm wrangler kv namespace list --json | jq -r ".[] | select(.title == \"$PREVIEW_KV\") | .id")
+          if [ -z "$KV_ID" ]; then echo "ERROR: Failed to get KV namespace ID for $PREVIEW_KV"; exit 1; fi
 
           # Copy wrangler config, strip routes, enable workers.dev for preview
           sed '/^\[\[routes\]\]/,/^$/d' wrangler.toml > wrangler.preview.toml
