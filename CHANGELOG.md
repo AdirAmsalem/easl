@@ -2,7 +2,19 @@
 
 All notable changes to easl will be documented in this file.
 
-## [0.1.3.0] - 2026-03-24
+## [0.1.4] - 2026-03-30
+
+### Removed
+- `VERSION` file — unused by any code, build script, or CI config
+- Personal artifacts and tooling from repo
+
+### Changed
+- Open source readiness improvements
+- CI gate added before deploy
+- Polished download buttons and easl badge
+- Made easl sites non-indexable by search engines
+
+## [0.1.3] - 2026-03-24
 
 ### Added
 - Download button on every rendered easl site (header bar, next to "easl" badge)
@@ -10,7 +22,7 @@ All notable changes to easl will be documented in this file.
 - "Download all" link on multi-file navigation pages
 - `fflate` dependency for zip generation in Cloudflare Workers
 
-## [0.1.2.0] - 2026-03-24
+## [0.1.2] - 2026-03-24
 
 ### Added
 - SVG logo assets: favicon, wordmark, and easel-as-A combined mark served from `/public`
@@ -25,7 +37,7 @@ All notable changes to easl will be documented in this file.
 - Background darkened from `#0a0a0a` to `#050505` with refined nav blur
 - Wrangler route ordering: most-specific routes first
 
-## [0.1.1.0] - 2026-03-24
+## [0.1.1] - 2026-03-24
 
 ### Added
 - Localhost dev routing for testing without easl.dev subdomain DNS
@@ -47,7 +59,7 @@ All notable changes to easl will be documented in this file.
 ### Removed
 - Dead `ANON_MAX_TOTAL_SIZE` constant
 
-## [0.1.0.0] - 2026-03-23
+## [0.1.0] - 2026-03-23
 
 ### Added
 - Cloudflare Worker with Hono routing: API subdomain, root landing, wildcard subdomain serving
