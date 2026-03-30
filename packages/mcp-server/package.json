@@ -2,6 +2,12 @@
   "name": "@easl/mcp",
   "version": "0.1.0",
   "description": "MCP server for easl — publish agent output as beautiful URLs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AdirAmsalem/easl.git",
+    "directory": "packages/mcp-server"
+  },
   "type": "module",
   "bin": {
     "easl-mcp": "dist/index.js"

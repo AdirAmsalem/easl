@@ -2,6 +2,12 @@
   "name": "@easl/worker",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AdirAmsalem/easl.git",
+    "directory": "packages/worker"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "build": "wrangler deploy --dry-run --outdir=dist",

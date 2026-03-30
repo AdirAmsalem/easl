@@ -2,6 +2,11 @@
   "name": "easl",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AdirAmsalem/easl.git"
+  },
   "description": "Agent-native static hosting with beautiful auto-rendering",
   "scripts": {
     "dev": "turbo dev",
