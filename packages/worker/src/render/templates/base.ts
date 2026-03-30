@@ -42,26 +42,34 @@ const BASE_CSS = `
     gap: 0.5rem;
   }
   .el-badge {
-    font-size: 0.6875rem;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    background: #f0f0f0;
-    color: #737373;
+    display: inline-flex;
+    align-items: center;
     text-decoration: none;
+    opacity: 0.3;
+    transition: opacity 0.15s ease;
   }
-  .el-badge:hover { background: #e5e5e5; }
+  .el-badge:hover { opacity: 0.5; }
   .el-download-link {
-    font-size: 0.6875rem;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    background: #f0f0f0;
-    color: #737373;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    background: #fff;
+    color: #525252;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.375rem;
+    border: 1px solid #e5e5e5;
+    transition: all 0.15s ease;
+    min-height: 32px;
   }
-  .el-download-link:hover { background: #e5e5e5; color: #525252; }
+  .el-download-link:hover { background: #f9fafb; border-color: #d1d5db; color: #1a1a1a; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+  .el-download-link:active { background: #f3f4f6; transform: scale(0.97); }
+  .el-download-link svg { flex-shrink: 0; }
+  @media (max-width: 640px) {
+    .el-download-link { min-height: 36px; padding: 0.5rem 0.75rem; }
+  }
   .el-body { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 `;
 
@@ -121,8 +129,9 @@ const VIEWER_CSS: Record<ViewerType, string> = {
     .el-gallery img { max-width: 100%; max-height: calc(100vh - 120px); object-fit: contain; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: zoom-in; }
     .el-gallery img.zoomed { cursor: zoom-out; max-width: none; max-height: none; }
     .el-gallery-controls { display: flex; gap: 0.5rem; position: fixed; bottom: 1.5rem; right: 1.5rem; }
-    .el-gallery-btn { padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 0.8125rem; }
-    .el-gallery-btn:hover { background: #f5f5f5; }
+    .el-gallery-btn { padding: 0.5rem 0.875rem; background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; cursor: pointer; font-size: 0.8125rem; font-weight: 500; color: #525252; display: inline-flex; align-items: center; gap: 0.375rem; text-decoration: none; transition: all 0.15s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.06); min-height: 36px; }
+    .el-gallery-btn:hover { background: #f9fafb; border-color: #d1d5db; color: #1a1a1a; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    .el-gallery-btn:active { transform: scale(0.97); }
   `,
   pdf: `
     .el-pdf { width: 100%; height: calc(100vh - 60px); }
@@ -140,13 +149,17 @@ const VIEWER_CSS: Record<ViewerType, string> = {
     .el-mermaid-output { max-width: 100%; overflow: auto; }
   `,
   download: `
-    .el-download { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 60px); text-align: center; }
-    .el-download-card { padding: 3rem; background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; }
-    .el-download-icon { font-size: 3rem; margin-bottom: 1rem; }
-    .el-download-name { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem; }
-    .el-download-meta { font-size: 0.875rem; color: #737373; margin-bottom: 1.5rem; }
-    .el-download-btn { display: inline-block; padding: 0.75rem 1.5rem; background: #4f46e5; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; }
-    .el-download-btn:hover { background: #4338ca; }
+    .el-download { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 60px); text-align: center; padding: 1.5rem; }
+    .el-download-card { padding: 2.5rem 3rem; background: #fff; border: 1px solid #e5e5e5; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03); max-width: 400px; width: 100%; }
+    .el-download-icon { margin-bottom: 1.25rem; display: flex; justify-content: center; }
+    .el-download-icon svg { color: #a3a3a3; }
+    .el-download-name { font-size: 1rem; font-weight: 600; margin-bottom: 0.25rem; word-break: break-all; color: #1a1a1a; }
+    .el-download-meta { font-size: 0.8125rem; color: #a3a3a3; margin-bottom: 1.75rem; }
+    .el-download-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.625rem 1.25rem; background: #1a1a1a; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.875rem; transition: all 0.15s ease; min-height: 44px; }
+    .el-download-btn:hover { background: #333; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+    .el-download-btn:active { transform: scale(0.97); }
+    .el-download-btn svg { flex-shrink: 0; }
+    @media (max-width: 640px) { .el-download-card { padding: 2rem 1.5rem; } }
   `,
 };
 
@@ -317,7 +330,7 @@ const VIEWER_JS: Record<ViewerType, string> = {
       wrap.appendChild(img);
       const controls = document.createElement('div');
       controls.className = 'el-gallery-controls';
-      controls.innerHTML = '<a class="el-gallery-btn" href="' + data.url + '" download>Download</a>';
+      controls.innerHTML = '<a class="el-gallery-btn" href="' + data.url + '" download><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8m0 0L5 7m3 3l3-3"/><path d="M3 13h10"/></svg>Download</a>';
       wrap.appendChild(controls);
       container.appendChild(wrap);
     })();
@@ -374,7 +387,8 @@ const VIEWER_JS: Record<ViewerType, string> = {
       const data = JSON.parse(document.getElementById('el-data').textContent);
       const container = document.getElementById('el-viewer');
       const size = data.size < 1024 ? data.size + ' B' : data.size < 1048576 ? (data.size/1024).toFixed(1) + ' KB' : (data.size/1048576).toFixed(1) + ' MB';
-      container.innerHTML = '<div class="el-download"><div class="el-download-card"><div class="el-download-icon">📄</div><div class="el-download-name">' + data.path + '</div><div class="el-download-meta">' + size + ' · ' + data.contentType + '</div><a class="el-download-btn" href="' + data.url + '" download>Download</a></div></div>';
+      function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+      container.innerHTML = '<div class="el-download"><div class="el-download-card"><div class="el-download-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><div class="el-download-name">' + esc(data.path) + '</div><div class="el-download-meta">' + size + ' · ' + data.contentType + '</div><a class="el-download-btn" href="' + data.url + '" download><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8m0 0L5 7m3 3l3-3"/><path d="M3 13h10"/></svg>Download file</a></div></div>';
     })();
   `,
 };
@@ -403,8 +417,8 @@ export function generateHtmlShell(data: TemplateData): string {
   <div class="el-header">
     <h1>${escapeHtml(data.title)}</h1>
     <div class="el-header-right">
-      <a class="el-download-link" href="${data.siteBaseUrl}/_easl/download" download title="Download">&#8595; Download</a>
-      <a class="el-badge" href="https://${data.domain}">easl</a>
+      <a class="el-download-link" href="${data.siteBaseUrl}/_easl/download" download title="Download"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8m0 0L5 7m3 3l3-3"/><path d="M3 13h10"/></svg>Download</a>
+      <a class="el-badge" href="https://${data.domain}" title="easl"><svg width="40" height="14" viewBox="100 540 820 260" aria-label="easl"><path fill="#1a1a1a" d="M220.826 577.724C227.438 577.408 237.227 577.677 243.82 578.438C273.565 581.811 300.745 596.882 319.36 620.326C338.155 644.2 344.884 670.205 341.322 700.043L229.806 700.058C207.333 700.096 182.568 700.708 160.326 700.05C174.546 754.979 251.573 765.662 286.557 724.715C288.024 722.998 290.641 718.899 292.622 718.294C299.889 717.868 307.173 717.765 314.45 717.984C320.342 718.197 330.549 718.906 336.266 718.175C333.166 729.219 327.356 738.512 320.285 747.304C272.925 806.197 171.626 801.991 133.008 735.576C125.302 722.324 120.99 709.817 119.46 694.593C112.996 630.277 158.592 583.423 220.826 577.724ZM160.554 662.226C169.612 661.736 179.889 661.966 189.056 661.973L236.625 661.972C256.989 662.089 277.436 661.693 297.775 662.109C291.387 644.913 278.364 631.001 261.628 623.492C249.988 618.218 236.199 616.238 223.5 617.241C194.855 619.904 170.475 634.123 160.554 662.226Z"/><path fill="#1a1a1a" d="M689.761 577.247C692.716 577.136 697 577.5 699.993 577.729C741.043 580.879 780.36 602.472 792.975 644.012C778.961 644.483 763.811 644.127 749.333 644.482L748.021 642.909C734.056 626.323 715.933 619.166 694.561 617.327C677.455 616.061 657.947 617.626 644.2 628.964C636.868 635.012 634.382 647.276 641.299 654.462C650.806 664.338 666.341 661.764 678.795 662.018C711.892 662.694 755.339 657.562 780.426 684.117C790.719 694.864 796.259 709.298 795.802 724.172C795.423 734.777 791.969 744.563 785.859 753.184C764.65 783.108 726.036 790.309 691.876 788.946C648.149 784.41 602.263 766.63 592.48 718.33L636.56 718.461C646.4 744.423 678.368 750.325 703.018 750.366C717.779 750.391 738.242 747.957 749.055 736.709C761.224 724.05 754.761 706.776 738.547 702.461C727.753 699.361 718.423 700.63 707.436 700.296C675.737 699.338 638.289 705.285 612.653 682.213C590.628 662.39 592.234 625.886 612.532 605.483C633.404 584.503 661.282 577.899 689.761 577.247Z"/><path fill="#60a5fa" d="M434.219 655.289C471.954 651.886 520.192 670.597 552.772 688.182C559.21 691.657 568.482 697.711 574.996 701.683L575.021 742.276C564.144 738.86 546.817 729.056 537.4 722.859C509.896 704.761 479.635 693.447 446.468 692.519C431.053 692.088 413.208 695.456 401.673 706.814C392.932 715.42 388.007 729.292 398.883 738.72C410.55 748.908 426.455 751.15 441.375 750.619C460.849 750.54 482.316 743.173 497.244 730.784C500.454 728.12 504.61 724.013 508.896 723.537C517.111 722.623 525.68 729.819 526.627 737.968C527.489 745.003 524.767 751.398 520.328 756.596C502.558 777.402 474.599 786.018 448.213 788.598C420.786 791.182 396.267 786.606 374.789 768.568C362.418 758.179 354.487 744.901 353.237 728.641C352.131 713.16 357.237 697.875 367.426 686.166C383.825 667.012 409.498 657.125 434.219 655.289Z"/><path fill="#1a1a1a" d="M811.525 516.938C824.936 516.755 838.62 516.898 852.051 516.912L852.075 628.471C852.065 649.662 852.03 670.866 852.096 692.056C852.145 707.866 855.694 723.362 867.488 734.713C878.636 745.442 892.013 746.204 906.59 745.964C906.205 755.776 906.955 774.977 906.486 785.544C906.272 785.792 906.058 786.04 905.845 786.287L905.347 786.29C878.306 786.293 855.491 778.408 836.339 759.11C826.04 748.895 818.691 736.088 815.069 722.041C810.98 705.573 811.532 688.148 811.575 671.292L811.642 630.776L811.525 516.938Z"/><path fill="#1a1a1a" d="M457.03 577.214C484.009 575.295 514.229 588.818 535.439 604.847L535.864 579.219C547.39 579.161 563.973 578.524 575.063 579.248L575.036 686.201C565.625 681.195 546.933 670.805 537.504 667.685C531.737 655.34 526.826 647.581 516.966 638.292C515.073 636.741 513.158 635.216 511.224 633.716C493.977 620.596 469.782 614.36 448.399 617.563C425.812 620.946 412.416 630.709 399.123 648.363C394.312 647.771 387.135 648.59 382.083 648.489C373.864 648.324 365.773 648.097 357.552 648.219C359.926 635.727 367.314 623.295 375.725 613.908C396.249 591.003 426.632 578.798 457.03 577.214Z"/><path fill="#1a1a1a" d="M535.63 738.116C538.522 739.311 545.22 743.277 548.292 744.923C557.656 749.938 564.884 752.996 575.046 755.811L575.053 786.438C563.191 785.901 547.997 786.373 535.901 786.453C535.889 773.031 536.716 750.963 535.63 738.116Z"/></svg></a>
     </div>
   </div>
   <div class="el-body">
