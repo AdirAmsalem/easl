@@ -26,3 +26,13 @@ CREATE TABLE IF NOT EXISTS versions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_versions_slug ON versions(slug);
+
+-- Feedback
+CREATE TABLE IF NOT EXISTS feedback (
+  id         TEXT PRIMARY KEY,
+  message    TEXT NOT NULL,
+  email      TEXT,
+  name       TEXT,
+  metadata   TEXT,                -- optional JSON blob for agent-specific context
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

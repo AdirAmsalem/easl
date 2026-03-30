@@ -127,6 +127,7 @@ export function docsPageHtml(domain: string): string {
           <a href="#publish-endpoints" class="sub">Publishing</a>
           <a href="#finalize-endpoint" class="sub">Finalize</a>
           <a href="#site-endpoints" class="sub">Site Management</a>
+          <a href="#feedback-endpoint" class="sub">Feedback</a>
           <a href="#curl">cURL Examples</a>
         </div>
         <div class="group">
@@ -368,6 +369,42 @@ export function docsPageHtml(domain: string): string {
           <p class="desc">Delete a site. Requires the claim token from the original publish response.</p>
           <p class="auth">Auth: <code>X-Claim-Token</code> header</p>
         </div>
+
+        <!-- Feedback -->
+        <h3 id="feedback-endpoint">Feedback</h3>
+
+        <div class="endpoint">
+          <div class="method-path"><span class="method method-post">POST</span> <span class="path">/feedback</span></div>
+          <p class="desc">Submit feedback programmatically. Agents can POST here to forward user feedback &mdash; no UI needed.</p>
+          <p class="auth">Auth: None required</p>
+        </div>
+
+        <h4>Request body</h4>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>message</code></td><td>string <span class="badge badge-required">required</span></td><td>Feedback message (max 10 KB)</td></tr>
+            <tr><td><code>email</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Submitter's email address</td></tr>
+            <tr><td><code>name</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Submitter's name</td></tr>
+            <tr><td><code>metadata</code></td><td>object <span class="badge badge-optional">optional</span></td><td>Freeform JSON for context (e.g. site slug, content type)</td></tr>
+          </tbody>
+        </table></div>
+
+        <h4>Response (201)</h4>
+<pre>{
+  <span class="s">"success"</span>: <span class="n">true</span>,
+  <span class="s">"id"</span>: <span class="s">"fb_abc123"</span>
+}</pre>
+
+        <h4>Example</h4>
+<pre><span class="k">curl</span> -X POST https://${api}/feedback \\
+  -H <span class="s">"Content-Type: application/json"</span> \\
+  -d <span class="s">'{
+    "message": "The CSV rendering is great!",
+    "email": "user@example.com",
+    "name": "Alice",
+    "metadata": {"slug": "warm-dawn", "contentType": "text/csv"}
+  }'</span></pre>
 
         <!-- ───── cURL Examples ───── -->
         <h2 id="curl">cURL Examples</h2>

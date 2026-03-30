@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import type { Env } from "./types";
 import publishApi from "./api/publish";
 import sitesApi from "./api/sites";
+import feedbackApi from "./api/feedback";
 import { serveSite } from "./serve/handler";
 import { docsPageHtml } from "./docs";
 
@@ -31,6 +32,7 @@ api.get("/health", (c) => c.json({ ok: true }));
 
 api.route("/", publishApi);
 api.route("/", sitesApi);
+api.route("/", feedbackApi);
 
 api.all("/*", (c) => c.json({ error: "Not found", docs: `https://${c.env.DOMAIN}/docs` }, 404));
 
@@ -91,7 +93,7 @@ async function pathBasedRouting(
 ): Promise<Response> {
   const path = url.pathname;
 
-  const apiPrefixes = ["/publish", "/finalize", "/sites", "/health"];
+  const apiPrefixes = ["/publish", "/finalize", "/sites", "/health", "/feedback"];
   if (apiPrefixes.some((p) => path === p || path.startsWith(p + "/"))) {
     return api.fetch(request, env, ctx);
   }

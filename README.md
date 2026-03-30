@@ -128,6 +128,7 @@ Base URL: `https://api.easl.dev`
 | `POST` | `/finalize/:slug` | Activate a site after uploading files |
 | `GET` | `/sites/:slug` | Get site metadata |
 | `DELETE` | `/sites/:slug` | Delete a site (requires `X-Claim-Token` header) |
+| `POST` | `/feedback` | Submit feedback programmatically |
 
 Full API docs: [easl.dev/docs](https://easl.dev/docs)
 
