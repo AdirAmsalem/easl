@@ -23,8 +23,7 @@ zone_name = "easl.dev"
 
 [[kv_namespaces]]
 binding = "SITES_KV"
-id = "00c6d65754594b07bdbbc4265585aa77"
-# Local dev uses .wrangler/state — no remote ID needed
+id = "00c6d65754594b07bdbbc4265585aa77"  # Self-hosters: replace with your own KV namespace ID
 
 [[r2_buckets]]
 binding = "CONTENT"
@@ -33,12 +32,12 @@ bucket_name = "easl-content"
 [[d1_databases]]
 binding = "DB"
 database_name = "easl-db"
-database_id = "8b7c3c46-7517-4459-a024-7d22ca39e28d"
+database_id = "8b7c3c46-7517-4459-a024-7d22ca39e28d"  # Self-hosters: replace with your own D1 database ID
 
 [vars]
 DOMAIN = "easl.dev"
 API_HOST = "api.easl.dev"
-WORKERS_DEV_SUBDOMAIN = "adir"
+WORKERS_DEV_SUBDOMAIN = "adir"  # Cloudflare account subdomain for preview proxy
 
 # Secrets (set via `wrangler secret put <NAME>`):
 # R2_ACCESS_KEY_ID

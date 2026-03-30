@@ -7,3 +7,5 @@ dist/
 .playwright-mcp/
 .env*
 .DS_Store
+.claude/
+.gstack/
