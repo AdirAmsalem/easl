@@ -123,7 +123,7 @@ function landingPageHtml(domain: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>easl — Instant hosting for AI agents</title>
-  <meta name="description" content="Upload any file, get a beautiful shareable URL. One API call turns CSV into sortable tables, Markdown into styled prose, JSON into interactive trees. Zero config.">
+  <meta name="description" content="Turn agent output into pages worth sharing. One API call turns CSV into sortable tables, Markdown into styled prose, JSON into interactive trees. Zero config.">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <script>(function(){var t=localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)})()</script>
   <style>
@@ -269,7 +269,7 @@ function landingPageHtml(domain: string): string {
   <div class="container">
     <section class="hero">
       <h1>Instant hosting for<br><span class="accent">AI agents</span></h1>
-      <p class="sub">Your agent sends CSV, Markdown, or JSON. easl renders it beautifully and gives you a shareable URL.</p>
+      <p class="sub">Your agent sends CSV, Markdown, or JSON. easl turns it into a page worth sharing.</p>
 
       <div class="hero-demo">
         <div class="agent-demo">

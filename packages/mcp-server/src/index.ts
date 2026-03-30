@@ -23,7 +23,7 @@ const toolDefinitions = [
   {
     name: "publish_content",
     description:
-      "Publish raw content (Markdown, CSV, HTML, JSON, SVG, Mermaid) as a beautiful shareable URL. The fastest way — content goes in, URL comes out. Max 256KB.",
+      "Publish raw content (Markdown, CSV, HTML, JSON, SVG, Mermaid) as a shareable page. The fastest way — content goes in, URL comes out. Max 256KB.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -41,7 +41,7 @@ const toolDefinitions = [
   {
     name: "publish_file",
     description:
-      "Publish a single file from disk as a beautiful shareable URL. easl auto-detects the file type and renders it with the best viewer.",
+      "Publish a single file from disk — returns a URL to a shareable page. easl auto-detects the file type and renders it with the best viewer.",
     inputSchema: {
       type: "object" as const,
       properties: {

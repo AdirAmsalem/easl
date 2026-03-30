@@ -147,7 +147,7 @@ export function docsPageHtml(domain: string): string {
     <div class="main">
       <div class="content">
         <h1 id="overview">easl docs</h1>
-        <p class="lead">One API call turns raw agent output into a beautiful, shareable URL.</p>
+        <p class="lead">Turn agent output into pages worth sharing — one API call is all it takes.</p>
 
         <p>easl is a smart rendering layer for AI agents. Upload a CSV, Markdown file, JSON blob, or any supported content — easl detects the type and renders it with the best interactive viewer. No accounts required.</p>
 
@@ -247,7 +247,7 @@ export function docsPageHtml(domain: string): string {
         <div class="table-wrap"><table>
           <thead><tr><th>Tool</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>publish_content</code></td><td>Publish raw content (string) &rarr; beautiful URL. The killer tool.</td></tr>
+            <tr><td><code>publish_content</code></td><td>Publish raw content (string) &rarr; URL to a shareable page. The fastest path.</td></tr>
             <tr><td><code>publish_file</code></td><td>Publish a file from disk with presigned upload</td></tr>
             <tr><td><code>publish_site</code></td><td>Publish a multi-file site (directory)</td></tr>
             <tr><td><code>list_sites</code></td><td>List published sites in this session</td></tr>
