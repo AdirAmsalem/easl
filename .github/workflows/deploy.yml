@@ -98,14 +98,26 @@ jobs:
           PREVIEW_DB="easl-db-preview-${PR_NUM}"
           PREVIEW_KV="easl-kv-preview-${PR_NUM}"
 
-          # Create per-PR D1 database (idempotent — may already exist)
-          pnpm wrangler d1 create "$PREVIEW_DB" 2>&1 || true
-          DB_ID=$(pnpm wrangler d1 list --json | jq -r ".[] | select(.name == \"$PREVIEW_DB\") | .uuid")
+          # Create per-PR D1 database (idempotent — parse ID from create or list)
+          DB_OUTPUT=$(pnpm wrangler d1 create "$PREVIEW_DB" 2>&1) || true
+          echo "$DB_OUTPUT"
+          DB_ID=$(echo "$DB_OUTPUT" | sed -n 's/.*database_id = "\([^"]*\)".*/\1/p')
+          if [ -z "$DB_ID" ]; then
+            # DB may already exist from a previous run — fetch ID via list
+            DB_ID=$(pnpm wrangler d1 list --json | jq -r ".[] | select(.name == \"$PREVIEW_DB\") | .uuid")
+          fi
           if [ -z "$DB_ID" ]; then echo "ERROR: Failed to get D1 database ID for $PREVIEW_DB"; exit 1; fi
 
-          # Create per-PR KV namespace (idempotent — may already exist)
-          pnpm wrangler kv namespace create "$PREVIEW_KV" 2>&1 || true
-          KV_ID=$(pnpm wrangler kv namespace list --json | jq -r ".[] | select(.title == \"$PREVIEW_KV\") | .id")
+          # Create per-PR KV namespace (idempotent — parse ID from create or list)
+          KV_OUTPUT=$(pnpm wrangler kv namespace create "$PREVIEW_KV" 2>&1) || true
+          echo "$KV_OUTPUT"
+          KV_ID=$(echo "$KV_OUTPUT" | sed -n 's/.*id = "\([^"]*\)".*/\1/p')
+          if [ -z "$KV_ID" ]; then
+            # KV may already exist — fetch ID via Cloudflare API
+            KV_ID=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces" \
+              | jq -r ".result[] | select(.title == \"$PREVIEW_KV\") | .id")
+          fi
           if [ -z "$KV_ID" ]; then echo "ERROR: Failed to get KV namespace ID for $PREVIEW_KV"; exit 1; fi
 
           # Copy wrangler config, strip routes, enable workers.dev for preview
@@ -215,7 +227,9 @@ jobs:
           # uniqueness is per-D1). The orphan cost is negligible.
 
           # Delete per-PR KV namespace
-          KV_ID=$(pnpm wrangler kv namespace list --json | jq -r ".[] | select(.title == \"$PREVIEW_KV\") | .id") || true
+          KV_ID=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces" \
+            | jq -r ".result[] | select(.title == \"$PREVIEW_KV\") | .id") || true
           if [ -n "$KV_ID" ]; then
             pnpm wrangler kv namespace delete --namespace-id="$KV_ID" -y || true
           fi
