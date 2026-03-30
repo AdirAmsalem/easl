@@ -103,7 +103,7 @@ The MCP server gives AI agents first-class publishing capabilities through the [
 
 | Tool | Description |
 |------|-------------|
-| `publish_content` | Publish raw content (string) → shareable page. The fastest path. |
+| `publish_content` | Publish raw content (string) → URL to a shareable page. The fastest path. |
 | `publish_file` | Publish a single file from disk with auto-detected rendering. |
 | `publish_site` | Publish a directory as a multi-page site. |
 | `list_sites` | List sites published in the current session. |

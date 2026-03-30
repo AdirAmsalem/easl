@@ -247,7 +247,7 @@ export function docsPageHtml(domain: string): string {
         <div class="table-wrap"><table>
           <thead><tr><th>Tool</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>publish_content</code></td><td>Publish raw content (string) &rarr; shareable page. The fastest path.</td></tr>
+            <tr><td><code>publish_content</code></td><td>Publish raw content (string) &rarr; URL to a shareable page. The fastest path.</td></tr>
             <tr><td><code>publish_file</code></td><td>Publish a file from disk with presigned upload</td></tr>
             <tr><td><code>publish_site</code></td><td>Publish a multi-file site (directory)</td></tr>
             <tr><td><code>list_sites</code></td><td>List published sites in this session</td></tr>
