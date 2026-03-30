@@ -55,6 +55,13 @@ jobs:
 
       - run: pnpm build
 
+      - name: Migrate D1
+        working-directory: packages/worker
+        run: pnpm wrangler d1 execute easl-db --file=./schema.sql --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy worker
         working-directory: packages/worker
         run: pnpm wrangler deploy
@@ -85,15 +92,33 @@ jobs:
         id: preview
         working-directory: packages/worker
         run: |
-          PREVIEW_NAME="easl-preview-${{ github.event.pull_request.number }}"
+          PR_NUM="${{ github.event.pull_request.number }}"
+          PREVIEW_NAME="easl-preview-${PR_NUM}"
+          PREVIEW_HOST="preview-pr-${PR_NUM}.easl.dev"
+          PREVIEW_DB="easl-db-preview-${PR_NUM}"
+          PREVIEW_KV="easl-kv-preview-${PR_NUM}"
 
-          PREVIEW_HOST="preview-pr-${{ github.event.pull_request.number }}.easl.dev"
+          # Create per-PR D1 database (idempotent)
+          pnpm wrangler d1 create "$PREVIEW_DB" 2>&1 || true
+          DB_ID=$(pnpm wrangler d1 list --json | jq -r ".[] | select(.name == \"$PREVIEW_DB\") | .uuid")
+
+          # Create per-PR KV namespace (idempotent)
+          pnpm wrangler kv namespace create "$PREVIEW_KV" 2>&1 || true
+          KV_ID=$(pnpm wrangler kv namespace list --json | jq -r ".[] | select(.title == \"$PREVIEW_KV\") | .id")
 
           # Copy wrangler config, strip routes, enable workers.dev for preview
           sed '/^\[\[routes\]\]/,/^$/d' wrangler.toml > wrangler.preview.toml
           sed -i "s/^name = .*/name = \"$PREVIEW_NAME\"/" wrangler.preview.toml
           sed -i "s/^workers_dev = .*/workers_dev = true/" wrangler.preview.toml
           sed -i "s/^preview_urls = .*/preview_urls = false/" wrangler.preview.toml
+
+          # Swap D1 + KV bindings to per-PR resources
+          sed -i "s/database_id = .*/database_id = \"$DB_ID\"/" wrangler.preview.toml
+          sed -i "s/database_name = .*/database_name = \"$PREVIEW_DB\"/" wrangler.preview.toml
+          sed -i "s/id = \"00c6d65754594b07bdbbc4265585aa77\"/id = \"$KV_ID\"/" wrangler.preview.toml
+
+          # Migrate preview D1
+          pnpm wrangler d1 execute "$PREVIEW_DB" --file=./schema.sql --remote
 
           pnpm wrangler deploy --config wrangler.preview.toml
 
@@ -161,6 +186,40 @@ jobs:
       - name: Delete preview worker
         working-directory: packages/worker
         run: pnpm wrangler delete --name "easl-preview-${{ github.event.pull_request.number }}" --force
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Cleanup preview resources
+        working-directory: packages/worker
+        run: |
+          PR_NUM="${{ github.event.pull_request.number }}"
+          PREVIEW_DB="easl-db-preview-${PR_NUM}"
+          PREVIEW_KV="easl-kv-preview-${PR_NUM}"
+
+          # Extract R2 keys and slugs from preview D1 before deleting it
+          SLUGS=$(pnpm wrangler d1 execute "$PREVIEW_DB" --json --remote \
+            --command="SELECT slug FROM sites" | jq -r '.[].results[].slug') || true
+
+          R2_KEYS=$(pnpm wrangler d1 execute "$PREVIEW_DB" --json --remote \
+            --command="SELECT files_json FROM versions" | jq -r '.[].results[].files_json' | jq -r '.[].r2Key') || true
+
+          # Delete R2 file objects (keyed by slug/versionId/path — unique per D1)
+          for key in $R2_KEYS; do
+            pnpm wrangler r2 object delete "easl-content/$key" || true
+          done
+          # Note: og/{slug}.png and qr/{slug}.svg are NOT deleted here because
+          # preview slugs could theoretically collide with prod slugs (slug
+          # uniqueness is per-D1). The orphan cost is negligible.
+
+          # Delete per-PR KV namespace
+          KV_ID=$(pnpm wrangler kv namespace list --json | jq -r ".[] | select(.title == \"$PREVIEW_KV\") | .id") || true
+          if [ -n "$KV_ID" ]; then
+            pnpm wrangler kv namespace delete --namespace-id="$KV_ID" -y || true
+          fi
+
+          # Delete per-PR D1 database
+          pnpm wrangler d1 delete "$PREVIEW_DB" -y || true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
