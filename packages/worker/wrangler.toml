@@ -37,7 +37,7 @@ database_id = "8b7c3c46-7517-4459-a024-7d22ca39e28d"  # Self-hosters: replace wi
 [vars]
 DOMAIN = "easl.dev"
 API_HOST = "api.easl.dev"
-WORKERS_DEV_SUBDOMAIN = "localhost"  # Overridden in CI for preview deploys
+WORKERS_DEV_SUBDOMAIN = "adir"  # Cloudflare account subdomain for preview proxy
 
 # Secrets (set via `wrangler secret put <NAME>`):
 # R2_ACCESS_KEY_ID

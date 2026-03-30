@@ -94,7 +94,6 @@ jobs:
           sed -i "s/^name = .*/name = \"$PREVIEW_NAME\"/" wrangler.preview.toml
           sed -i "s/^workers_dev = .*/workers_dev = true/" wrangler.preview.toml
           sed -i "s/^preview_urls = .*/preview_urls = false/" wrangler.preview.toml
-          sed -i "s/WORKERS_DEV_SUBDOMAIN = .*/WORKERS_DEV_SUBDOMAIN = \"${{ vars.WORKERS_DEV_SUBDOMAIN }}\"/" wrangler.preview.toml
 
           pnpm wrangler deploy --config wrangler.preview.toml
 
