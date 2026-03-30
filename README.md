@@ -4,7 +4,6 @@
 
 **Instant hosting for AI agents. Upload any file, get a beautiful URL.**
 
-[![Version](https://img.shields.io/badge/version-0.1.3-blue?style=flat-square)](https://github.com/AdiRamsalem/easl/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square)](https://nodejs.org)
 
