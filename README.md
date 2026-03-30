@@ -2,13 +2,13 @@
 
 # easl
 
-**Instant hosting for AI agents. Upload any file, get a beautiful URL.**
+**Turn agent output into pages worth sharing.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square)](https://nodejs.org)
 
 One API call turns a CSV into a sortable table, Markdown into styled prose, JSON into an interactive tree.<br>
-No accounts, no config, no deploy pipeline — just content in, beautiful URL out.
+No accounts, no config, no deploy pipeline — just content in, shareable page out.
 
 </div>
 
@@ -103,7 +103,7 @@ The MCP server gives AI agents first-class publishing capabilities through the [
 
 | Tool | Description |
 |------|-------------|
-| `publish_content` | Publish raw content (string) → beautiful URL. The fastest path. |
+| `publish_content` | Publish raw content (string) → shareable page. The fastest path. |
 | `publish_file` | Publish a single file from disk with auto-detected rendering. |
 | `publish_site` | Publish a directory as a multi-page site. |
 | `list_sites` | List sites published in the current session. |
