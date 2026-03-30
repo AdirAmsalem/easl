@@ -238,7 +238,7 @@ export function docsPageHtml(domain: string): string {
   <span class="s">"mcpServers"</span>: {
     <span class="s">"easl"</span>: {
       <span class="s">"command"</span>: <span class="s">"npx"</span>,
-      <span class="s">"args"</span>: [<span class="s">"-y"</span>, <span class="s">"@easl/mcp-server"</span>]
+      <span class="s">"args"</span>: [<span class="s">"-y"</span>, <span class="s">"@easl/mcp"</span>]
     }
   }
 }</pre>
