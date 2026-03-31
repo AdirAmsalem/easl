@@ -5,23 +5,45 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AdirAmsalem/easl.git",
+    "url": "git+https://github.com/AdirAmsalem/easl.git",
     "directory": "packages/mcp-server"
   },
   "type": "module",
+  "author": "Adir Amsalem",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "dist/index.mjs",
+  "files": [
+    "dist"
+  ],
   "bin": {
-    "easl-mcp": "dist/index.js"
+    "mcp": "dist/index.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "agent",
+    "publish",
+    "hosting"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "tsdown",
+    "start": "node dist/index.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0"
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsdown": "^0.21.7",
     "typescript": "^5.7.0"
   }
 }
