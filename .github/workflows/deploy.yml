@@ -3,8 +3,14 @@ name: CI/CD
 on:
   push:
     branches: [main]
+    paths:
+      - 'packages/worker/**'
+      - 'pnpm-lock.yaml'
   pull_request:
     types: [opened, synchronize, reopened, closed]
+    paths:
+      - 'packages/worker/**'
+      - 'pnpm-lock.yaml'
 
 permissions:
   contents: read

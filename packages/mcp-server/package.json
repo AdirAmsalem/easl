@@ -35,7 +35,8 @@
   "scripts": {
     "build": "tsdown",
     "start": "node dist/index.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "release": "bumpp --tag 'mcp@%s'"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "bumpp": "^10.1.0",
     "tsdown": "^0.21.7",
     "typescript": "^5.7.0"
   }
