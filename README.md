@@ -1,6 +1,10 @@
 <div align="center">
 
-# easl
+<br>
+
+<img src="assets/logo-light.svg" alt="easl" width="50%">
+
+<br>
 
 **Turn agent output into pages worth sharing.**
 
