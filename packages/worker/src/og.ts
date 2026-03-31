@@ -2,7 +2,6 @@ import satori from "satori";
 import { Resvg, initWasm } from "@resvg/resvg-wasm";
 // @ts-expect-error — Cloudflare Workers support direct WASM imports
 import resvgWasm from "../node_modules/@resvg/resvg-wasm/index_bg.wasm";
-import type { Env } from "./types";
 
 // ─── Per-isolate caches ───
 let wasmReady = false;

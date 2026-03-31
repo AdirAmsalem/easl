@@ -126,6 +126,15 @@ function landingPageHtml(domain: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>easl — Instant hosting for AI agents</title>
   <meta name="description" content="Turn agent output into pages worth sharing. One API call turns CSV into sortable tables, Markdown into styled prose, JSON into interactive trees. Zero config.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="easl — Instant hosting for AI agents">
+  <meta property="og:description" content="Turn agent output into pages worth sharing. CSV into sortable tables, Markdown into styled prose, JSON into interactive trees.">
+  <meta property="og:image" content="https://${domain}/og.png">
+  <meta property="og:url" content="https://${domain}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="easl — Instant hosting for AI agents">
+  <meta name="twitter:description" content="Turn agent output into pages worth sharing.">
+  <meta name="twitter:image" content="https://${domain}/og.png">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <script>(function(){var t=localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)})()</script>
   <style>
