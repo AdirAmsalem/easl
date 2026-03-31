@@ -129,8 +129,8 @@ function landingPageHtml(domain: string): string {
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <script>(function(){var t=localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)})()</script>
   <style>
-    :root{--bg:#050505;--bg-elevated:#141414;--bg-subtle:#0f0f0f;--surface:rgba(255,255,255,0.02);--surface-hover:rgba(255,255,255,0.06);--border:#141414;--border-subtle:#1a1a1a;--border-medium:#262626;--border-hover:#333;--text:#e5e5e5;--text-heading:#fff;--text-muted:#a3a3a3;--text-faint:#737373;--text-faintest:#525252;--text-dim:#404040;--accent:#60a5fa;--accent-hover:#93c5fd;--green:#34d399;--yellow:#fbbf24;--nav-bg:rgba(5,5,5,0.85);--demo-bg:rgba(12,12,12,0.9);--demo-glow-1:rgba(255,255,255,0.1);--demo-glow-2:rgba(255,255,255,0.05);--demo-tab-bg:rgba(255,255,255,0.03);--demo-tab-border:rgba(255,255,255,0.05);--demo-prompt-border:rgba(255,255,255,0.04);--avatar-bg:rgba(255,255,255,0.06);--avatar-accent-bg:rgba(96,165,250,0.12);--url-bg:rgba(52,211,153,0.1);--preview-bg:rgba(0,0,0,0.35);--preview-border:rgba(255,255,255,0.04);--code-bg:#262626;--btn-primary-text:#0a0a0a;--logo-color:#fff}
-    [data-theme="light"]{--bg:#fafafa;--bg-elevated:#fff;--bg-subtle:#f5f5f5;--surface:rgba(0,0,0,0.02);--surface-hover:rgba(0,0,0,0.06);--border:#e5e5e5;--border-subtle:#ebebeb;--border-medium:#d4d4d4;--border-hover:#bbb;--text:#1a1a1a;--text-heading:#000;--text-muted:#525252;--text-faint:#737373;--text-faintest:#a3a3a3;--text-dim:#bbb;--accent:#2563eb;--accent-hover:#1d4ed8;--green:#059669;--yellow:#d97706;--nav-bg:rgba(250,250,250,0.85);--demo-bg:rgba(255,255,255,0.95);--demo-glow-1:rgba(0,0,0,0.06);--demo-glow-2:rgba(0,0,0,0.03);--demo-tab-bg:rgba(0,0,0,0.02);--demo-tab-border:rgba(0,0,0,0.06);--demo-prompt-border:rgba(0,0,0,0.06);--avatar-bg:rgba(0,0,0,0.05);--avatar-accent-bg:rgba(37,99,235,0.1);--url-bg:rgba(5,150,105,0.08);--preview-bg:rgba(0,0,0,0.03);--preview-border:rgba(0,0,0,0.06);--code-bg:#e5e5e5;--btn-primary-text:#fff;--logo-color:#000}
+    :root{--bg:#050505;--bg-elevated:#141414;--bg-subtle:#0f0f0f;--surface:rgba(255,255,255,0.02);--surface-hover:rgba(255,255,255,0.06);--border:#141414;--border-subtle:#1a1a1a;--border-medium:#262626;--border-hover:#333;--text:#e5e5e5;--text-heading:#fff;--text-muted:#a3a3a3;--text-faint:#737373;--text-faintest:#525252;--text-dim:#555;--accent:#60a5fa;--accent-hover:#93c5fd;--green:#34d399;--yellow:#fbbf24;--nav-bg:rgba(5,5,5,0.85);--demo-bg:rgba(12,12,12,0.9);--demo-glow-1:rgba(255,255,255,0.1);--demo-glow-2:rgba(255,255,255,0.05);--demo-tab-bg:rgba(255,255,255,0.03);--demo-tab-border:rgba(255,255,255,0.05);--demo-prompt-border:rgba(255,255,255,0.04);--avatar-bg:rgba(255,255,255,0.06);--avatar-accent-bg:rgba(96,165,250,0.12);--url-bg:rgba(52,211,153,0.1);--preview-bg:rgba(0,0,0,0.35);--preview-border:rgba(255,255,255,0.04);--code-bg:#262626;--btn-primary-text:#0a0a0a;--logo-color:#fff}
+    [data-theme="light"]{--bg:#fafafa;--bg-elevated:#fff;--bg-subtle:#f5f5f5;--surface:rgba(0,0,0,0.02);--surface-hover:rgba(0,0,0,0.06);--border:#e5e5e5;--border-subtle:#ebebeb;--border-medium:#d4d4d4;--border-hover:#bbb;--text:#1a1a1a;--text-heading:#000;--text-muted:#525252;--text-faint:#737373;--text-faintest:#a3a3a3;--text-dim:#888;--accent:#2563eb;--accent-hover:#1d4ed8;--green:#059669;--yellow:#d97706;--nav-bg:rgba(250,250,250,0.85);--demo-bg:rgba(255,255,255,0.95);--demo-glow-1:rgba(0,0,0,0.06);--demo-glow-2:rgba(0,0,0,0.03);--demo-tab-bg:rgba(0,0,0,0.02);--demo-tab-border:rgba(0,0,0,0.06);--demo-prompt-border:rgba(0,0,0,0.06);--avatar-bg:rgba(0,0,0,0.05);--avatar-accent-bg:rgba(37,99,235,0.1);--url-bg:rgba(5,150,105,0.08);--preview-bg:rgba(0,0,0,0.03);--preview-border:rgba(0,0,0,0.06);--code-bg:#e5e5e5;--btn-primary-text:#fff;--logo-color:#000}
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased;transition:background .2s,color .2s}
     a{color:var(--accent);text-decoration:none}
@@ -170,8 +170,8 @@ function landingPageHtml(domain: string): string {
     .agent-prompt .msg{font-size:0.875rem;color:var(--text);line-height:1.5;padding-top:2px}
     .agent-response{display:flex;align-items:flex-start;gap:0.75rem}
     .agent-response .avatar{width:26px;height:26px;border-radius:7px;background:var(--avatar-accent-bg);display:flex;align-items:center;justify-content:center;font-size:0.5625rem;font-weight:700;color:var(--accent);flex-shrink:0;margin-top:1px}
-    .agent-response .msg{font-size:0.8125rem;color:var(--text-muted);line-height:1.5;flex:1;min-width:0;padding-top:2px}
-    .agent-url{display:inline-block;background:var(--url-bg);color:var(--green);font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.75rem;padding:0.25rem 0.625rem;border-radius:4px;margin:0.5rem 0 0.875rem}
+    .agent-response .msg{font-size:0.8125rem;color:var(--text-muted);line-height:1.5;flex:1;min-width:0}
+    .agent-url{display:inline-block;background:var(--url-bg);color:var(--green);font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.75rem;padding:0.25rem 0.625rem;border-radius:4px;margin:0 0 0.875rem}
     .agent-preview{background:var(--preview-bg);border:1px solid var(--preview-border);border-radius:8px;padding:1rem 1.25rem;overflow:hidden}
     .agent-preview-inner{transition:opacity .3s ease}
 
@@ -190,10 +190,11 @@ function landingPageHtml(domain: string): string {
     .setup-card pre .s{color:var(--green)}
     .setup-card pre .c{color:var(--text-dim)}
     .setup-card pre .u{color:var(--yellow)}
+    .setup-compat{text-align:center;font-size:0.75rem;color:var(--text-faintest);margin-top:1.25rem}
     @media(max-width:600px){.setup-row{grid-template-columns:1fr}}
 
     /* Demos — before/after transformation */
-    .demos{margin:0 auto 5rem}
+    .demos{margin:0 auto 5rem;scroll-margin-top:4rem}
     .demos h2{font-size:1.5rem;font-weight:700;color:var(--text-heading);text-align:center;margin-bottom:0.75rem}
     .demos .sub{text-align:center;color:var(--text-faint);margin-bottom:2rem;font-size:0.9375rem}
     .demo-list{display:flex;flex-direction:column;gap:1.5rem}
@@ -228,7 +229,8 @@ function landingPageHtml(domain: string): string {
     /* CTA */
     .cta{text-align:center;padding:4rem 0;border-top:1px solid var(--border-subtle);margin-top:2rem}
     .cta h2{font-size:1.5rem;font-weight:700;color:var(--text-heading);margin-bottom:0.75rem}
-    .cta p{color:var(--text-faint);margin-bottom:2rem;font-size:0.9375rem}
+    .cta p{color:var(--text-faint);margin-bottom:0.5rem;font-size:0.9375rem}
+    .cta .cta-sub{font-size:0.8125rem;color:var(--text-faintest);margin-bottom:2rem}
     .cta-buttons{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
     .btn{padding:0.625rem 1.5rem;border-radius:8px;font-size:0.875rem;font-weight:600;transition:all .15s;display:inline-block}
     .btn-primary{background:var(--accent);color:var(--btn-primary-text)}
@@ -307,8 +309,8 @@ function landingPageHtml(domain: string): string {
       </div>
       <div class="setup-row">
         <div class="setup-card">
-          <div class="label">Add to your editor</div>
-          <div class="desc">Works with Claude Desktop, Cursor, Windsurf &amp; more</div>
+          <div class="label">Use easl MCP</div>
+          <div class="desc">Works with Claude Code, Codex, Cursor &amp; more</div>
           <pre>{
   <span class="k">"mcpServers"</span>: {
     <span class="s">"easl"</span>: {
@@ -329,6 +331,7 @@ function landingPageHtml(domain: string): string {
 <span class="c">#</span> <span class="u">https://warm-dawn.${domain}</span></pre>
         </div>
       </div>
+      <p class="setup-compat">Works with Claude Code, Codex, Cursor, ChatGPT, OpenClaw &amp; any AI agent.</p>
     </section>
   </div>
 
@@ -379,8 +382,9 @@ Dave,Engineer,Infra,2024</div>
     <section class="cta">
       <h2>Try it now</h2>
       <p>Publish your first file in under 10 seconds.</p>
+      <p class="cta-sub">Free and open-source. Self-host or use our hosted version.</p>
       <div class="cta-buttons">
-        <a class="btn btn-primary" href="/docs">API Docs</a>
+        <a class="btn btn-primary" href="/docs">Get Started</a>
         <a class="btn btn-secondary" href="https://github.com/AdirAmsalem/easl">View on GitHub</a>
       </div>
     </section>
