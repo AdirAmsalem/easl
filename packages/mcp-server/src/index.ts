@@ -9,13 +9,16 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 
 type Json = Record<string, unknown>;
 
+declare const __PACKAGE_VERSION__: string | undefined;
+const version: string = typeof __PACKAGE_VERSION__ !== "undefined" ? __PACKAGE_VERSION__ : "0.0.0-dev";
+
 const API_URL = (process.env.EASL_API_URL ?? "https://api.easl.dev").replace(/\/$/, "");
 
 // Session state: track published sites for list_sites
 const sessionSites: Array<{ slug: string; claimToken: string; url: string; createdAt: string }> = [];
 
 const server = new Server(
-  { name: "easl", version: "0.1.0" },
+  { name: "easl", version },
   { capabilities: { tools: {} } },
 );
 
