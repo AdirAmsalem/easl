@@ -252,7 +252,8 @@ function landingPageHtml(domain: string): string {
 
     @media(max-width:600px){
       .hero{padding:6rem 0 3rem}
-      .cta-buttons{flex-direction:column;align-items:center}
+      .cta-buttons{flex-direction:column;align-items:stretch;max-width:13rem;margin-left:auto;margin-right:auto}
+      .cta-buttons .btn{text-align:center}
     }
   </style>
 </head>
