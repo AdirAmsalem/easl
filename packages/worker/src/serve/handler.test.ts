@@ -1,6 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { serveSite } from "./handler";
 import type { Env, SiteMeta } from "../types";
+
+// Mock Cache API globally
+const mockCache = {
+  match: vi.fn(async () => undefined),
+  put: vi.fn(async () => undefined),
+};
+(globalThis as Record<string, unknown>).caches = { default: mockCache };
 
 /** Create a mock D1 row matching the JOIN query result shape */
 function makeD1Row(meta: SiteMeta) {
@@ -42,6 +49,11 @@ function makeEnv(opts: { d1Row?: Record<string, unknown> | null } = {}): Env {
 }
 
 const ctx = { waitUntil: vi.fn() } as unknown as ExecutionContext;
+
+beforeEach(() => {
+  mockCache.match.mockReset().mockResolvedValue(undefined);
+  mockCache.put.mockReset().mockResolvedValue(undefined);
+});
 
 describe("serveSite noindex", () => {
   it("returns robots.txt that disallows all crawlers", async () => {
@@ -180,7 +192,73 @@ describe("serveSite D1-based metadata", () => {
     expect(env.SITES_KV.put).toHaveBeenCalledWith(
       expect.stringContaining("html:wt:"),
       expect.any(String),
-      expect.objectContaining({ expirationTtl: 3600 }),
+      expect.objectContaining({ expirationTtl: 14400 }),
+    );
+  });
+});
+
+describe("serveSite Cache API L1", () => {
+  it("checks Cache API before KV and returns cached response on hit", async () => {
+    const meta: SiteMeta = {
+      slug: "cached",
+      currentVersionId: "v1",
+      status: "active",
+      files: [{ path: "data.csv", size: 100, contentType: "text/csv" }],
+      title: "Cached",
+      template: null,
+      expiresAt: null,
+      createdAt: "2025-01-01T00:00:00Z",
+    };
+
+    const env = makeEnv({ d1Row: makeD1Row(meta) });
+    const cachedResponse = new Response("<html>cached</html>", {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "public, max-age=14400",
+        "X-Robots-Tag": "noindex, nofollow",
+      },
+    });
+    mockCache.match.mockResolvedValueOnce(cachedResponse);
+
+    const req = new Request("https://cached.easl.dev/");
+    const res = await serveSite(req, env, "cached", ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toBe("<html>cached</html>");
+    // KV should not have been checked
+    expect(env.SITES_KV.get).not.toHaveBeenCalledWith(
+      expect.stringContaining("html:"),
+    );
+  });
+
+  it("backfills Cache API when KV hits but Cache API misses", async () => {
+    const meta: SiteMeta = {
+      slug: "backfill",
+      currentVersionId: "v1",
+      status: "active",
+      files: [{ path: "data.csv", size: 100, contentType: "text/csv" }],
+      title: "Backfill",
+      template: null,
+      expiresAt: null,
+      createdAt: "2025-01-01T00:00:00Z",
+    };
+
+    const env = makeEnv({ d1Row: makeD1Row(meta) });
+    (env.SITES_KV.get as ReturnType<typeof vi.fn>).mockResolvedValue("<html>from-kv</html>");
+
+    const mockCtx = { waitUntil: vi.fn() } as unknown as ExecutionContext;
+    const req = new Request("https://backfill.easl.dev/");
+    const res = await serveSite(req, env, "backfill", mockCtx);
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toBe("<html>from-kv</html>");
+    // Cache API should have been backfilled via waitUntil
+    expect(mockCtx.waitUntil).toHaveBeenCalled();
+    expect(mockCache.put).toHaveBeenCalledWith(
+      expect.stringContaining("cache.internal/html:backfill:v1:"),
+      expect.any(Response),
     );
   });
 });
