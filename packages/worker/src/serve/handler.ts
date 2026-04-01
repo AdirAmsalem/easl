@@ -19,7 +19,9 @@ export async function serveSite(
     });
   }
 
-  const response = await serveSiteInner(request, env, slug, ctx, basePath);
+  const inner = await serveSiteInner(request, env, slug, ctx, basePath);
+  // Cache API returns immutable responses — wrap in a new Response to allow header mutation
+  const response = new Response(inner.body, inner);
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   return response;
 }
@@ -125,11 +127,29 @@ async function smartRender(
     return serveR2File(env, slug, meta.currentVersionId, file.path, request);
   }
 
-  // Check KV cache for rendered HTML (include basePath to avoid cache poisoning between routing modes)
+  // Check caches for rendered HTML (include basePath to avoid cache poisoning between routing modes)
   const cacheKey = `html:${slug}:${meta.currentVersionId}:${file.path}:${basePath || "root"}`;
+  const cacheUrl = `https://cache.internal/${cacheKey}`;
+  const cache = caches.default;
+
+  // L1: Cache API (per-colo, ~1ms)
+  const cacheMatch = await cache.match(cacheUrl);
+  if (cacheMatch) {
+    return cacheMatch;
+  }
+
+  // L2: KV
   const cached = await env.SITES_KV.get(cacheKey);
   if (cached) {
-    return htmlResponse(cached, 200);
+    const response = new Response(cached, {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "public, max-age=14400",
+        "X-Robots-Tag": "noindex, nofollow",
+      },
+    });
+    ctx.waitUntil(cache.put(cacheUrl, response.clone()));
+    return response;
   }
 
   // Fetch file content from R2
@@ -172,9 +192,17 @@ async function smartRender(
     siteBaseUrl: basePath,
   });
 
-  ctx.waitUntil(env.SITES_KV.put(cacheKey, html, { expirationTtl: 3600 }));
+  const response = new Response(html, {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=14400",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
+  ctx.waitUntil(env.SITES_KV.put(cacheKey, html, { expirationTtl: 14400 }));
+  ctx.waitUntil(cache.put(cacheUrl, response.clone()));
 
-  return htmlResponse(html, 200);
+  return response;
 }
 
 async function serveR2File(
