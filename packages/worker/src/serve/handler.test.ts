@@ -65,7 +65,6 @@ describe("serveSite noindex", () => {
       template: null,
       expiresAt: null,
       createdAt: "2025-01-01T00:00:00Z",
-      updatedAt: "2025-01-01T00:00:00Z",
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -101,7 +100,6 @@ describe("serveSite D1-based metadata", () => {
       template: null,
       expiresAt: null,
       createdAt: "2025-01-01T00:00:00Z",
-      updatedAt: "2025-01-01T00:00:00Z",
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -143,7 +141,6 @@ describe("serveSite D1-based metadata", () => {
       template: null,
       expiresAt: "2020-01-01T00:00:00Z", // expired
       createdAt: "2019-12-01T00:00:00Z",
-      updatedAt: "2019-12-01T00:00:00Z",
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -163,7 +160,6 @@ describe("serveSite D1-based metadata", () => {
       template: null,
       expiresAt: null,
       createdAt: "2025-01-01T00:00:00Z",
-      updatedAt: "2025-01-01T00:00:00Z",
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });

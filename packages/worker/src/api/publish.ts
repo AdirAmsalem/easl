@@ -208,15 +208,18 @@ app.post("/finalize/:slug", async (c) => {
     return c.json({ error: "versionId is required" }, 400);
   }
 
-  // Verify version exists
-  const version = await c.env.DB.prepare("SELECT * FROM versions WHERE id = ? AND slug = ?")
-    .bind(body.versionId, slug).first();
+  // Verify version exists and load site title in one query
+  const version = await c.env.DB.prepare(
+    `SELECT v.files_json, s.title
+     FROM versions v
+     JOIN sites s ON s.slug = v.slug
+     WHERE v.id = ? AND v.slug = ?`
+  ).bind(body.versionId, slug).first();
 
   if (!version) {
     return c.json({ error: "Version not found" }, 404);
   }
 
-  // Verify all files exist in R2
   const files = JSON.parse(version.files_json as string) as Array<{ path: string; r2Key: string; contentType: string }>;
   const checks = await Promise.all(
     files.map(async (file) => {
@@ -230,13 +233,9 @@ app.post("/finalize/:slug", async (c) => {
     return c.json({ error: "Missing uploaded files", missing }, 422);
   }
 
-  // Update version status
   await c.env.DB.prepare("UPDATE versions SET status = 'active' WHERE id = ?")
     .bind(body.versionId).run();
 
-  // Load title from D1 for social asset generation
-  const site = await c.env.DB.prepare("SELECT title FROM sites WHERE slug = ?")
-    .bind(slug).first();
   const primaryFile = files[0];
 
   const url = siteUrl(c, slug);
@@ -246,7 +245,7 @@ app.post("/finalize/:slug", async (c) => {
     generateSocialAssets(
       c.env,
       slug,
-      (site?.title as string) || slug,
+      (version.title as string) || slug,
       primaryFile?.contentType || "text/plain",
       url,
     )

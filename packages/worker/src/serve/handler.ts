@@ -9,7 +9,7 @@ export async function serveSite(
   request: Request,
   env: Env,
   slug: string,
-  _ctx: ExecutionContext,
+  ctx: ExecutionContext,
   basePath = "",
 ): Promise<Response> {
   const url = new URL(request.url);
@@ -19,7 +19,7 @@ export async function serveSite(
     });
   }
 
-  const response = await serveSiteInner(request, env, slug, _ctx, basePath);
+  const response = await serveSiteInner(request, env, slug, ctx, basePath);
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   return response;
 }
@@ -28,11 +28,9 @@ async function serveSiteInner(
   request: Request,
   env: Env,
   slug: string,
-  _ctx: ExecutionContext,
+  ctx: ExecutionContext,
   basePath = "",
 ): Promise<Response> {
-  // Always read metadata from D1 (no KV metadata cache — D1 reads are nearly free
-  // and this eliminates staleness bugs and KV write costs)
   const meta = await loadMetaFromD1(env, slug);
 
   if (!meta) {
@@ -83,7 +81,7 @@ async function serveSiteInner(
 
     // Single file → smart render with beautiful viewer
     if (decision.mode === "single-file" && decision.primaryFile) {
-      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request, _ctx, basePath);
+      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request, ctx, basePath);
     }
 
     // Multi-file without index → auto-generated nav
@@ -96,7 +94,7 @@ async function serveSiteInner(
     // If requesting a raw file, check for ?render=true to smart-render it
     if (url.searchParams.has("render")) {
       const viewerType = detectViewerType(file.contentType, file.path);
-      return smartRender(env, slug, meta, file, viewerType, request, _ctx, basePath);
+      return smartRender(env, slug, meta, file, viewerType, request, ctx, basePath);
     }
     return serveR2File(env, slug, meta.currentVersionId, file.path, request);
   }
@@ -174,7 +172,6 @@ async function smartRender(
     siteBaseUrl: basePath,
   });
 
-  // Cache for 1 hour (non-blocking — don't make the user wait for a cache write)
   ctx.waitUntil(env.SITES_KV.put(cacheKey, html, { expirationTtl: 3600 }));
 
   return htmlResponse(html, 200);
@@ -209,10 +206,10 @@ async function serveR2File(
   return new Response(object.body, { headers });
 }
 
-/** Load SiteMeta directly from D1 using a single JOIN query */
 async function loadMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> {
   const row = await env.DB.prepare(
-    `SELECT s.*, v.id AS version_id, v.files_json
+    `SELECT s.title, s.template, s.expires_at, s.created_at,
+            v.id AS version_id, v.files_json
      FROM sites s
      JOIN versions v ON v.slug = s.slug AND v.status = 'active'
      WHERE s.slug = ?
@@ -238,7 +235,6 @@ async function loadMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> 
     template: row.template as string | null,
     expiresAt: row.expires_at as string | null,
     createdAt: row.created_at as string,
-    updatedAt: row.created_at as string,
   };
 }
 
