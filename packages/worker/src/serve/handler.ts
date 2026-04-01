@@ -31,12 +31,9 @@ async function serveSiteInner(
   _ctx: ExecutionContext,
   basePath = "",
 ): Promise<Response> {
-  let meta = await env.SITES_KV.get<SiteMeta>(`site:${slug}`, "json");
-
-  // D1 fallback: if KV missed (expired or evicted), rebuild from D1
-  if (!meta) {
-    meta = await rebuildMetaFromD1(env, slug);
-  }
+  // Always read metadata from D1 (no KV metadata cache — D1 reads are nearly free
+  // and this eliminates staleness bugs and KV write costs)
+  const meta = await loadMetaFromD1(env, slug);
 
   if (!meta) {
     return htmlResponse(notFoundHtml(slug, env.DOMAIN), 404);
@@ -86,7 +83,7 @@ async function serveSiteInner(
 
     // Single file → smart render with beautiful viewer
     if (decision.mode === "single-file" && decision.primaryFile) {
-      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request, basePath);
+      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request, _ctx, basePath);
     }
 
     // Multi-file without index → auto-generated nav
@@ -99,7 +96,7 @@ async function serveSiteInner(
     // If requesting a raw file, check for ?render=true to smart-render it
     if (url.searchParams.has("render")) {
       const viewerType = detectViewerType(file.contentType, file.path);
-      return smartRender(env, slug, meta, file, viewerType, request, basePath);
+      return smartRender(env, slug, meta, file, viewerType, request, _ctx, basePath);
     }
     return serveR2File(env, slug, meta.currentVersionId, file.path, request);
   }
@@ -122,6 +119,7 @@ async function smartRender(
   file: FileEntry,
   viewerType: ViewerType,
   request: Request,
+  ctx: ExecutionContext,
   basePath = "",
 ): Promise<Response> {
   // Files >5MB skip smart render — serve as download instead of reading into memory
@@ -176,8 +174,8 @@ async function smartRender(
     siteBaseUrl: basePath,
   });
 
-  // Cache for 1 hour
-  await env.SITES_KV.put(cacheKey, html, { expirationTtl: 3600 });
+  // Cache for 1 hour (non-blocking — don't make the user wait for a cache write)
+  ctx.waitUntil(env.SITES_KV.put(cacheKey, html, { expirationTtl: 3600 }));
 
   return htmlResponse(html, 200);
 }
@@ -211,17 +209,19 @@ async function serveR2File(
   return new Response(object.body, { headers });
 }
 
-/** Rebuild SiteMeta from D1 when KV has expired/evicted */
-async function rebuildMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> {
-  const site = await env.DB.prepare("SELECT * FROM sites WHERE slug = ?").bind(slug).first();
-  if (!site) return null;
-
-  const version = await env.DB.prepare(
-    "SELECT * FROM versions WHERE slug = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1"
+/** Load SiteMeta directly from D1 using a single JOIN query */
+async function loadMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> {
+  const row = await env.DB.prepare(
+    `SELECT s.*, v.id AS version_id, v.files_json
+     FROM sites s
+     JOIN versions v ON v.slug = s.slug AND v.status = 'active'
+     WHERE s.slug = ?
+     ORDER BY v.created_at DESC
+     LIMIT 1`
   ).bind(slug).first();
-  if (!version) return null;
+  if (!row) return null;
 
-  const files: FileEntry[] = JSON.parse(version.files_json as string).map(
+  const files: FileEntry[] = JSON.parse(row.files_json as string).map(
     (f: { path: string; contentType: string; size: number }) => ({
       path: f.path,
       size: f.size,
@@ -229,29 +229,17 @@ async function rebuildMetaFromD1(env: Env, slug: string): Promise<SiteMeta | nul
     })
   );
 
-  const meta: SiteMeta = {
+  return {
     slug,
-    currentVersionId: version.id as string,
+    currentVersionId: row.version_id as string,
     status: "active",
     files,
-    title: site.title as string | null,
-    template: site.template as string | null,
-    expiresAt: site.expires_at as string | null,
-    createdAt: site.created_at as string,
-    updatedAt: site.created_at as string,
+    title: row.title as string | null,
+    template: row.template as string | null,
+    expiresAt: row.expires_at as string | null,
+    createdAt: row.created_at as string,
+    updatedAt: row.created_at as string,
   };
-
-  // Re-populate KV cache
-  const ttl = meta.expiresAt
-    ? Math.max(60, Math.floor((new Date(meta.expiresAt).getTime() - Date.now()) / 1000))
-    : undefined;
-  if (ttl === undefined || ttl > 0) {
-    await env.SITES_KV.put(`site:${slug}`, JSON.stringify(meta), {
-      expirationTtl: ttl ? ttl + 3600 : undefined,
-    });
-  }
-
-  return meta;
 }
 
 async function downloadSite(env: Env, slug: string, meta: SiteMeta): Promise<Response> {

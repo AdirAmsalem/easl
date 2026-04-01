@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, CreateSiteRequest, InlinePublishRequest, SiteMeta, SiteRow } from "../types";
+import type { Env, CreateSiteRequest, InlinePublishRequest } from "../types";
 import { generateSlug, generateVersionId, generateClaimToken, isValidCustomSlug } from "../lib/slug";
 import { generateUploadUrls } from "../lib/presign";
 import { getContentType } from "../lib/mime";
@@ -91,22 +91,6 @@ app.post("/publish", async (c) => {
     `INSERT INTO versions (id, slug, status, created_at, files_json) VALUES (?, ?, 'uploading', ?, ?)`
   ).bind(versionId, slug, now, filesJson).run();
 
-  // Write KV metadata
-  const meta: SiteMeta = {
-    slug,
-    currentVersionId: versionId,
-    status: "pending",
-    files: body.files,
-    title: body.title ?? null,
-    template: body.template ?? null,
-    expiresAt,
-    createdAt: now,
-    updatedAt: now,
-  };
-  await c.env.SITES_KV.put(`site:${slug}`, JSON.stringify(meta), {
-    expirationTtl: ttlSeconds + 3600,
-  });
-
   // Generate presigned upload URLs
   const uploads = await generateUploadUrls(c.env, slug, versionId, body.files);
 
@@ -190,22 +174,6 @@ app.post("/publish/inline", async (c) => {
     `INSERT INTO versions (id, slug, status, created_at, files_json) VALUES (?, ?, 'active', ?, ?)`
   ).bind(versionId, slug, now, filesJson).run();
 
-  // Write KV metadata (active immediately)
-  const meta: SiteMeta = {
-    slug,
-    currentVersionId: versionId,
-    status: "active",
-    files: [fileEntry],
-    title: body.title ?? null,
-    template: body.template ?? null,
-    expiresAt,
-    createdAt: now,
-    updatedAt: now,
-  };
-  await c.env.SITES_KV.put(`site:${slug}`, JSON.stringify(meta), {
-    expirationTtl: ANON_TTL_SECONDS + 3600,
-  });
-
   const url = siteUrl(c, slug);
 
   // Generate social assets in background (non-blocking)
@@ -249,7 +217,7 @@ app.post("/finalize/:slug", async (c) => {
   }
 
   // Verify all files exist in R2
-  const files = JSON.parse(version.files_json as string) as Array<{ path: string; r2Key: string }>;
+  const files = JSON.parse(version.files_json as string) as Array<{ path: string; r2Key: string; contentType: string }>;
   const checks = await Promise.all(
     files.map(async (file) => {
       const obj = await c.env.CONTENT.head(file.r2Key);
@@ -266,33 +234,19 @@ app.post("/finalize/:slug", async (c) => {
   await c.env.DB.prepare("UPDATE versions SET status = 'active' WHERE id = ?")
     .bind(body.versionId).run();
 
-  // Update KV metadata to active
-  const meta = await c.env.SITES_KV.get<SiteMeta>(`site:${slug}`, "json");
-  if (!meta) {
-    return c.json({ error: "Site metadata not found" }, 404);
-  }
-
-  if (meta.currentVersionId !== body.versionId) {
-    return c.json({ error: "Version mismatch" }, 409);
-  }
-
-  meta.status = "active";
-  meta.updatedAt = new Date().toISOString();
-  await c.env.SITES_KV.put(`site:${slug}`, JSON.stringify(meta), {
-    expirationTtl: meta.expiresAt
-      ? Math.max(60, Math.floor((new Date(meta.expiresAt).getTime() - Date.now()) / 1000) + 3600)
-      : undefined,
-  });
+  // Load title from D1 for social asset generation
+  const site = await c.env.DB.prepare("SELECT title FROM sites WHERE slug = ?")
+    .bind(slug).first();
+  const primaryFile = files[0];
 
   const url = siteUrl(c, slug);
 
   // Generate social assets in background (non-blocking)
-  const primaryFile = meta.files[0];
   c.executionCtx.waitUntil(
     generateSocialAssets(
       c.env,
       slug,
-      meta.title || slug,
+      (site?.title as string) || slug,
       primaryFile?.contentType || "text/plain",
       url,
     )
