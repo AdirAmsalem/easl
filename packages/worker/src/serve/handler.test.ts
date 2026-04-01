@@ -4,8 +4,8 @@ import type { Env, SiteMeta } from "../types";
 
 // Mock Cache API globally
 const mockCache = {
-  match: vi.fn(async () => undefined),
-  put: vi.fn(async () => undefined),
+  match: vi.fn(async (_req: string) => undefined as Response | undefined),
+  put: vi.fn(async (_req: string, _res: Response) => undefined),
 };
 (globalThis as Record<string, unknown>).caches = { default: mockCache };
 
