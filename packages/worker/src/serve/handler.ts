@@ -19,7 +19,9 @@ export async function serveSite(
     });
   }
 
-  const response = await serveSiteInner(request, env, slug, ctx, basePath);
+  const inner = await serveSiteInner(request, env, slug, ctx, basePath);
+  // Cache API returns immutable responses — wrap to allow header mutation
+  const response = new Response(inner.body, inner);
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   return response;
 }
