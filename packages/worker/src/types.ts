@@ -63,7 +63,6 @@ export interface FinalizeResponse {
   shareText: string;
 }
 
-// KV stored metadata
 export interface SiteMeta {
   slug: string;
   currentVersionId: string;
@@ -73,7 +72,6 @@ export interface SiteMeta {
   template: string | null;
   expiresAt: string | null;
   createdAt: string;
-  updatedAt: string;
 }
 
 // D1 row types

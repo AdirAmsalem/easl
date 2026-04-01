@@ -64,9 +64,6 @@ app.delete("/sites/:slug", async (c) => {
   // Delete from D1 (cascade deletes versions)
   await c.env.DB.prepare("DELETE FROM sites WHERE slug = ?").bind(slug).run();
 
-  // Delete from KV
-  await c.env.SITES_KV.delete(`site:${slug}`);
-
   return c.json({ success: true, slug });
 });
 
