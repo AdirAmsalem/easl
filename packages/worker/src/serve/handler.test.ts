@@ -198,7 +198,7 @@ describe("serveSite D1-based metadata", () => {
 });
 
 describe("serveSite Cache API L1", () => {
-  it("checks Cache API before KV and returns cached response on hit", async () => {
+  it("returns Cache API response and skips KV html lookup on Cache API hit", async () => {
     const meta: SiteMeta = {
       slug: "cached",
       currentVersionId: "v1",
@@ -226,10 +226,14 @@ describe("serveSite Cache API L1", () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toBe("<html>cached</html>");
-    // KV should not have been checked
-    expect(env.SITES_KV.get).not.toHaveBeenCalledWith(
-      expect.stringContaining("html:"),
+    // Cache API was checked with the version-pinned synthetic URL
+    expect(mockCache.match).toHaveBeenCalledWith(
+      expect.stringContaining("cache.internal/html:cached:v1:"),
     );
+    // KV html lookup was skipped (D1 is still called for metadata)
+    expect(env.SITES_KV.get).not.toHaveBeenCalled();
+    // R2 was not fetched
+    expect(env.CONTENT.get).not.toHaveBeenCalled();
   });
 
   it("backfills Cache API when KV hits but Cache API misses", async () => {
