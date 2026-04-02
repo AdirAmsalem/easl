@@ -48,6 +48,9 @@ export default {
     const html = (body: string) =>
       new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 
+    const req = classifyRequest(hostname, path, env);
+    console.log(JSON.stringify({ event: "request", method: request.method, path, route: req.route, slug: req.slug, ua: request.headers.get("user-agent") }));
+
     // API subdomain
     if (hostname === env.API_HOST) {
       return api.fetch(request, env, ctx);
@@ -112,6 +115,23 @@ async function pathBasedRouting(
   }
 
   return html(landingPageHtml(env.DOMAIN));
+}
+
+function classifyRequest(hostname: string, path: string, workerEnv: Env): { route: string; slug?: string } {
+  if (hostname === workerEnv.API_HOST) return { route: "api" };
+
+  const domainSuffix = `.${workerEnv.DOMAIN}`;
+  if (hostname.endsWith(domainSuffix)) {
+    return { route: "site", slug: hostname.slice(0, -domainSuffix.length) };
+  }
+
+  const siteMatch = path.match(/^\/s\/([a-z0-9][a-z0-9-]+[a-z0-9])/);
+  if (siteMatch) return { route: "site", slug: siteMatch[1] };
+
+  if (path.startsWith("/publish") || path.startsWith("/finalize") || path.startsWith("/sites") || path.startsWith("/feedback")) return { route: "api" };
+  if (path === "/docs" || path === "/docs/") return { route: "docs" };
+
+  return { route: "landing" };
 }
 
 // ─────────────────────────────────────────────

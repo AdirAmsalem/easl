@@ -94,6 +94,9 @@ app.post("/publish", async (c) => {
   // Generate presigned upload URLs
   const uploads = await generateUploadUrls(c.env, slug, versionId, body.files);
 
+  const contentTypes = [...new Set(body.files.map((f) => f.contentType))];
+  console.log(JSON.stringify({ event: "publish", slug, files: body.files.length, totalBytes: totalSize, contentTypes }));
+
   return c.json({
     slug,
     url: siteUrl(c, slug),
@@ -176,6 +179,8 @@ app.post("/publish/inline", async (c) => {
 
   const url = siteUrl(c, slug);
 
+  console.log(JSON.stringify({ event: "publish_inline", slug, contentType: body.contentType, bytes: contentBytes.byteLength }));
+
   // Generate social assets in background (non-blocking)
   c.executionCtx.waitUntil(
     generateSocialAssets(c.env, slug, body.title || fileName, body.contentType, url)
@@ -237,6 +242,8 @@ app.post("/finalize/:slug", async (c) => {
     .bind(body.versionId).run();
 
   const primaryFile = files[0];
+  const contentTypes = [...new Set(files.map((f) => f.contentType))];
+  console.log(JSON.stringify({ event: "finalize", slug, files: files.length, contentTypes }));
 
   const url = siteUrl(c, slug);
 
@@ -269,18 +276,22 @@ async function generateSocialAssets(
   contentType: string,
   siteUrlStr: string,
 ): Promise<void> {
-  const [ogPng, qrSvg] = await Promise.all([
-    generateOgImage({ title, slug, contentType, domain: env.DOMAIN }),
-    Promise.resolve(generateQrSvg(siteUrlStr)),
-  ]);
-  await Promise.all([
-    env.CONTENT.put(`og/${slug}.png`, ogPng, {
-      httpMetadata: { contentType: "image/png" },
-    }),
-    env.CONTENT.put(`qr/${slug}.svg`, qrSvg, {
-      httpMetadata: { contentType: "image/svg+xml" },
-    }),
-  ]);
+  try {
+    const [ogPng, qrSvg] = await Promise.all([
+      generateOgImage({ title, slug, contentType, domain: env.DOMAIN }),
+      Promise.resolve(generateQrSvg(siteUrlStr)),
+    ]);
+    await Promise.all([
+      env.CONTENT.put(`og/${slug}.png`, ogPng, {
+        httpMetadata: { contentType: "image/png" },
+      }),
+      env.CONTENT.put(`qr/${slug}.svg`, qrSvg, {
+        httpMetadata: { contentType: "image/svg+xml" },
+      }),
+    ]);
+  } catch (err) {
+    console.error(JSON.stringify({ event: "social_asset_generation_failed", slug, error: String(err) }));
+  }
 }
 
 async function generateUniqueSlug(db: D1Database, maxRetries = 3): Promise<string> {
@@ -294,6 +305,7 @@ async function generateUniqueSlug(db: D1Database, maxRetries = 3): Promise<strin
       continue;
     }
   }
+  console.error(JSON.stringify({ event: "slug_generation_failed", maxRetries }));
   throw new Error("Failed to generate unique slug after retries");
 }
 

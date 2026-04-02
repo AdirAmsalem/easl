@@ -68,11 +68,14 @@ async function serveSiteInner(
 
   // Download — serve raw file(s) as attachment
   if (path === "_easl/download") {
+    const totalBytes = meta.files.reduce((sum, f) => sum + f.size, 0);
+    console.log(JSON.stringify({ event: "download", slug, files: meta.files.length, totalBytes, zip: meta.files.length > 1 }));
     return downloadSite(env, slug, meta);
   }
 
   // Render decision based on file manifest
   const decision = decideRenderMode(meta.files);
+  console.log(JSON.stringify({ event: "serve", slug, path: path || "/", mode: decision.mode, viewerType: decision.viewerType, files: meta.files.length }));
 
   // Root request — smart render
   if (!path || path === "") {
@@ -235,15 +238,21 @@ async function serveR2File(
 }
 
 async function loadMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> {
-  const row = await env.DB.prepare(
-    `SELECT s.title, s.template, s.expires_at, s.created_at,
-            v.id AS version_id, v.files_json
-     FROM sites s
-     JOIN versions v ON v.slug = s.slug AND v.status = 'active'
-     WHERE s.slug = ?
-     ORDER BY v.created_at DESC
-     LIMIT 1`
-  ).bind(slug).first();
+  let row;
+  try {
+    row = await env.DB.prepare(
+      `SELECT s.title, s.template, s.expires_at, s.created_at,
+              v.id AS version_id, v.files_json
+       FROM sites s
+       JOIN versions v ON v.slug = s.slug AND v.status = 'active'
+       WHERE s.slug = ?
+       ORDER BY v.created_at DESC
+       LIMIT 1`
+    ).bind(slug).first();
+  } catch (err) {
+    console.error(JSON.stringify({ event: "d1_query_failed", slug, error: String(err) }));
+    throw err;
+  }
   if (!row) return null;
 
   const files: FileEntry[] = JSON.parse(row.files_json as string).map(
