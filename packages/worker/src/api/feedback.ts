@@ -44,6 +44,8 @@ app.post("/feedback", async (c) => {
     `INSERT INTO feedback (id, message, email, name, metadata) VALUES (?, ?, ?, ?, ?)`
   ).bind(id, body.message, body.email ?? null, body.name ?? null, metadataJson).run();
 
+  console.log(JSON.stringify({ event: "feedback", hasEmail: !!body.email }));
+
   return c.json({ success: true, id }, 201);
 });
 

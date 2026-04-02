@@ -64,6 +64,8 @@ app.delete("/sites/:slug", async (c) => {
   // Delete from D1 (cascade deletes versions)
   await c.env.DB.prepare("DELETE FROM sites WHERE slug = ?").bind(slug).run();
 
+  console.log(JSON.stringify({ event: "site_deleted", slug, files: allR2Keys.length }));
+
   return c.json({ success: true, slug });
 });
 
