@@ -1,0 +1,75 @@
+# AGENTS.md
+
+Project context and guidelines for AI coding agents working on this repository.
+
+## What is easl?
+
+easl is an agent-native hosting platform that auto-detects content types (CSV, Markdown, JSON, HTML, SVG, PDF, Mermaid, images) and renders them as shareable pages with interactive viewers. One API call in, shareable URL out.
+
+## Commands
+
+```bash
+pnpm install          # Install dependencies (requires pnpm 9.15+, Node >=20)
+pnpm dev              # Start local dev server (wrangler dev at localhost:8787)
+pnpm build            # Build all packages via Turborepo
+pnpm test             # Run all tests (vitest)
+pnpm typecheck        # TypeScript type checking across all packages
+
+# Run a single test file
+npx vitest run packages/worker/src/lib/slug.test.ts
+
+# Worker-specific
+cd packages/worker
+pnpm db:migrate       # Apply D1 schema (wrangler d1 execute)
+pnpm deploy           # Deploy to Cloudflare
+```
+
+## Architecture
+
+**Monorepo** managed by pnpm workspaces + Turborepo with two packages:
+
+### `packages/worker` — Cloudflare Worker (Hono)
+The main application. A single Worker handles all routing by hostname:
+- **`api.easl.dev`** → Hono API routes (`src/api/`)
+- **`*.easl.dev`** (wildcard subdomains) → Site serving with smart rendering (`src/serve/handler.ts`)
+- **`easl.dev`** (root domain) → Landing page, docs, and path-based fallback routing
+
+Key flow — **publishing**: `POST /publish/inline` → generates slug, uploads content to R2, inserts D1 rows, fires off OG image + QR code generation via `waitUntil`.
+
+Key flow — **serving**: Request hits `serveSite` → loads metadata from D1 (site + active version JOIN) → `decideRenderMode` classifies as passthrough/single-file/multi-file → for single files, `smartRender` checks L1 (Cache API) then L2 (KV) cache, or generates an HTML shell with embedded viewer.
+
+Bindings: **R2** (file storage), **D1** (SQLite metadata), **KV** (rendered HTML cache), plus R2 presigned URLs for multi-file upload.
+
+Local dev uses path-based routing (`/s/:slug`) instead of subdomains.
+
+### `packages/mcp-server` — MCP Server (`@easl/mcp`)
+Published to npm. Single-file stdio MCP server (`src/index.ts`) with 5 tools: `publish_content`, `publish_file`, `publish_site`, `list_sites`, `delete_site`. Built with tsdown.
+
+## Key source paths
+
+- `packages/worker/src/index.ts` — Main Worker entry, hostname-based routing
+- `packages/worker/src/api/publish.ts` — Publish + finalize endpoints
+- `packages/worker/src/serve/handler.ts` — Site serving, caching, smart rendering
+- `packages/worker/src/render/detect.ts` — Content type → render mode decision
+- `packages/worker/src/render/templates/base.ts` — HTML shell generation for viewers
+- `packages/worker/src/lib/mime.ts` — MIME detection and viewer type mapping
+- `packages/worker/src/types.ts` — Shared TypeScript types (Env bindings, API types, D1 row types)
+- `packages/worker/schema.sql` — D1 database schema (sites, versions, feedback tables)
+
+## Testing
+
+Tests live alongside source files as `*.test.ts` in `packages/worker/src/`. Vitest config at root includes `packages/*/src/**/*.test.ts`. No test mocking framework — tests are pure unit tests against utility functions.
+
+## Conventions
+
+- TypeScript throughout, strict mode, ES2022 target
+- No linter/formatter configured — match existing code style
+- Structured JSON logging via `console.log(JSON.stringify({ event: "...", ... }))`
+- Non-blocking background work via `ctx.waitUntil()` / `c.executionCtx.waitUntil()`
+- Hono sub-routers mounted on the main app (one per API domain: publish, sites, feedback)
+- Before finalizing a change: run `pnpm build`, `pnpm test`, and `pnpm typecheck` and fix any errors
+
+## References
+
+- [Cloudflare Workers docs index](https://developers.cloudflare.com/workers/llms.txt) — full index of all Workers documentation pages
+- [Cloudflare Workers Best Practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/index.md) — architectural and performance guidance
