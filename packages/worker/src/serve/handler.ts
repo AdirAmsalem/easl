@@ -75,21 +75,24 @@ async function serveSiteInner(
 
   // Render decision based on file manifest
   const decision = decideRenderMode(meta.files);
-  console.log(JSON.stringify({ event: "serve", slug, path: path || "/", mode: decision.mode, viewerType: decision.viewerType, files: meta.files.length }));
+  const logServe = (extra?: { cache?: "l1" | "l2" | "miss" }) =>
+    console.log(JSON.stringify({ event: "serve", slug, path: path || "/", mode: decision.mode, viewerType: decision.viewerType, files: meta.files.length, ...extra }));
 
   // Root request — smart render
   if (!path || path === "") {
     // Passthrough mode (HTML site) → serve index.html directly
     if (decision.mode === "passthrough" && decision.primaryFile) {
+      logServe();
       return serveR2File(env, slug, meta.currentVersionId, decision.primaryFile.path, request);
     }
 
     // Single file → smart render with beautiful viewer
     if (decision.mode === "single-file" && decision.primaryFile) {
-      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request, ctx, basePath);
+      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request, ctx, basePath, logServe);
     }
 
     // Multi-file without index → auto-generated nav
+    logServe();
     return htmlResponse(buildMultiFileNav(slug, meta, env.DOMAIN, basePath), 200);
   }
 
@@ -99,14 +102,16 @@ async function serveSiteInner(
     // If requesting a raw file, check for ?render=true to smart-render it
     if (url.searchParams.has("render")) {
       const viewerType = detectViewerType(file.contentType, file.path);
-      return smartRender(env, slug, meta, file, viewerType, request, ctx, basePath);
+      return smartRender(env, slug, meta, file, viewerType, request, ctx, basePath, logServe);
     }
+    logServe();
     return serveR2File(env, slug, meta.currentVersionId, file.path, request);
   }
 
   // Try .html extension (clean URLs)
   const htmlFile = meta.files.find((f) => f.path === path + ".html");
   if (htmlFile) {
+    logServe();
     return serveR2File(env, slug, meta.currentVersionId, htmlFile.path, request);
   }
 
@@ -124,9 +129,11 @@ async function smartRender(
   request: Request,
   ctx: ExecutionContext,
   basePath = "",
+  logServe: (extra?: { cache?: "l1" | "l2" | "miss" }) => void = () => {},
 ): Promise<Response> {
   // Files >5MB skip smart render — serve as download instead of reading into memory
   if (file.size > RENDER_SIZE_LIMIT) {
+    logServe();
     return serveR2File(env, slug, meta.currentVersionId, file.path, request);
   }
 
@@ -138,12 +145,14 @@ async function smartRender(
   // L1: Cache API (per-colo, ~1ms)
   const cacheMatch = await cache.match(cacheUrl);
   if (cacheMatch) {
+    logServe({ cache: "l1" });
     return cacheMatch;
   }
 
   // L2: KV
   const cached = await env.SITES_KV.get(cacheKey);
   if (cached) {
+    logServe({ cache: "l2" });
     const response = new Response(cached, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
@@ -154,6 +163,8 @@ async function smartRender(
     ctx.waitUntil(cache.put(cacheUrl, response.clone()));
     return response;
   }
+
+  logServe({ cache: "miss" });
 
   // Fetch file content from R2
   const r2Key = `${slug}/${meta.currentVersionId}/${file.path}`;
