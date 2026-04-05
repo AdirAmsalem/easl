@@ -123,6 +123,7 @@ export function docsPageHtml(domain: string): string {
         <div class="group">
           <div class="group-title">Integrations</div>
           <a href="#mcp-server">MCP Server</a>
+          <a href="#agent-skill">Agent Skill</a>
           <a href="#rest-api">REST API</a>
           <a href="#publish-endpoints" class="sub">Publishing</a>
           <a href="#site-endpoints" class="sub">Site Management</a>
@@ -262,6 +263,24 @@ export function docsPageHtml(domain: string): string {
 "Turn this markdown into a beautiful page"
 "Show me this JSON in a tree view"
 "Create a Mermaid diagram of the architecture"</pre>
+
+        <!-- ───── Agent Skill ───── -->
+        <h2 id="agent-skill">Agent Skill</h2>
+        <p>The easl Agent Skill teaches AI agents <em>when</em> and <em>how</em> to use easl. It works alongside the MCP server — the MCP provides tools, the skill provides knowledge about content types, viewers, and best practices.</p>
+
+        <h3>Installation</h3>
+        <p>Install the skill with one command:</p>
+<pre><span class="k">npx</span> skills add <span class="s">AdirAmsalem/easl</span></pre>
+        <p>Works with Claude Code, Cursor, GitHub Copilot, Codex, Gemini CLI, and more.</p>
+
+        <h3>What it does</h3>
+        <p>Once installed, your agent automatically knows:</p>
+        <ul style="margin:0.5rem 0 1.5rem 1.5rem;color:var(--text-muted);font-size:0.875rem">
+          <li>Which content types easl supports and how each is rendered</li>
+          <li>When to suggest publishing content as a shareable page</li>
+          <li>How to use the MCP tools and HTTP API effectively</li>
+          <li>Available templates and limits</li>
+        </ul>
 
         <!-- ───── REST API ───── -->
         <h2 id="rest-api">REST API</h2>
