@@ -185,24 +185,33 @@ function landingPageHtml(domain: string): string {
     .hero h1 .accent{color:var(--accent)}
     .hero .sub{font-size:1.0625rem;color:var(--text-faint);max-width:520px;margin:0 auto 0;line-height:1.7}
 
-    /* Hero demo — the centerpiece */
-    .hero-demo{margin:2.5rem auto 0;max-width:640px;position:relative;text-align:left}
-    .hero-demo::before{content:'';position:absolute;inset:-1px;border-radius:15px;padding:1px;background:linear-gradient(170deg,var(--demo-glow-1) 0%,transparent 40%,var(--demo-glow-2) 80%,transparent);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:1}
-    .agent-demo{position:relative;z-index:1;background:var(--demo-bg);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-    .agent-tabs{display:flex;gap:0;background:var(--demo-tab-bg);border-bottom:1px solid var(--demo-tab-border)}
-    .agent-tab{font-size:0.75rem;padding:0.625rem 1.125rem;color:var(--text-dim);cursor:pointer;transition:all .15s;font-family:inherit;border:none;background:none;border-bottom:2px solid transparent;font-weight:500}
-    .agent-tab:hover{color:var(--text-muted)}
-    .agent-tab.active{color:var(--text);border-bottom-color:var(--accent)}
-    .agent-body{padding:1.5rem 1.75rem}
-    .agent-prompt{display:flex;align-items:flex-start;gap:0.75rem;margin-bottom:1.25rem;padding-bottom:1.25rem;border-bottom:1px solid var(--demo-prompt-border)}
-    .agent-prompt .avatar{width:26px;height:26px;border-radius:7px;background:var(--avatar-bg);display:flex;align-items:center;justify-content:center;font-size:0.5625rem;font-weight:600;color:var(--text-faintest);flex-shrink:0;margin-top:1px}
-    .agent-prompt .msg{font-size:0.875rem;color:var(--text);line-height:1.5;padding-top:2px}
-    .agent-response{display:flex;align-items:flex-start;gap:0.75rem}
-    .agent-response .avatar{width:26px;height:26px;border-radius:7px;background:var(--avatar-accent-bg);display:flex;align-items:center;justify-content:center;font-size:0.5625rem;font-weight:700;color:var(--accent);flex-shrink:0;margin-top:1px}
-    .agent-response .msg{font-size:0.8125rem;color:var(--text-muted);line-height:1.5;flex:1;min-width:0}
-    .agent-url{display:inline-block;background:var(--url-bg);color:var(--green);font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.75rem;padding:0.25rem 0.625rem;border-radius:4px;margin:0 0 0.875rem}
-    .agent-preview{background:var(--preview-bg);border:1px solid var(--preview-border);border-radius:8px;padding:1rem 1.25rem;overflow:hidden}
-    .agent-preview-inner{transition:opacity .3s ease}
+    /* Hero terminal — animated demo */
+    .hero-terminal{margin:2.5rem auto 0;max-width:640px;position:relative;text-align:left}
+    .hero-terminal::before{content:'';position:absolute;inset:-1px;border-radius:15px;padding:1px;background:linear-gradient(170deg,var(--demo-glow-1) 0%,transparent 40%,var(--demo-glow-2) 80%,transparent);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:1}
+    .term-chrome{position:relative;z-index:1;background:var(--demo-bg);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+    .term-header{display:flex;align-items:center;gap:0.5rem;padding:0.75rem 1rem;border-bottom:1px solid var(--demo-tab-border)}
+    .term-dots{display:flex;gap:6px}
+    .term-dot{width:10px;height:10px;border-radius:50%}
+    .term-dot.r{background:#ff5f57;opacity:0.7}
+    .term-dot.y{background:#febc2e;opacity:0.7}
+    .term-dot.g{background:#28c840;opacity:0.7}
+    .term-indicators{display:flex;gap:6px;margin-left:auto}
+    .term-indicator{font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.5625rem;padding:2px 8px;border-radius:9px;background:var(--surface);color:var(--text-faintest);cursor:pointer;transition:all .2s;border:1px solid transparent;line-height:1.4}
+    .term-indicator:hover{color:var(--text-muted);border-color:var(--border-medium)}
+    .term-indicator.active{color:var(--accent);background:var(--avatar-accent-bg);border-color:rgba(96,165,250,0.25)}
+    .term-body{padding:1.25rem 1.5rem;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.8125rem;line-height:1.7;min-height:340px;transition:opacity .3s ease}
+    .term-line{opacity:0;transform:translateY(3px);transition:opacity .25s ease,transform .25s ease;white-space:pre-wrap;word-break:break-all}
+    .term-line.visible{opacity:1;transform:none}
+    .term-line.typing{opacity:1;transform:none}
+    .term-prompt{color:var(--green)}
+    .term-cmd{color:var(--text-heading)}
+    .term-dim{color:var(--text-faintest)}
+    .term-accent{color:var(--accent)}
+    .term-ok{color:var(--green);font-weight:600}
+    .term-url{display:inline;background:var(--url-bg);color:var(--green);padding:0.125rem 0.5rem;border-radius:3px}
+    .term-box{color:var(--text-faint);font-size:0.75rem;line-height:1.5}
+    @keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
+    .term-cursor{display:inline-block;width:0.5em;height:1.1em;background:var(--text-heading);vertical-align:text-bottom;animation:blink 1s step-end infinite;margin-left:1px}
 
     /* Setup section */
     .setup{margin:4rem auto 5rem;max-width:640px}
@@ -274,10 +283,10 @@ function landingPageHtml(domain: string): string {
 
     /* Animations */
     @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-    .hero h1,.hero .sub,.hero-demo,.setup,.demos,.cta{animation:fadeUp .5s ease both}
+    .hero h1,.hero .sub,.hero-terminal,.setup,.demos,.cta{animation:fadeUp .5s ease both}
     .hero .sub{animation-delay:.08s}
-    .hero-demo{animation-delay:.18s}
-    .setup{animation-delay:.3s}
+    .hero-terminal{animation-delay:.18s}
+    .setup{animation-delay:.25s}
 
     @media(max-width:600px){
       .hero{padding:6rem 0 3rem}
@@ -303,31 +312,15 @@ function landingPageHtml(domain: string): string {
   <div class="container">
     <section class="hero">
       <h1>Instant hosting for<br><span class="accent">AI agents</span></h1>
-      <p class="sub">Your agent sends CSV, Markdown, or JSON. easl turns it into a page worth sharing.</p>
+      <p class="sub">Your agent sends content. easl turns it into a page worth sharing.</p>
 
-      <div class="hero-demo">
-        <div class="agent-demo">
-          <div class="agent-tabs">
-            <button class="agent-tab active" onclick="showExample('csv')">CSV</button>
-            <button class="agent-tab" onclick="showExample('markdown')">Markdown</button>
-            <button class="agent-tab" onclick="showExample('json')">JSON</button>
+      <div class="hero-terminal">
+        <div class="term-chrome">
+          <div class="term-header">
+            <div class="term-dots"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div></div>
+            <div class="term-indicators" id="term-indicators"></div>
           </div>
-          <div class="agent-body">
-            <div class="agent-prompt">
-              <div class="avatar">You</div>
-              <div class="msg" id="agent-prompt-text">Publish this CSV as a shareable table</div>
-            </div>
-            <div class="agent-response">
-              <div class="avatar">A</div>
-              <div class="msg">
-                <span id="agent-response-text">Done — published to easl:</span>
-                <div class="agent-url" id="agent-url">https://warm-dawn.${domain}</div>
-                <div class="agent-preview">
-                  <div class="agent-preview-inner" id="agent-preview"></div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div class="term-body" id="term"></div>
         </div>
       </div>
     </section>
@@ -425,43 +418,210 @@ Dave,Engineer,Infra,2024</div>
   </footer>
   <script>
     function getTheme(){return localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark')}
-    function applyTheme(t){document.documentElement.setAttribute('data-theme',t);document.getElementById('theme-btn').textContent=t==='dark'?'\u263E':'\u2600';document.querySelectorAll('.nav-logo').forEach(function(img){img.src=t==='dark'?'/logo.svg':'/logo-light.svg'})}
+    function applyTheme(t){document.documentElement.setAttribute('data-theme',t);document.getElementById('theme-btn').textContent=t==='dark'?'\\u263E':'\\u2600';document.querySelectorAll('.nav-logo').forEach(function(img){img.src=t==='dark'?'/logo.svg':'/logo-light.svg'})}
     function toggleTheme(){var t=getTheme()==='dark'?'light':'dark';localStorage.setItem('easl-theme',t);applyTheme(t)}
     applyTheme(getTheme());
-  </script><script>
-    var examples={
-      csv:{
-        prompt:'Publish this CSV as a shareable table',
-        response:'Done \\u2014 published to easl:',
-        url:'https://warm-dawn.${domain}',
-        preview:'<table class="mini-table"><tr><th>name</th><th>role</th><th>team</th><th>joined</th></tr><tr><td>Alice</td><td>Engineer</td><td>Platform</td><td>2024</td></tr><tr><td>Bob</td><td>Designer</td><td>Product</td><td>2023</td></tr><tr><td>Carol</td><td>PM</td><td>Growth</td><td>2025</td></tr><tr><td>Dave</td><td>Engineer</td><td>Infra</td><td>2024</td></tr></table>'
-      },
-      markdown:{
-        prompt:'Turn my notes into a shareable page',
-        response:'Done \\u2014 published to easl:',
-        url:'https://blue-river.${domain}',
-        preview:'<div class="mini-md"><h3>Q1 Results</h3><p>Revenue grew <strong>42%</strong> YoY.</p><p>Key wins:</p><p>\\u2022 Enterprise: <code>+68%</code></p><p>\\u2022 Self-serve: <code>+31%</code></p></div>'
-      },
-      json:{
-        prompt:'Share this API response as a readable page',
-        response:'Done \\u2014 published to easl:',
-        url:'https://swift-peak.${domain}',
-        preview:'<div class="mini-json"><span class="jb">{</span><br>&nbsp;&nbsp;<span class="jk">\\"user\\"</span>: <span class="jb">{</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">\\"name\\"</span>: <span class="js">\\"Alice\\"</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">\\"plan\\"</span>: <span class="js">\\"pro\\"</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">\\"usage\\"</span>: <span class="jn">8,420</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">\\"active\\"</span>: <span class="jn">true</span><br>&nbsp;&nbsp;<span class="jb">}</span><br><span class="jb">}</span></div>'
-      }
-    };
+  </script>
+  <script>
+    (function(){
+      var term=document.getElementById('term');
+      var indicatorsEl=document.getElementById('term-indicators');
+      if(!term||!indicatorsEl)return;
 
-    function showExample(id){
-      var ex=examples[id];
-      document.getElementById('agent-prompt-text').textContent=ex.prompt;
-      document.getElementById('agent-response-text').textContent=ex.response;
-      document.getElementById('agent-url').textContent=ex.url;
-      var preview=document.getElementById('agent-preview');
-      preview.style.opacity='0';
-      setTimeout(function(){preview.innerHTML=ex.preview;preview.style.opacity='1';},150);
-      document.querySelectorAll('.agent-tab').forEach(b=>b.classList.remove('active'));
-      document.querySelector('.agent-tab[onclick*="'+id+'"]').classList.add('active');
-    }
-    showExample('csv');
+      var scripts=[
+        {label:'CSV',lines:[
+          {text:'<span class="term-prompt">$</span> <span class="term-cmd">Analyze the team roster and share it</span>',delay:300,type:'type'},
+          {text:'',delay:600,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Reading team_roster.csv...</span>',delay:400,type:'instant'},
+          {text:'<span class="term-dim">  Parsed 12 rows \\u00d7 4 columns</span>',delay:800,type:'instant'},
+          {text:'<span class="term-dim">  Departments: Eng, Design, Product, Growth</span>',delay:600,type:'instant'},
+          {text:'<span class="term-dim">  Adding sortable headers and filters</span>',delay:700,type:'instant'},
+          {text:'',delay:500,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
+          {text:'',delay:1200,type:'instant'},
+          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://warm-dawn.${domain}</span>',delay:200,type:'instant'}
+        ]},
+        {label:'Markdown',lines:[
+          {text:'<span class="term-prompt">$</span> <span class="term-cmd">Write up the Q1 results and share them</span>',delay:300,type:'type'},
+          {text:'',delay:600,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Drafting Q1 summary...</span>',delay:400,type:'instant'},
+          {text:'<span class="term-dim">  Revenue: $2.4M (+42% YoY)</span>',delay:700,type:'instant'},
+          {text:'<span class="term-dim">  Adding sections: key wins, regional breakdown</span>',delay:600,type:'instant'},
+          {text:'<span class="term-dim">  Formatting tables and highlights</span>',delay:700,type:'instant'},
+          {text:'',delay:500,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
+          {text:'',delay:1200,type:'instant'},
+          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://blue-river.${domain}</span>',delay:200,type:'instant'}
+        ]},
+        {label:'HTML',lines:[
+          {text:'<span class="term-prompt">$</span> <span class="term-cmd">Build a metrics dashboard and publish it</span>',delay:300,type:'type'},
+          {text:'',delay:600,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Building dashboard layout...</span>',delay:400,type:'instant'},
+          {text:'<span class="term-dim">  Scaffolding responsive grid</span>',delay:700,type:'instant'},
+          {text:'<span class="term-dim">  Rendering 3 charts + KPI cards</span>',delay:800,type:'instant'},
+          {text:'<span class="term-dim">  Bundling CSS and inline assets</span>',delay:600,type:'instant'},
+          {text:'',delay:500,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
+          {text:'',delay:1200,type:'instant'},
+          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://swift-peak.${domain}</span>',delay:200,type:'instant'}
+        ]},
+        {label:'JSON',lines:[
+          {text:'<span class="term-prompt">$</span> <span class="term-cmd">Share the API response from /users/alice</span>',delay:300,type:'type'},
+          {text:'',delay:600,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Fetching /users/alice...</span>',delay:400,type:'instant'},
+          {text:'<span class="term-dim">  200 OK \\u00b7 1.2 KB response</span>',delay:600,type:'instant'},
+          {text:'<span class="term-dim">  4 top-level keys, 2 nested objects</span>',delay:600,type:'instant'},
+          {text:'<span class="term-dim">  Building collapsible tree view</span>',delay:700,type:'instant'},
+          {text:'',delay:500,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
+          {text:'',delay:1200,type:'instant'},
+          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://cool-leaf.${domain}</span>',delay:200,type:'instant'}
+        ]},
+        {label:'SVG',lines:[
+          {text:'<span class="term-prompt">$</span> <span class="term-cmd">Create a diagram of our auth flow and share it</span>',delay:300,type:'type'},
+          {text:'',delay:600,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Generating SVG diagram...</span>',delay:400,type:'instant'},
+          {text:'<span class="term-dim">  Mapping OAuth flow: 6 steps, 3 actors</span>',delay:700,type:'instant'},
+          {text:'<span class="term-dim">  Laying out nodes and connections</span>',delay:700,type:'instant'},
+          {text:'<span class="term-dim">  Rendering vector paths</span>',delay:600,type:'instant'},
+          {text:'',delay:500,type:'instant'},
+          {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
+          {text:'',delay:1200,type:'instant'},
+          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://red-cloud.${domain}</span>',delay:200,type:'instant'}
+        ]}
+      ];
+
+      var currentIdx=0;
+      var running=false;
+      var autoTimer=null;
+      var runId=0;
+      var cursor=document.createElement('span');
+      cursor.className='term-cursor';
+
+      scripts.forEach(function(s,i){
+        var pill=document.createElement('button');
+        pill.className='term-indicator'+(i===0?' active':'');
+        pill.textContent=s.label;
+        pill.onclick=function(){switchTo(i)};
+        indicatorsEl.appendChild(pill);
+      });
+
+      function updateIndicators(idx){
+        indicatorsEl.querySelectorAll('.term-indicator').forEach(function(p,i){
+          p.classList.toggle('active',i===idx);
+        });
+      }
+
+      function addLine(html){
+        var div=document.createElement('div');
+        div.className='term-line';
+        div.innerHTML=html;
+        term.appendChild(div);
+        return div;
+      }
+
+      function showLine(div){div.classList.add('visible')}
+
+      function typeText(div,html,cb){
+        div.classList.add('typing');
+        var tmp=document.createElement('span');
+        tmp.innerHTML=html;
+        var plain=tmp.textContent||'';
+        var i=0;
+        div.textContent='';
+        div.appendChild(cursor);
+        function tick(){
+          if(i<plain.length){
+            div.insertBefore(document.createTextNode(plain[i]),cursor);
+            i++;
+            setTimeout(tick,30+Math.random()*25);
+          }else{
+            if(cursor.parentNode)cursor.parentNode.removeChild(cursor);
+            div.innerHTML=html;
+            cb();
+          }
+        }
+        tick();
+      }
+
+      function runScript(idx,cb){
+        var id=++runId;
+        running=true;
+        var lines=scripts[idx].lines;
+        var t=0;
+        var done=0;
+        lines.forEach(function(s,i){
+          t+=s.delay;
+          var ms=t;
+          setTimeout(function(){
+            if(id!==runId)return;
+            if(s.type==='type'){
+              var div=addLine('');
+              typeText(div,s.text,function(){
+                done++;
+                if(done>=lines.length){running=false;cb&&cb()}
+              });
+            }else{
+              var div=addLine(s.text);
+              showLine(div);
+              done++;
+              if(done>=lines.length){running=false;cb&&cb()}
+            }
+          },ms);
+          if(s.type==='type'){
+            t+=(s.text.replace(/<[^>]*>/g,'').length)*42;
+          }
+        });
+      }
+
+      function switchTo(idx){
+        clearTimeout(autoTimer);
+        runId++;
+        currentIdx=idx;
+        updateIndicators(idx);
+        term.style.opacity='0';
+        setTimeout(function(){
+          term.innerHTML='';
+          term.style.opacity='1';
+          runScript(idx,function(){
+            appendCursor();
+            scheduleNext();
+          });
+        },350);
+      }
+
+      function scheduleNext(){
+        autoTimer=setTimeout(function(){
+          switchTo((currentIdx+1)%scripts.length);
+        },5000);
+      }
+
+      function appendCursor(){
+        var lines=term.querySelectorAll('.term-line');
+        if(lines.length){lines[lines.length-1].appendChild(cursor)}
+      }
+
+      function start(){
+        runScript(0,function(){
+          appendCursor();
+          scheduleNext();
+        });
+      }
+
+      if('IntersectionObserver' in window){
+        var started=false;
+        var obs=new IntersectionObserver(function(entries){
+          if(entries[0].isIntersecting&&!started){
+            started=true;
+            obs.disconnect();
+            start();
+          }
+        },{threshold:0.3});
+        obs.observe(term);
+      }else{
+        start();
+      }
+    })();
   </script>
 </body>
 </html>`;
