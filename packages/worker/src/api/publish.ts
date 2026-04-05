@@ -63,7 +63,7 @@ app.post("/publish", async (c) => {
 
   // Normalize: single-file shorthand → files array
   let files: PublishFileEntry[];
-  if (body.content && body.contentType) {
+  if (body.content != null && body.contentType) {
     files = [{
       path: fileNameFromContentType(body.contentType),
       content: body.content,
@@ -81,18 +81,23 @@ app.post("/publish", async (c) => {
 
   // Validate all files have required fields
   for (const f of files) {
-    if (!f.path || !f.content || !f.contentType) {
+    if (!f.path || f.content == null || !f.contentType) {
       return c.json({ error: "Each file must have path, content, and contentType" }, 400);
     }
   }
 
   // Decode/encode all files and check total size
-  const encoded = files.map((f) => ({
-    ...f,
-    bytes: f.encoding === "base64"
-      ? Uint8Array.from(atob(f.content), (ch) => ch.charCodeAt(0))
-      : new TextEncoder().encode(f.content),
-  }));
+  let encoded: Array<PublishFileEntry & { bytes: Uint8Array }>;
+  try {
+    encoded = files.map((f) => ({
+      ...f,
+      bytes: f.encoding === "base64"
+        ? Uint8Array.from(atob(f.content), (ch) => ch.charCodeAt(0))
+        : new TextEncoder().encode(f.content),
+    }));
+  } catch {
+    return c.json({ error: "Invalid base64 content" }, 400);
+  }
   const totalSize = encoded.reduce((sum, f) => sum + f.bytes.byteLength, 0);
 
   if (totalSize > ANON_MAX_SITE_SIZE) {
