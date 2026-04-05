@@ -27,17 +27,17 @@ describe("siteUrl", () => {
 
 describe("apiUrl", () => {
   it("returns production API host URL", () => {
-    expect(apiUrl("https://api.easl.dev/publish", prodEnv, "/finalize/abc"))
-      .toBe("https://api.easl.dev/finalize/abc");
+    expect(apiUrl("https://api.easl.dev/publish", prodEnv, "/sites/abc"))
+      .toBe("https://api.easl.dev/sites/abc");
   });
 
   it("returns localhost origin URL on localhost", () => {
-    expect(apiUrl("http://localhost:8787/publish", prodEnv, "/finalize/abc"))
-      .toBe("http://localhost:8787/finalize/abc");
+    expect(apiUrl("http://localhost:8787/publish", prodEnv, "/sites/abc"))
+      .toBe("http://localhost:8787/sites/abc");
   });
 
   it("returns 127.0.0.1 origin URL", () => {
-    expect(apiUrl("http://127.0.0.1:8787/publish", prodEnv, "/finalize/abc"))
-      .toBe("http://127.0.0.1:8787/finalize/abc");
+    expect(apiUrl("http://127.0.0.1:8787/publish", prodEnv, "/sites/abc"))
+      .toBe("http://127.0.0.1:8787/sites/abc");
   });
 });

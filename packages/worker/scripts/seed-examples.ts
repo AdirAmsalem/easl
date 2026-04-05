@@ -311,92 +311,25 @@ Q2 pipeline is 2.3× coverage with strong signal in enterprise. Expect continued
   },
 ];
 
-async function publishMultiStep(ex: Example): Promise<string> {
-  const fileSize = new TextEncoder().encode(ex.content).byteLength;
-
-  // Step 1: Create site with custom slug
-  const createRes = await fetch(`${API_BASE}/publish`, {
+async function publishExample(ex: Example): Promise<void> {
+  const res = await fetch(`${API_BASE}/publish`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       slug: ex.slug,
       title: ex.title,
       ttl: TEN_YEARS,
-      files: [{ path: ex.fileName, size: fileSize, contentType: ex.contentType }],
-    }),
-  });
-
-  if (!createRes.ok) {
-    const err = await createRes.text();
-    throw new Error(`Failed to create ${ex.slug}: ${createRes.status} ${err}`);
-  }
-
-  const createData = (await createRes.json()) as {
-    slug: string;
-    url: string;
-    upload: { versionId: string; uploads: Array<{ url: string; headers: Record<string, string> }> };
-  };
-
-  // Step 2: Upload content via presigned URL
-  const upload = createData.upload.uploads[0];
-  const uploadRes = await fetch(upload.url, {
-    method: "PUT",
-    headers: upload.headers,
-    body: ex.content,
-  });
-
-  if (!uploadRes.ok) {
-    throw new Error(`Failed to upload ${ex.slug}: ${uploadRes.status}`);
-  }
-
-  // Step 3: Finalize
-  const finalizeRes = await fetch(`${API_BASE}/finalize/${ex.slug}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ versionId: createData.upload.versionId }),
-  });
-
-  if (!finalizeRes.ok) {
-    const err = await finalizeRes.text();
-    throw new Error(`Failed to finalize ${ex.slug}: ${finalizeRes.status} ${err}`);
-  }
-
-  return createData.url;
-}
-
-async function publishInline(ex: Example): Promise<string> {
-  const res = await fetch(`${API_BASE}/publish/inline`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      content: ex.content,
-      contentType: ex.contentType,
-      title: ex.title,
+      files: [{ path: ex.fileName, content: ex.content, contentType: ex.contentType }],
     }),
   });
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Failed to publish inline ${ex.slug}: ${res.status} ${err}`);
+    throw new Error(`Failed to publish ${ex.slug}: ${res.status} ${err}`);
   }
 
   const data = (await res.json()) as { url: string; slug: string };
-  return data.url;
-}
-
-async function publishExample(ex: Example): Promise<void> {
-  try {
-    const url = await publishMultiStep(ex);
-    console.log(`✓ ${ex.slug} → ${url}`);
-  } catch (e) {
-    // Multi-step fails locally (no R2 presign secrets) — fall back to inline
-    if (process.env.SEED_INLINE) {
-      const url = await publishInline(ex);
-      console.log(`✓ ${ex.slug} (inline, random slug) → ${url}`);
-    } else {
-      throw e;
-    }
-  }
+  console.log(`✓ ${ex.slug} → ${data.url}`);
 }
 
 async function main() {

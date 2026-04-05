@@ -42,9 +42,6 @@ function makeEnv(opts: { d1Row?: Record<string, unknown> | null } = {}): Env {
     DOMAIN: "easl.dev",
     API_HOST: "api.easl.dev",
     WORKERS_DEV_SUBDOMAIN: "easl",
-    R2_ACCESS_KEY_ID: "",
-    R2_SECRET_ACCESS_KEY: "",
-    R2_ACCOUNT_ID: "",
   };
 }
 

@@ -118,14 +118,13 @@ export function docsPageHtml(domain: string): string {
           <div class="group-title">Getting Started</div>
           <a href="#overview">Overview</a>
           <a href="#quickstart">Quick Start</a>
-          <a href="#inline-publish">Inline Publish</a>
+          <a href="#publish-guide">Publishing</a>
         </div>
         <div class="group">
           <div class="group-title">Integrations</div>
           <a href="#mcp-server">MCP Server</a>
           <a href="#rest-api">REST API</a>
           <a href="#publish-endpoints" class="sub">Publishing</a>
-          <a href="#finalize-endpoint" class="sub">Finalize</a>
           <a href="#site-endpoints" class="sub">Site Management</a>
           <a href="#feedback-endpoint" class="sub">Feedback</a>
           <a href="#curl">cURL Examples</a>
@@ -157,15 +156,15 @@ export function docsPageHtml(domain: string): string {
             <tr><td><strong>API Base</strong></td><td><code>https://${api}</code></td></tr>
             <tr><td><strong>Sites served at</strong></td><td><code>https://{slug}.${domain}</code></td></tr>
             <tr><td><strong>Anonymous limit</strong></td><td>50 files, 200 MB, expires in 7 days</td></tr>
-            <tr><td><strong>Inline limit</strong></td><td>256 KB content, single file</td></tr>
+            <tr><td><strong>Single-file shorthand</strong></td><td>Send <code>content</code> + <code>contentType</code> directly</td></tr>
           </tbody>
         </table></div>
 
         <!-- ───── Quick Start ───── -->
         <h2 id="quickstart">Quick Start</h2>
-        <p>The fastest way to publish: inline publish. One API call, content in the body, live URL in the response.</p>
+        <p>The fastest way to publish: one API call, content in the body, live URL in the response.</p>
 
-<pre><span class="k">curl</span> -X POST https://${api}/publish/inline \\
+<pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
   -d <span class="s">'{
     "content": "# Hello World\\nSome **markdown** here.",
@@ -182,9 +181,9 @@ export function docsPageHtml(domain: string): string {
 
         <p>That's it. Your content is live and beautifully rendered.</p>
 
-        <!-- ───── Inline Publish ───── -->
-        <h2 id="inline-publish">Inline Publish (One-Call Magic)</h2>
-        <p>The simplest publish method. Send content as a string, get a URL back instantly. No file uploads, no finalize step.</p>
+        <!-- ───── Publishing ───── -->
+        <h2 id="publish-guide">Publishing</h2>
+        <p>One endpoint for everything. Send content as a string or an array of files — easl handles the rest.</p>
 
         <h3>Supported content types</h3>
         <div class="table-wrap"><table>
@@ -203,7 +202,7 @@ export function docsPageHtml(domain: string): string {
         <h3>Examples</h3>
 
         <h4>CSV &rarr; Interactive Table</h4>
-<pre><span class="k">curl</span> -X POST https://${api}/publish/inline \\
+<pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
   -d <span class="s">'{
     "content": "Name,Role,City\\nAlice,Engineer,SF\\nBob,Designer,NYC",
@@ -212,7 +211,7 @@ export function docsPageHtml(domain: string): string {
   }'</span></pre>
 
         <h4>JSON &rarr; Tree Viewer</h4>
-<pre><span class="k">curl</span> -X POST https://${api}/publish/inline \\
+<pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
   -d <span class="s">'{
     "content": "{\\"users\\": [{\\"name\\": \\"Alice\\", \\"active\\": true}]}",
@@ -221,7 +220,7 @@ export function docsPageHtml(domain: string): string {
   }'</span></pre>
 
         <h4>Mermaid &rarr; Rendered Diagram</h4>
-<pre><span class="k">curl</span> -X POST https://${api}/publish/inline \\
+<pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
   -d <span class="s">'{
     "content": "graph TD\\n  A[Start] --> B{Decision}\\n  B -->|Yes| C[Do it]\\n  B -->|No| D[Skip]",
@@ -249,7 +248,7 @@ export function docsPageHtml(domain: string): string {
           <thead><tr><th>Tool</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>publish_content</code></td><td>Publish raw content (string) &rarr; URL to a shareable page. The fastest path.</td></tr>
-            <tr><td><code>publish_file</code></td><td>Publish a file from disk with presigned upload</td></tr>
+            <tr><td><code>publish_file</code></td><td>Publish a file from disk &rarr; URL to a shareable page</td></tr>
             <tr><td><code>publish_site</code></td><td>Publish a multi-file site (directory)</td></tr>
             <tr><td><code>list_sites</code></td><td>List published sites in this session</td></tr>
             <tr><td><code>delete_site</code></td><td>Delete a published site</td></tr>
@@ -271,44 +270,27 @@ export function docsPageHtml(domain: string): string {
         <h3 id="publish-endpoints">Publishing</h3>
 
         <div class="endpoint">
-          <div class="method-path"><span class="method method-post">POST</span> <span class="path">/publish/inline</span></div>
-          <p class="desc">One-call publish. Send content as a string, get a live URL back instantly. No upload step needed.</p>
+          <div class="method-path"><span class="method method-post">POST</span> <span class="path">/publish</span></div>
+          <p class="desc">Publish content and get a live URL back instantly. Supports single-file shorthand or multi-file arrays.</p>
           <p class="auth">Auth: None required (anonymous, 7-day TTL)</p>
         </div>
 
-        <h4>Request body</h4>
+        <h4>Single-file shorthand</h4>
         <div class="table-wrap"><table>
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>content</code></td><td>string <span class="badge badge-required">required</span></td><td>Raw content string (max 256 KB)</td></tr>
+            <tr><td><code>content</code></td><td>string <span class="badge badge-required">required</span></td><td>Raw content string</td></tr>
             <tr><td><code>contentType</code></td><td>string <span class="badge badge-required">required</span></td><td>MIME type (e.g. <code>text/markdown</code>)</td></tr>
             <tr><td><code>title</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Page title shown in header &amp; browser tab</td></tr>
             <tr><td><code>template</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Template: <code>minimal</code>, <code>report</code>, or <code>dashboard</code></td></tr>
           </tbody>
         </table></div>
 
-        <h4>Response (201)</h4>
-<pre>{
-  <span class="s">"url"</span>: <span class="s">"https://warm-dawn.${domain}"</span>,
-  <span class="s">"slug"</span>: <span class="s">"warm-dawn"</span>,
-  <span class="s">"claimToken"</span>: <span class="s">"claim_..."</span>,
-  <span class="s">"embed"</span>: <span class="s">"&lt;iframe src=\\"...?embed=1\\" ...&gt;&lt;/iframe&gt;"</span>,
-  <span class="s">"shareText"</span>: <span class="s">"My Page: https://warm-dawn.${domain}"</span>,
-  <span class="s">"expiresAt"</span>: <span class="s">"2026-03-30T12:00:00Z"</span>,
-  <span class="s">"anonymous"</span>: <span class="n">true</span>
-}</pre>
-
-        <div class="endpoint">
-          <div class="method-path"><span class="method method-post">POST</span> <span class="path">/publish</span></div>
-          <p class="desc">Multi-file publish. Returns presigned R2 upload URLs for each file. Call <code>/finalize</code> after uploads complete.</p>
-          <p class="auth">Auth: None required</p>
-        </div>
-
-        <h4>Request body</h4>
+        <h4>Multi-file form</h4>
         <div class="table-wrap"><table>
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>files</code></td><td>array <span class="badge badge-required">required</span></td><td>Array of <code>{path, size, contentType}</code></td></tr>
+            <tr><td><code>files</code></td><td>array <span class="badge badge-required">required</span></td><td>Array of <code>{path, content, contentType, encoding?}</code>. Set <code>encoding: "base64"</code> for binary files.</td></tr>
             <tr><td><code>slug</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Custom slug (3-48 chars, lowercase alphanumeric + hyphens)</td></tr>
             <tr><td><code>title</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Site title</td></tr>
             <tr><td><code>template</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Template name</td></tr>
@@ -318,42 +300,16 @@ export function docsPageHtml(domain: string): string {
 
         <h4>Response (201)</h4>
 <pre>{
-  <span class="s">"slug"</span>: <span class="s">"bold-arch"</span>,
-  <span class="s">"url"</span>: <span class="s">"https://bold-arch.${domain}"</span>,
+  <span class="s">"url"</span>: <span class="s">"https://warm-dawn.${domain}"</span>,
+  <span class="s">"slug"</span>: <span class="s">"warm-dawn"</span>,
   <span class="s">"claimToken"</span>: <span class="s">"claim_..."</span>,
-  <span class="s">"upload"</span>: {
-    <span class="s">"versionId"</span>: <span class="s">"v_abc123"</span>,
-    <span class="s">"uploads"</span>: [
-      {
-        <span class="s">"path"</span>: <span class="s">"index.html"</span>,
-        <span class="s">"method"</span>: <span class="s">"PUT"</span>,
-        <span class="s">"url"</span>: <span class="s">"https://presigned-url..."</span>,
-        <span class="s">"headers"</span>: { <span class="s">"Content-Type"</span>: <span class="s">"text/html"</span> }
-      }
-    ],
-    <span class="s">"finalizeUrl"</span>: <span class="s">"https://${api}/finalize/bold-arch"</span>,
-    <span class="s">"expiresInSeconds"</span>: <span class="n">600</span>
-  },
-  <span class="s">"expiresAt"</span>: <span class="s">"2026-03-30T..."</span>,
+  <span class="s">"ogImage"</span>: <span class="s">"https://warm-dawn.${domain}/_easl/og.png"</span>,
+  <span class="s">"qrCode"</span>: <span class="s">"https://warm-dawn.${domain}/_easl/qr.svg"</span>,
+  <span class="s">"embed"</span>: <span class="s">"&lt;iframe src=\\"...?embed=1\\" ...&gt;&lt;/iframe&gt;"</span>,
+  <span class="s">"shareText"</span>: <span class="s">"My Page: https://warm-dawn.${domain}"</span>,
+  <span class="s">"expiresAt"</span>: <span class="s">"2026-03-30T12:00:00Z"</span>,
   <span class="s">"anonymous"</span>: <span class="n">true</span>
 }</pre>
-
-        <!-- Finalize -->
-        <h3 id="finalize-endpoint">Finalize</h3>
-
-        <div class="endpoint">
-          <div class="method-path"><span class="method method-post">POST</span> <span class="path">/finalize/:slug</span></div>
-          <p class="desc">Activate a site after uploading all files via presigned URLs. Verifies all files exist in R2.</p>
-          <p class="auth">Auth: None required</p>
-        </div>
-
-        <h4>Request body</h4>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-          <tbody>
-            <tr><td><code>versionId</code></td><td>string <span class="badge badge-required">required</span></td><td>The version ID from the publish response</td></tr>
-          </tbody>
-        </table></div>
 
         <!-- Site Management -->
         <h3 id="site-endpoints">Site Management</h3>
@@ -410,30 +366,25 @@ export function docsPageHtml(domain: string): string {
         <h2 id="curl">cURL Examples</h2>
 
         <h3>Publish markdown</h3>
-<pre><span class="k">curl</span> -X POST https://${api}/publish/inline \\
+<pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
   -d <span class="s">'{"content":"# Report\\n\\nQ1 was great.","contentType":"text/markdown"}'</span></pre>
 
         <h3>Publish CSV</h3>
-<pre><span class="k">curl</span> -X POST https://${api}/publish/inline \\
+<pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
   -d <span class="s">'{"content":"Name,Score\\nAlice,95\\nBob,87","contentType":"text/csv"}'</span></pre>
 
         <h3>Multi-file publish</h3>
-<pre><span class="c"># Step 1: Create site</span>
-<span class="k">curl</span> -X POST https://${api}/publish \\
+<pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
-  -d <span class="s">'{"files":[{"path":"index.html","size":1024,"contentType":"text/html"}]}'</span>
-
-<span class="c"># Step 2: Upload to presigned URL</span>
-<span class="k">curl</span> -X PUT <span class="n">"PRESIGNED_URL"</span> \\
-  -H <span class="s">"Content-Type: text/html"</span> \\
-  --data-binary <span class="s">@index.html</span>
-
-<span class="c"># Step 3: Finalize</span>
-<span class="k">curl</span> -X POST https://${api}/finalize/<span class="n">YOUR_SLUG</span> \\
-  -H <span class="s">"Content-Type: application/json"</span> \\
-  -d <span class="s">'{"versionId":"VERSION_ID"}'</span></pre>
+  -d <span class="s">'{
+    "files": [
+      {"path": "index.html", "content": "&lt;h1&gt;Hello&lt;/h1&gt;", "contentType": "text/html"},
+      {"path": "style.css", "content": "body { color: #333 }", "contentType": "text/css"}
+    ],
+    "title": "My Site"
+  }'</span></pre>
 
         <!-- ───── Smart Rendering ───── -->
         <h2 id="smart-rendering">Smart Rendering</h2>
@@ -483,8 +434,7 @@ export function docsPageHtml(domain: string): string {
         <div class="table-wrap"><table>
           <thead><tr><th>Endpoint</th><th>Limit</th><th>Window</th></tr></thead>
           <tbody>
-            <tr><td><code>/publish</code></td><td>5 requests</td><td>1 hour</td></tr>
-            <tr><td><code>/publish/inline</code></td><td>10 requests</td><td>1 hour</td></tr>
+            <tr><td><code>/publish</code></td><td>10 requests</td><td>1 hour</td></tr>
           </tbody>
         </table></div>
 
@@ -495,7 +445,7 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>400</code></td><td>Bad request — missing or invalid parameters</td></tr>
             <tr><td><code>404</code></td><td>Not found — site or version doesn't exist</td></tr>
             <tr><td><code>409</code></td><td>Conflict — slug taken or version mismatch</td></tr>
-            <tr><td><code>422</code></td><td>Unprocessable — files missing from R2 during finalize</td></tr>
+            <tr><td><code>422</code></td><td>Unprocessable — invalid request</td></tr>
             <tr><td><code>429</code></td><td>Rate limited — try again later</td></tr>
             <tr><td><code>500</code></td><td>Server error</td></tr>
           </tbody>

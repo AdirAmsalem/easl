@@ -34,11 +34,11 @@ The main application. A single Worker handles all routing by hostname:
 - **`*.easl.dev`** (wildcard subdomains) → Site serving with smart rendering (`src/serve/handler.ts`)
 - **`easl.dev`** (root domain) → Landing page, docs, and path-based fallback routing
 
-Key flow — **publishing**: `POST /publish/inline` → generates slug, uploads content to R2, inserts D1 rows, fires off OG image + QR code generation via `waitUntil`.
+Key flow — **publishing**: `POST /publish` → accepts content inline (single-file shorthand) or a files array (multi-file), uploads to R2 via binding, inserts D1 rows, fires off OG image + QR code generation via `waitUntil`.
 
 Key flow — **serving**: Request hits `serveSite` → loads metadata from D1 (site + active version JOIN) → `decideRenderMode` classifies as passthrough/single-file/multi-file → for single files, `smartRender` checks L1 (Cache API) then L2 (KV) cache, or generates an HTML shell with embedded viewer.
 
-Bindings: **R2** (file storage), **D1** (SQLite metadata), **KV** (rendered HTML cache), plus R2 presigned URLs for multi-file upload.
+Bindings: **R2** (file storage), **D1** (SQLite metadata), **KV** (rendered HTML cache).
 
 Local dev uses path-based routing (`/s/:slug`) instead of subdomains.
 
@@ -48,7 +48,7 @@ Published to npm. Single-file stdio MCP server (`src/index.ts`) with 5 tools: `p
 ## Key source paths
 
 - `packages/worker/src/index.ts` — Main Worker entry, hostname-based routing
-- `packages/worker/src/api/publish.ts` — Publish + finalize endpoints
+- `packages/worker/src/api/publish.ts` — Publish endpoint
 - `packages/worker/src/serve/handler.ts` — Site serving, caching, smart rendering
 - `packages/worker/src/render/detect.ts` — Content type → render mode decision
 - `packages/worker/src/render/templates/base.ts` — HTML shell generation for viewers

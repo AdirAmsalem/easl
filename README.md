@@ -19,7 +19,7 @@ No accounts, no config, no deploy pipeline — just content in, shareable page o
 <br>
 
 ```bash
-curl -X POST https://api.easl.dev/publish/inline \
+curl -X POST https://api.easl.dev/publish \
   -H "Content-Type: application/json" \
   -d '{"content": "# Hello World\nSome **markdown** here.", "contentType": "text/markdown"}'
 
@@ -72,12 +72,12 @@ Then just ask your agent:
 
 ```bash
 # Publish a CSV as a sortable table
-curl -X POST https://api.easl.dev/publish/inline \
+curl -X POST https://api.easl.dev/publish \
   -H "Content-Type: application/json" \
   -d '{"content": "Name,Role\nAlice,Engineer\nBob,Designer", "contentType": "text/csv"}'
 
 # Publish JSON as an interactive tree
-curl -X POST https://api.easl.dev/publish/inline \
+curl -X POST https://api.easl.dev/publish \
   -H "Content-Type: application/json" \
   -d '{"content": "{\"users\": [{\"name\": \"Alice\"}, {\"name\": \"Bob\"}]}", "contentType": "application/json"}'
 ```
@@ -127,9 +127,7 @@ Base URL: `https://api.easl.dev`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/publish/inline` | One-call publish — content in, URL out (max 256 KB) |
-| `POST` | `/publish` | Multi-file publish — returns presigned upload URLs |
-| `POST` | `/finalize/:slug` | Activate a site after uploading files |
+| `POST` | `/publish` | Publish content — single-file shorthand or multi-file array |
 | `GET` | `/sites/:slug` | Get site metadata |
 | `DELETE` | `/sites/:slug` | Delete a site (requires `X-Claim-Token` header) |
 | `POST` | `/feedback` | Submit feedback programmatically |
@@ -143,7 +141,7 @@ Full API docs: [easl.dev/docs](https://easl.dev/docs)
 easl runs on Cloudflare's edge network as a single Worker:
 
 - **[Hono](https://hono.dev)** router handles API requests, landing page, docs, and wildcard subdomain serving
-- **R2** stores uploaded files with presigned URL uploads
+- **R2** stores uploaded files
 - **D1** (SQLite) tracks site metadata and version history
 - **KV** caches rendered HTML shells for fast serving
 
@@ -192,12 +190,6 @@ Prerequisites: [Node.js](https://nodejs.org) ≥ 20, a [Cloudflare](https://clou
 
 5. **Deploy**
    ```bash
-   # Set secrets
-   wrangler secret put R2_ACCESS_KEY_ID
-   wrangler secret put R2_SECRET_ACCESS_KEY
-   wrangler secret put R2_ACCOUNT_ID
-
-   # Deploy the worker
    pnpm deploy
    ```
 
@@ -213,7 +205,7 @@ pnpm build            # Build all packages
 ```
 
 Local dev uses path-based routing instead of subdomains:
-- API endpoints: `http://localhost:8787/publish`, `/finalize`, `/sites`
+- API endpoints: `http://localhost:8787/publish`, `/sites`
 - View sites: `http://localhost:8787/s/:slug`
 - Docs: `http://localhost:8787/docs`
 

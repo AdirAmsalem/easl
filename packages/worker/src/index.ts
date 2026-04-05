@@ -96,7 +96,7 @@ async function pathBasedRouting(
 ): Promise<Response> {
   const path = url.pathname;
 
-  const apiPrefixes = ["/publish", "/finalize", "/sites", "/health", "/feedback"];
+  const apiPrefixes = ["/publish", "/sites", "/health", "/feedback"];
   if (apiPrefixes.some((p) => path === p || path.startsWith(p + "/"))) {
     return api.fetch(request, env, ctx);
   }
@@ -128,7 +128,7 @@ function classifyRequest(hostname: string, path: string, workerEnv: Env): { rout
   const siteMatch = path.match(/^\/s\/([a-z0-9][a-z0-9-]+[a-z0-9])/);
   if (siteMatch) return { route: "site", slug: siteMatch[1] };
 
-  if (path.startsWith("/publish") || path.startsWith("/finalize") || path.startsWith("/sites") || path.startsWith("/feedback")) return { route: "api" };
+  if (path.startsWith("/publish") || path.startsWith("/sites") || path.startsWith("/feedback")) return { route: "api" };
   if (path === "/docs" || path === "/docs/") return { route: "docs" };
 
   return { route: "landing" };
@@ -347,7 +347,7 @@ function landingPageHtml(domain: string): string {
         <div class="setup-card">
           <div class="label">Or call the API directly</div>
           <div class="desc">One curl command, instant shareable URL</div>
-          <pre><span class="k">curl</span> api.${domain}/publish/inline \\
+          <pre><span class="k">curl</span> api.${domain}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
   -d <span class="s">'{"content":"name,role\\nAlice,Eng",
   "contentType":"text/csv"}'</span>
