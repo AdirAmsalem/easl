@@ -344,7 +344,7 @@ const VIEWER_JS: Record<ViewerType, string> = {
   `,
   svg: `
     (function() {
-      const raw = document.getElementById('el-data').textContent;
+      const raw = document.getElementById('el-data').textContent.split('<' + '\\\\' + '/').join('</');
       const container = document.getElementById('el-viewer');
       const wrap = document.createElement('div');
       wrap.className = 'el-svg-viewer';
