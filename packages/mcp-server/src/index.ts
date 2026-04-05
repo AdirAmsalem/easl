@@ -2,7 +2,6 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative } from "node:path";
-import { Buffer } from "node:buffer";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -111,7 +110,7 @@ async function publishContent(args: Json): Promise<Json> {
   const content = requireString(args.content, "content");
   const contentType = requireString(args.contentType, "contentType");
 
-  const result = await apiRequest<Json>("POST", "/publish/inline", {
+  const result = await apiRequest<Json>("POST", "/publish", {
     content,
     contentType,
     title: typeof args.title === "string" ? args.title : undefined,
@@ -133,33 +132,26 @@ async function publishFile(args: Json): Promise<Json> {
   const content = readFileSync(filePath);
   const fileName = filePath.split("/").pop()!;
   const contentType = inferContentType(fileName);
-  const fileEntry = { path: fileName, size: content.byteLength, contentType };
 
-  // Publish via standard flow
-  const publish = await apiRequest<Json>("POST", "/publish", {
-    files: [fileEntry],
+  const result = await apiRequest<Json>("POST", "/publish", {
+    files: [{
+      path: fileName,
+      content: content.toString("base64"),
+      contentType,
+      encoding: "base64",
+    }],
     title: typeof args.title === "string" ? args.title : undefined,
     template: typeof args.template === "string" ? args.template : undefined,
   });
 
-  // Upload to presigned URL
-  const upload = (publish.upload as Json);
-  const uploads = (upload.uploads as Array<{ url: string; headers: Record<string, string> }>);
-  await uploadToPresigned(uploads[0].url, content, uploads[0].headers);
-
-  // Finalize
-  const finalize = await apiRequest<Json>("POST", `/finalize/${publish.slug}`, {
-    versionId: (upload as Json).versionId,
-  });
-
   sessionSites.push({
-    slug: finalize.slug as string,
-    claimToken: publish.claimToken as string,
-    url: finalize.url as string,
+    slug: result.slug as string,
+    claimToken: result.claimToken as string,
+    url: result.url as string,
     createdAt: new Date().toISOString(),
   });
 
-  return finalize;
+  return result;
 }
 
 async function publishSite(args: Json): Promise<Json> {
@@ -172,37 +164,25 @@ async function publishSite(args: Json): Promise<Json> {
 
   const fileEntries = files.map((f) => ({
     path: f.relativePath,
-    size: f.size,
+    content: readFileSync(f.absolutePath).toString("base64"),
     contentType: inferContentType(f.relativePath),
+    encoding: "base64" as const,
   }));
 
-  const publish = await apiRequest<Json>("POST", "/publish", {
+  const result = await apiRequest<Json>("POST", "/publish", {
     files: fileEntries,
     title: typeof args.title === "string" ? args.title : undefined,
     template: typeof args.template === "string" ? args.template : undefined,
   });
 
-  // Upload all files
-  const upload = publish.upload as Json;
-  const uploads = upload.uploads as Array<{ path: string; url: string; headers: Record<string, string> }>;
-  for (const up of uploads) {
-    const file = files.find((f) => f.relativePath === up.path);
-    if (!file) throw new Error(`No file for upload path: ${up.path}`);
-    await uploadToPresigned(up.url, readFileSync(file.absolutePath), up.headers);
-  }
-
-  const finalize = await apiRequest<Json>("POST", `/finalize/${publish.slug}`, {
-    versionId: (upload as Json).versionId,
-  });
-
   sessionSites.push({
-    slug: finalize.slug as string,
-    claimToken: publish.claimToken as string,
-    url: finalize.url as string,
+    slug: result.slug as string,
+    claimToken: result.claimToken as string,
+    url: result.url as string,
     createdAt: new Date().toISOString(),
   });
 
-  return finalize;
+  return result;
 }
 
 async function deleteSite(args: Json): Promise<Json> {
@@ -270,18 +250,6 @@ function inferContentType(filePath: string): string {
     ".mmd": "text/x-mermaid; charset=utf-8",
   };
   return types[ext] ?? "application/octet-stream";
-}
-
-async function uploadToPresigned(url: string, body: Buffer, headers: Record<string, string>): Promise<void> {
-  const h = new Headers();
-  for (const [k, v] of Object.entries(headers)) {
-    if (k.toLowerCase() !== "host") h.set(k, v);
-  }
-  const res = await fetch(url, { method: "PUT", headers: h, body });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Upload failed: ${res.status} ${res.statusText}${text ? ` - ${text}` : ""}`);
-  }
 }
 
 async function apiRequest<T>(

@@ -6,61 +6,12 @@ export interface Env {
   DOMAIN: string;
   API_HOST: string;
   WORKERS_DEV_SUBDOMAIN: string;
-  R2_ACCESS_KEY_ID: string;
-  R2_SECRET_ACCESS_KEY: string;
-  R2_ACCOUNT_ID: string;
 }
 
-// API request/response types
 export interface FileEntry {
   path: string;
   size: number;
   contentType: string;
-}
-
-export interface CreateSiteRequest {
-  files: FileEntry[];
-  title?: string;
-  template?: string;
-  ttl?: number;
-  slug?: string;
-}
-
-export interface InlinePublishRequest {
-  content: string;
-  contentType: string;
-  title?: string;
-  template?: string;
-}
-
-export interface UploadInfo {
-  path: string;
-  method: "PUT";
-  url: string;
-  headers: Record<string, string>;
-}
-
-export interface CreateSiteResponse {
-  slug: string;
-  url: string;
-  claimToken: string;
-  upload: {
-    versionId: string;
-    uploads: UploadInfo[];
-    finalizeUrl: string;
-    expiresInSeconds: number;
-  };
-  expiresAt: string;
-  anonymous: true;
-}
-
-export interface FinalizeResponse {
-  url: string;
-  slug: string;
-  ogImage: string;
-  qrCode: string;
-  embed: string;
-  shareText: string;
 }
 
 export interface SiteMeta {
