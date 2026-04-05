@@ -208,7 +208,7 @@ function landingPageHtml(domain: string): string {
     .term-dim{color:var(--text-faintest)}
     .term-accent{color:var(--accent)}
     .term-ok{color:var(--green);font-weight:600}
-    .term-url{display:inline;background:var(--url-bg);color:var(--green);padding:0.125rem 0.5rem;border-radius:3px}
+    .term-url{display:inline;background:var(--url-bg);color:var(--green);padding:0.125rem 0.5rem;border-radius:3px;text-decoration:none}.term-url:hover{text-decoration:underline;color:var(--green)}
     .term-box{color:var(--text-faint);font-size:0.75rem;line-height:1.5}
     @keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
     .term-cursor{display:inline-block;width:0.5em;height:1.1em;background:var(--text-heading);vertical-align:text-bottom;animation:blink 1s step-end infinite;margin-left:1px}
@@ -259,6 +259,7 @@ function landingPageHtml(domain: string): string {
     .mini-json .js{color:var(--green)}
     .mini-json .jn{color:var(--yellow)}
     .mini-json .jb{color:var(--text-faintest)}
+    .demo-live{display:inline-block;margin-top:0.75rem;font-size:0.625rem;font-weight:600;color:var(--accent);text-decoration:none;letter-spacing:0.02em}.demo-live:hover{text-decoration:underline}
     @media(max-width:600px){
       .demo-row{grid-template-columns:1fr;grid-template-rows:auto auto auto}
       .demo-arrow{width:auto;height:2rem;border-left:0;border-right:0;border-top:1px solid var(--border-medium);border-bottom:1px solid var(--border-medium)}
@@ -373,7 +374,7 @@ Key wins:
 - Enterprise: \`+68%\`
 - Self-serve: \`+31%\`</div>
           <div class="demo-arrow">&rarr;</div>
-          <div class="demo-rendered"><span class="label">Rendered page</span><div class="mini-md"><h3>Q1 Results</h3><p>Revenue grew <strong>42%</strong> YoY.</p><p>Key wins:</p><p>&bull; Enterprise: <code>+68%</code></p><p>&bull; Self-serve: <code>+31%</code></p></div></div>
+          <div class="demo-rendered"><span class="label">Rendered page</span><div class="mini-md"><h3>Q1 Results</h3><p>Revenue grew <strong>42%</strong> YoY.</p><p>Key wins:</p><p>&bull; Enterprise: <code>+68%</code></p><p>&bull; Self-serve: <code>+31%</code></p></div><a href="https://blue-river.${domain}" target="_blank" rel="noopener" class="demo-live">Open live &rarr;</a></div>
         </div>
 
         <div class="demo-row">
@@ -383,7 +384,7 @@ Bob,Designer,Product,2023
 Carol,PM,Growth,2025
 Dave,Engineer,Infra,2024</div>
           <div class="demo-arrow">&rarr;</div>
-          <div class="demo-rendered"><span class="label">Sortable table</span><table class="mini-table"><tr><th>name</th><th>role</th><th>team</th><th>joined</th></tr><tr><td>Alice</td><td>Engineer</td><td>Platform</td><td>2024</td></tr><tr><td>Bob</td><td>Designer</td><td>Product</td><td>2023</td></tr><tr><td>Carol</td><td>PM</td><td>Growth</td><td>2025</td></tr><tr><td>Dave</td><td>Engineer</td><td>Infra</td><td>2024</td></tr></table></div>
+          <div class="demo-rendered"><span class="label">Sortable table</span><table class="mini-table"><tr><th>name</th><th>role</th><th>team</th><th>joined</th></tr><tr><td>Alice</td><td>Engineer</td><td>Platform</td><td>2024</td></tr><tr><td>Bob</td><td>Designer</td><td>Product</td><td>2023</td></tr><tr><td>Carol</td><td>PM</td><td>Growth</td><td>2025</td></tr><tr><td>Dave</td><td>Engineer</td><td>Infra</td><td>2024</td></tr></table><a href="https://warm-dawn.${domain}" target="_blank" rel="noopener" class="demo-live">Open live &rarr;</a></div>
         </div>
 
         <div class="demo-row">
@@ -396,7 +397,7 @@ Dave,Engineer,Infra,2024</div>
   }
 }</div>
           <div class="demo-arrow">&rarr;</div>
-          <div class="demo-rendered"><span class="label">Interactive tree</span><div class="mini-json"><span class="jb">{</span><br>&nbsp;&nbsp;<span class="jk">"user"</span>: <span class="jb">{</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"name"</span>: <span class="js">"Alice"</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"plan"</span>: <span class="js">"pro"</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"usage"</span>: <span class="jn">8420</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"active"</span>: <span class="jn">true</span><br>&nbsp;&nbsp;<span class="jb">}</span><br><span class="jb">}</span></div></div>
+          <div class="demo-rendered"><span class="label">Interactive tree</span><div class="mini-json"><span class="jb">{</span><br>&nbsp;&nbsp;<span class="jk">"user"</span>: <span class="jb">{</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"name"</span>: <span class="js">"Alice"</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"plan"</span>: <span class="js">"pro"</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"usage"</span>: <span class="jn">8420</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"active"</span>: <span class="jn">true</span><br>&nbsp;&nbsp;<span class="jb">}</span><br><span class="jb">}</span></div><a href="https://cool-leaf.${domain}" target="_blank" rel="noopener" class="demo-live">Open live &rarr;</a></div>
         </div>
 
       </div>
@@ -439,7 +440,7 @@ Dave,Engineer,Infra,2024</div>
           {text:'',delay:500,type:'instant'},
           {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
           {text:'',delay:1200,type:'instant'},
-          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://warm-dawn.${domain}</span>',delay:200,type:'instant'}
+          {text:'<span class="term-ok">\\u2713 Published:</span> <a href="https://warm-dawn.${domain}" target="_blank" rel="noopener" class="term-url">https://warm-dawn.${domain}</a>',delay:200,type:'instant'}
         ]},
         {label:'Markdown',lines:[
           {text:'<span class="term-prompt">$</span> <span class="term-cmd">Write up the Q1 results and share them</span>',delay:300,type:'type'},
@@ -451,7 +452,7 @@ Dave,Engineer,Infra,2024</div>
           {text:'',delay:500,type:'instant'},
           {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
           {text:'',delay:1200,type:'instant'},
-          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://blue-river.${domain}</span>',delay:200,type:'instant'}
+          {text:'<span class="term-ok">\\u2713 Published:</span> <a href="https://blue-river.${domain}" target="_blank" rel="noopener" class="term-url">https://blue-river.${domain}</a>',delay:200,type:'instant'}
         ]},
         {label:'HTML',lines:[
           {text:'<span class="term-prompt">$</span> <span class="term-cmd">Build a metrics dashboard and publish it</span>',delay:300,type:'type'},
@@ -463,7 +464,7 @@ Dave,Engineer,Infra,2024</div>
           {text:'',delay:500,type:'instant'},
           {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
           {text:'',delay:1200,type:'instant'},
-          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://swift-peak.${domain}</span>',delay:200,type:'instant'}
+          {text:'<span class="term-ok">\\u2713 Published:</span> <a href="https://swift-peak.${domain}" target="_blank" rel="noopener" class="term-url">https://swift-peak.${domain}</a>',delay:200,type:'instant'}
         ]},
         {label:'JSON',lines:[
           {text:'<span class="term-prompt">$</span> <span class="term-cmd">Share the API response from /users/alice</span>',delay:300,type:'type'},
@@ -475,7 +476,7 @@ Dave,Engineer,Infra,2024</div>
           {text:'',delay:500,type:'instant'},
           {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
           {text:'',delay:1200,type:'instant'},
-          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://cool-leaf.${domain}</span>',delay:200,type:'instant'}
+          {text:'<span class="term-ok">\\u2713 Published:</span> <a href="https://cool-leaf.${domain}" target="_blank" rel="noopener" class="term-url">https://cool-leaf.${domain}</a>',delay:200,type:'instant'}
         ]},
         {label:'SVG',lines:[
           {text:'<span class="term-prompt">$</span> <span class="term-cmd">Create a diagram of our auth flow and share it</span>',delay:300,type:'type'},
@@ -487,7 +488,7 @@ Dave,Engineer,Infra,2024</div>
           {text:'',delay:500,type:'instant'},
           {text:'<span class="term-dim">\\u25cf Publishing to easl...</span>',delay:200,type:'instant'},
           {text:'',delay:1200,type:'instant'},
-          {text:'<span class="term-ok">\\u2713 Published:</span> <span class="term-url">https://red-cloud.${domain}</span>',delay:200,type:'instant'}
+          {text:'<span class="term-ok">\\u2713 Published:</span> <a href="https://red-cloud.${domain}" target="_blank" rel="noopener" class="term-url">https://red-cloud.${domain}</a>',delay:200,type:'instant'}
         ]}
       ];
 
