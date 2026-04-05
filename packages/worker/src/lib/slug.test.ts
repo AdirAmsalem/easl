@@ -32,7 +32,7 @@ describe("generateVersionId", () => {
     expect(parts.length).toBe(3);
     expect(parts[0]).toBe("v");
     expect(parts[1].length).toBe(9); // base36 timestamp
-    expect(parts[2]).toMatch(/^[0-9a-f]{6}$/);
+    expect(parts[2]).toMatch(/^[0-9a-f]{8}$/);
   });
 
   it("generates unique version IDs", () => {

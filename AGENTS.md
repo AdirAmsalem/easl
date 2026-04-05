@@ -12,7 +12,8 @@ easl is an agent-native hosting platform that auto-detects content types (CSV, M
 pnpm install          # Install dependencies (requires pnpm 9.15+, Node >=20)
 pnpm dev              # Start local dev server (wrangler dev at localhost:8787)
 pnpm build            # Build all packages via Turborepo
-pnpm test             # Run all tests (vitest)
+pnpm test             # Run unit tests (vitest)
+pnpm test:e2e         # Run e2e tests (vitest + @cloudflare/vitest-pool-workers)
 pnpm typecheck        # TypeScript type checking across all packages
 
 # Run a single test file
@@ -58,7 +59,9 @@ Published to npm. Single-file stdio MCP server (`src/index.ts`) with 5 tools: `p
 
 ## Testing
 
-Tests live alongside source files as `*.test.ts` in `packages/worker/src/`. Vitest config at root includes `packages/*/src/**/*.test.ts`. No test mocking framework — tests are pure unit tests against utility functions.
+**Unit tests** live alongside source files as `*.test.ts` in `packages/worker/src/`. Pure unit tests against utility functions — run via `pnpm test`.
+
+**E2E tests** in `packages/worker/src/e2e.test.ts` run inside the Cloudflare Workers runtime via `@cloudflare/vitest-pool-workers` with real miniflare-backed D1, R2, and KV. Config at `packages/worker/vitest.config.e2e.mts` — run via `pnpm test:e2e`.
 
 ## Conventions
 
@@ -67,7 +70,7 @@ Tests live alongside source files as `*.test.ts` in `packages/worker/src/`. Vite
 - Structured JSON logging via `console.log(JSON.stringify({ event: "...", ... }))`
 - Non-blocking background work via `ctx.waitUntil()` / `c.executionCtx.waitUntil()`
 - Hono sub-routers mounted on the main app (one per API domain: publish, sites, feedback)
-- Before finalizing a change: run `pnpm build`, `pnpm test`, and `pnpm typecheck` and fix any errors
+- Before finalizing a change: run `pnpm build`, `pnpm test`, `pnpm test:e2e`, and `pnpm typecheck` and fix any errors
 
 ## References
 

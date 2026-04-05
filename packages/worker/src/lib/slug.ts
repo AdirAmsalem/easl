@@ -42,7 +42,7 @@ export function generateSlug(): string {
 
 export function generateVersionId(): string {
   const time = Date.now().toString(36).padStart(9, "0");
-  const rand = randomHex(6);
+  const rand = randomHex(8);
   return `v_${time}_${rand}`;
 }
 
