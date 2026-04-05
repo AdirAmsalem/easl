@@ -68,6 +68,16 @@ Then just ask your agent:
 >
 > "Turn this markdown into a beautiful page"
 
+### Agent Skill
+
+Give your agent built-in knowledge of easl — content types, viewers, best practices:
+
+```bash
+npx skills add AdirAmsalem/easl
+```
+
+Works with Claude Code, Codex, Cursor, ChatGPT, Gemini CLI, and more.
+
 ### With curl
 
 ```bash
