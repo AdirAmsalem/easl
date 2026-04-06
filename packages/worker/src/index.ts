@@ -229,7 +229,7 @@ function landingPageHtml(domain: string): string {
     .setup-card pre .c{color:var(--text-dim)}
     .setup-card pre .u{color:var(--yellow)}
     .setup-compat{text-align:center;font-size:0.75rem;color:var(--text-faintest);margin-top:1.25rem}
-    .setup-skill{margin-top:0.75rem;background:var(--surface);border:1px solid var(--surface-hover);border-radius:10px;padding:0.875rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;transition:border-color .2s}
+    .setup-skill{margin-bottom:0.75rem;background:var(--surface);border:1px solid var(--surface-hover);border-radius:10px;padding:0.875rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;transition:border-color .2s}
     .setup-skill:hover{border-color:var(--border-hover)}
     .setup-skill .left{display:flex;align-items:baseline;gap:0.5rem}
     .setup-skill .label{font-size:0.75rem;font-weight:600;color:var(--text-muted);white-space:nowrap}
@@ -239,7 +239,7 @@ function landingPageHtml(domain: string): string {
     .setup-skill .copy-btn{background:none;border:none;cursor:pointer;color:var(--text-faintest);padding:0.25rem;line-height:0;transition:color .15s,background .15s;display:flex;align-items:center;border-radius:3px}
     .setup-skill .copy-btn:hover{color:var(--accent);background:var(--surface-hover)}
     .setup-skill .copy-btn svg{width:13px;height:13px}
-    @media(max-width:600px){.setup-row{grid-template-columns:1fr}.setup-skill{flex-direction:column;align-items:stretch;gap:0.5rem}}
+    @media(max-width:600px){.setup-row{grid-template-columns:1fr}.setup-skill{flex-direction:column;align-items:stretch;gap:0.5rem}.setup-skill .left{flex-direction:column;gap:0.25rem}.setup-skill .cmd{align-self:stretch;justify-content:space-between}}
 
     /* Demos — before/after transformation */
     .demos{margin:0 auto 5rem;scroll-margin-top:4rem}
@@ -272,7 +272,8 @@ function landingPageHtml(domain: string): string {
     .demo-live{display:inline-block;margin-top:0.75rem;font-size:0.625rem;font-weight:600;color:var(--accent);text-decoration:none;letter-spacing:0.02em}.demo-live:hover{text-decoration:underline}
     @media(max-width:600px){
       .demo-row{grid-template-columns:1fr;grid-template-rows:auto auto auto}
-      .demo-arrow{width:auto;height:2rem;border-left:0;border-right:0;border-top:1px solid var(--border-medium);border-bottom:1px solid var(--border-medium)}
+      .demo-arrow{width:auto;height:2rem;border-left:0;border-right:0;border-top:1px solid var(--border-medium);border-bottom:1px solid var(--border-medium);font-size:0;line-height:0}
+      .demo-arrow::after{content:'\\2193';font-size:1.25rem;line-height:2rem}
     }
 
     /* CTA */
@@ -341,6 +342,10 @@ function landingPageHtml(domain: string): string {
         <h2>Start in seconds</h2>
         <p>No signup. No auth. Just publish.</p>
       </div>
+      <div class="setup-skill">
+        <div class="left"><span class="label">Agent Skill</span><span class="desc">Teaches any agent when &amp; how to use easl</span></div>
+        <div class="cmd"><code>npx skills add AdirAmsalem/easl</code><button class="copy-btn" onclick="var b=this;navigator.clipboard.writeText('npx skills add AdirAmsalem/easl').then(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><polyline points=\\'20 6 9 17 4 12\\'/></svg>';setTimeout(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><rect x=\\'9\\' y=\\'9\\' width=\\'13\\' height=\\'13\\' rx=\\'2\\'/><path d=\\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\\'/></svg>'},1500)})" aria-label="Copy to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
+      </div>
       <div class="setup-row">
         <div class="setup-card">
           <div class="label">Use easl MCP</div>
@@ -364,10 +369,6 @@ function landingPageHtml(domain: string): string {
 
 <span class="c">#</span> <span class="u">https://warm-dawn.${domain}</span></pre>
         </div>
-      </div>
-      <div class="setup-skill">
-        <div class="left"><span class="label">Agent Skill</span><span class="desc">Teaches any agent when &amp; how to use easl</span></div>
-        <div class="cmd"><code>npx skills add AdirAmsalem/easl</code><button class="copy-btn" onclick="var b=this;navigator.clipboard.writeText('npx skills add AdirAmsalem/easl').then(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><polyline points=\\'20 6 9 17 4 12\\'/></svg>';setTimeout(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><rect x=\\'9\\' y=\\'9\\' width=\\'13\\' height=\\'13\\' rx=\\'2\\'/><path d=\\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\\'/></svg>'},1500)})" aria-label="Copy to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
       </div>
       <p class="setup-compat">Works with Claude Code, Codex, Cursor, ChatGPT, OpenClaw &amp; any AI agent.</p>
     </section>
