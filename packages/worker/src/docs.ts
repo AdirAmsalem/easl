@@ -124,6 +124,7 @@ export function docsPageHtml(domain: string): string {
           <div class="group-title">Integrations</div>
           <a href="#mcp-server">MCP Server</a>
           <a href="#agent-skill">Agent Skill</a>
+          <a href="#cli">CLI</a>
           <a href="#rest-api">REST API</a>
           <a href="#publish-endpoints" class="sub">Publishing</a>
           <a href="#site-endpoints" class="sub">Site Management</a>
@@ -163,7 +164,18 @@ export function docsPageHtml(domain: string): string {
 
         <!-- ───── Quick Start ───── -->
         <h2 id="quickstart">Quick Start</h2>
-        <p>The fastest way to publish: one API call, content in the body, live URL in the response.</p>
+
+        <h3>With the CLI</h3>
+<pre><span class="k">npm</span> install -g <span class="s">@easl/cli</span>
+
+<span class="k">easl</span> publish report.md
+<span class="c"># =&gt; https://warm-dawn.${domain}</span>
+
+<span class="k">easl</span> publish data.csv --title <span class="s">"Q4 Results"</span> --open
+<span class="k">cat</span> logs.json | <span class="k">easl</span> publish --type json</pre>
+
+        <h3>With curl</h3>
+        <p>One API call, content in the body, live URL in the response.</p>
 
 <pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
@@ -281,6 +293,60 @@ export function docsPageHtml(domain: string): string {
           <li>How to use the MCP tools and HTTP API effectively</li>
           <li>Available templates and limits</li>
         </ul>
+
+        <!-- ───── CLI ───── -->
+        <h2 id="cli">CLI</h2>
+        <p>The easl CLI lets you publish files, directories, and piped content directly from the terminal. All commands output structured JSON when piped, making it easy to use in scripts and agent workflows.</p>
+
+        <h3>Installation</h3>
+<pre><span class="k">npm</span> install -g <span class="s">@easl/cli</span></pre>
+
+        <h3>Commands</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Command</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>easl publish [path]</code></td><td>Publish a file, directory, stdin, or inline content</td></tr>
+            <tr><td><code>easl list</code></td><td>List sites published from this machine</td></tr>
+            <tr><td><code>easl get &lt;slug&gt;</code></td><td>Get site metadata</td></tr>
+            <tr><td><code>easl delete &lt;slug&gt;</code></td><td>Delete a published site</td></tr>
+            <tr><td><code>easl open [slug]</code></td><td>Open a site in your browser</td></tr>
+            <tr><td><code>easl doctor</code></td><td>Check CLI version, API connectivity, and local config</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Examples</h3>
+<pre><span class="c"># Publish a file</span>
+<span class="k">easl</span> publish report.md
+
+<span class="c"># Publish with options</span>
+<span class="k">easl</span> publish data.csv --title <span class="s">"Q4 Results"</span> --open
+
+<span class="c"># Publish from stdin</span>
+<span class="k">cat</span> data.csv | <span class="k">easl</span> publish --type csv
+
+<span class="c"># Publish inline content</span>
+<span class="k">easl</span> publish --content <span class="s">"# Hello World"</span> --type markdown
+
+<span class="c"># JSON output for scripting</span>
+<span class="k">easl</span> publish report.md --json
+<span class="c"># {"url":"...","slug":"...","claimToken":"...","expiresAt":"..."}</span></pre>
+
+        <h3>Publish options</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>--content &lt;text&gt;</code></td><td>Inline content to publish</td></tr>
+            <tr><td><code>--type &lt;type&gt;</code></td><td>Content type: <code>markdown</code>, <code>csv</code>, <code>html</code>, <code>json</code>, <code>svg</code>, <code>mermaid</code></td></tr>
+            <tr><td><code>--title &lt;title&gt;</code></td><td>Page title</td></tr>
+            <tr><td><code>--slug &lt;slug&gt;</code></td><td>Custom slug (3-48 chars)</td></tr>
+            <tr><td><code>--ttl &lt;seconds&gt;</code></td><td>Time to live (default: 7 days)</td></tr>
+            <tr><td><code>--open</code></td><td>Open in browser after publishing</td></tr>
+            <tr><td><code>--copy</code></td><td>Copy URL to clipboard</td></tr>
+            <tr><td><code>--json</code></td><td>Force JSON output</td></tr>
+          </tbody>
+        </table></div>
+
+        <p>Full documentation: <a href="https://www.npmjs.com/package/@easl/cli">@easl/cli on npm</a></p>
 
         <!-- ───── REST API ───── -->
         <h2 id="rest-api">REST API</h2>

@@ -47,7 +47,20 @@ easl auto-detects your content and renders it with the right interactive viewer:
 
 ## Quick Start
 
-### For AI agents (MCP)
+### CLI
+
+```bash
+npm install -g @easl/cli
+
+easl publish report.md
+# => https://calm-river.easl.dev
+
+easl publish data.csv --title "Q4 Results" --open
+cat logs.json | easl publish --type json
+easl list
+```
+
+### MCP Server
 
 Add to your MCP config (Claude Desktop, Cursor, Windsurf, etc.):
 
@@ -81,15 +94,9 @@ Works with Claude Code, Codex, Cursor, ChatGPT, Gemini CLI, and more.
 ### With curl
 
 ```bash
-# Publish a CSV as a sortable table
 curl -X POST https://api.easl.dev/publish \
   -H "Content-Type: application/json" \
   -d '{"content": "Name,Role\nAlice,Engineer\nBob,Designer", "contentType": "text/csv"}'
-
-# Publish JSON as an interactive tree
-curl -X POST https://api.easl.dev/publish \
-  -H "Content-Type: application/json" \
-  -d '{"content": "{\"users\": [{\"name\": \"Alice\"}, {\"name\": \"Bob\"}]}", "contentType": "application/json"}'
 ```
 
 ---
@@ -162,7 +169,8 @@ When a site is requested (e.g. `warm-dawn.easl.dev`), the Worker detects the fil
 ```
 packages/
   worker/        → Cloudflare Worker (Hono routes, smart rendering, serving)
-  mcp-server/    → MCP server (stdio transport, 5 tools)
+  cli/           → CLI (npm: @easl/cli)
+  mcp-server/    → MCP server (npm: @easl/mcp, stdio transport, 5 tools)
 ```
 
 ---
