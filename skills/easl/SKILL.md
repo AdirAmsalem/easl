@@ -6,10 +6,11 @@ description: >-
   each rendered with an interactive viewer. Use when the user wants to share,
   publish, or host generated content as a web page, create a shareable URL for
   data analysis results, reports, dashboards, tables, charts, or diagrams,
-  or when the user mentions easl.
+  or when the user mentions easl. Available as CLI (`easl`), MCP server
+  (`@easl/mcp`), or HTTP API.
 metadata:
   author: easl
-  version: "0.1"
+  version: "0.2"
 ---
 
 # easl
@@ -41,6 +42,89 @@ These require MCP `publish_file` / `publish_site`, or the `files[]` API with `"e
 | Images | `image/png`, `image/jpeg`, `image/gif`, `image/webp` | Image viewer |
 
 For CSV: always include a header row. For multi-file sites with an `index.html`: easl serves the HTML as-is. Without one, easl auto-generates a navigation page.
+
+## Publishing via CLI
+
+The `@easl/cli` package provides the `easl` command. Install with `npm i -g @easl/cli`.
+
+### Agent protocol
+
+The CLI auto-detects non-TTY environments and outputs JSON — no `--json` flag needed.
+
+**Rules for agents:**
+- Supply ALL required flags. The CLI will NOT prompt when stdin is not a TTY.
+- Pass `--quiet` (or `-q`) to suppress spinners and status messages.
+- Exit `0` = success, `1` = error.
+- Error JSON: `{"error":{"message":"...","code":"..."}}`
+- All `delete`/`rm` commands require `--yes` in non-interactive mode.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `easl publish <path>` | Publish a file or directory |
+| `easl publish --content "..." --type markdown` | Publish inline content |
+| `cat file \| easl publish --type csv` | Publish from stdin |
+| `easl list` | List sites published from this machine |
+| `easl get <slug>` | Get site metadata |
+| `easl delete <slug> --yes` | Delete a site |
+| `easl open [slug]` | Open site in browser |
+| `easl doctor` | Check CLI version, API, and config |
+
+### Global flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Force JSON output (auto in non-TTY) |
+| `-q, --quiet` | Suppress spinners (implies `--json`) |
+| `--api-url <url>` | Override API URL (or set `EASL_API_URL`) |
+
+### Publish flags
+
+| Flag | Description |
+|------|-------------|
+| `--type <type>` | Content type hint: `markdown`, `csv`, `html`, `json`, `svg`, `mermaid`, or MIME type |
+| `--title <title>` | Page title |
+| `--template <tpl>` | `minimal`, `report`, or `dashboard` |
+| `--slug <slug>` | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
+| `--ttl <seconds>` | Time to live in seconds |
+| `--open` | Open in browser after publishing |
+| `--copy` | Copy URL to clipboard |
+
+### Publish output
+
+```json
+{
+  "url": "https://calm-river.easl.dev",
+  "slug": "calm-river",
+  "claimToken": "...",
+  "expiresAt": "2025-01-14T00:00:00.000Z"
+}
+```
+
+The `claimToken` is stored locally in `~/.config/easl/sites.json` for later deletion.
+
+### Common patterns
+
+```bash
+# Publish a markdown report
+easl publish report.md --title "Q4 Report" --open
+
+# Publish CSV from a pipeline
+cat data.csv | easl publish --type csv --title "Results"
+
+# Publish a directory as a site
+easl publish ./my-site/
+
+# Custom slug
+easl publish chart.svg --slug my-chart
+
+# Delete a site (non-interactive)
+easl delete my-chart --yes
+
+# CI/CD (JSON output, no TTY)
+easl publish output.json --quiet
+```
 
 ## When to use easl
 

@@ -28,7 +28,8 @@ Local dev uses path-based routing (`/s/:slug`) instead of subdomains.
 ```
 packages/
   worker/       Cloudflare Worker — API routes, rendering, serving
-  mcp-server/   MCP server — stdio transport, 5 tools
+  cli/          CLI (npm: @easl/cli) — publish from the terminal
+  mcp-server/   MCP server (npm: @easl/mcp) — stdio transport, 5 tools
 ```
 
 ## Making Changes
@@ -52,4 +53,4 @@ Check [open issues](https://github.com/AdirAmsalem/easl/issues) for ideas, espec
 - TypeScript throughout
 - No explicit style guide enforced — match existing patterns
 - Keep functions small and focused
-- Add tests for new logic in `packages/worker/src/`
+- Add tests for new logic in `packages/worker/src/` and `packages/cli/src/`

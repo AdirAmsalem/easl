@@ -27,7 +27,7 @@ pnpm deploy           # Deploy to Cloudflare
 
 ## Architecture
 
-**Monorepo** managed by pnpm workspaces + Turborepo with two packages:
+**Monorepo** managed by pnpm workspaces + Turborepo with three packages:
 
 ### `packages/worker` — Cloudflare Worker (Hono)
 The main application. A single Worker handles all routing by hostname:
@@ -43,6 +43,9 @@ Bindings: **R2** (file storage), **D1** (SQLite metadata), **KV** (rendered HTML
 
 Local dev uses path-based routing (`/s/:slug`) instead of subdomains.
 
+### `packages/cli` — CLI (`@easl/cli`)
+Published to npm. Commander-based CLI (`src/cli.ts`) with commands: `publish`, `list`, `get`, `delete`, `open`, `doctor`, `completion`. Bundled to single CJS file via esbuild (`dist/cli.cjs`). Local config at `~/.config/easl/sites.json` tracks published sites and claim tokens.
+
 ### `packages/mcp-server` — MCP Server (`@easl/mcp`)
 Published to npm. Single-file stdio MCP server (`src/index.ts`) with 5 tools: `publish_content`, `publish_file`, `publish_site`, `list_sites`, `delete_site`. Built with tsdown.
 
@@ -56,12 +59,20 @@ Published to npm. Single-file stdio MCP server (`src/index.ts`) with 5 tools: `p
 - `packages/worker/src/lib/mime.ts` — MIME detection and viewer type mapping
 - `packages/worker/src/types.ts` — Shared TypeScript types (Env bindings, API types, D1 row types)
 - `packages/worker/schema.sql` — D1 database schema (sites, versions, feedback tables)
+- `packages/cli/src/cli.ts` — CLI entry point, command registration
+- `packages/cli/src/commands/publish.ts` — Publish command (file, dir, stdin, inline)
+- `packages/cli/src/lib/client.ts` — API client wrapper
+- `packages/cli/src/lib/config.ts` — Local config (~/.config/easl/sites.json)
 
 ## Testing
 
-**Unit tests** live alongside source files as `*.test.ts` in `packages/worker/src/`. Pure unit tests against utility functions — run via `pnpm test`.
+**Unit tests** live alongside source files as `*.test.ts`. Worker tests in `packages/worker/src/`, CLI tests in `packages/cli/src/`. Run via `pnpm test`.
 
-**E2E tests** in `packages/worker/src/e2e.test.ts` run inside the Cloudflare Workers runtime via `@cloudflare/vitest-pool-workers` with real miniflare-backed D1, R2, and KV. Config at `packages/worker/vitest.config.e2e.mts` — run via `pnpm test:e2e`.
+**E2E tests**:
+- Worker: `packages/worker/src/e2e.test.ts` — runs inside Cloudflare Workers runtime via `@cloudflare/vitest-pool-workers` with real miniflare-backed D1, R2, and KV. Config at `packages/worker/vitest.config.e2e.mts`.
+- CLI: `packages/cli/src/e2e.test.ts` — spawns the built CLI binary against real `api.easl.dev`. Config at `packages/cli/vitest.config.e2e.mts`.
+
+Run via `pnpm test:e2e`.
 
 ## Conventions
 
