@@ -5,7 +5,7 @@ import { buildHelpText } from '../lib/help-text';
 import { outputResult } from '../lib/output';
 import { createSpinner } from '../lib/spinner';
 import { isInteractive } from '../lib/tty';
-import { IS_BINARY, VERSION } from '../lib/version';
+import { VERSION } from '../lib/version';
 
 type CheckStatus = 'pass' | 'warn' | 'fail';
 
@@ -45,9 +45,7 @@ async function checkCliVersion(): Promise<CheckResult> {
       name: 'CLI Version',
       status: 'warn',
       message: `v${VERSION} (latest: v${latest})`,
-      detail: IS_BINARY
-        ? 'Update with: curl -fsSL https://easl.dev/install.sh | sh'
-        : 'Update with: npm i -g @easl/cli',
+      detail: 'Update with: npm i -g @easl/cli',
     };
   } catch {
     return {

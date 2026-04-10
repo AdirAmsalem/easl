@@ -12,12 +12,6 @@ easl auto-detects content types (CSV, Markdown, JSON, HTML, SVG, Mermaid, PDF, i
 ## Install
 
 ```bash
-curl -fsSL https://easl.dev/install.sh | sh
-```
-
-Or via npm:
-
-```bash
 npm install -g @easl/cli
 ```
 

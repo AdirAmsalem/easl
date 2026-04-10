@@ -105,17 +105,6 @@ async function pathBasedRouting(
     return html(docsPageHtml(env.DOMAIN));
   }
 
-  if (path === "/install.sh") {
-    const upstream = await fetch("https://raw.githubusercontent.com/AdirAmsalem/easl/main/packages/cli/install.sh");
-    return new Response(upstream.body, {
-      status: upstream.status,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "public, max-age=300",
-      },
-    });
-  }
-
   // /s/:slug — view a published site
   const siteMatch = path.match(/^\/s\/([a-z0-9][a-z0-9-]+[a-z0-9])(\/.*)?$/);
   if (siteMatch) {
@@ -141,7 +130,6 @@ function classifyRequest(hostname: string, path: string, workerEnv: Env): { rout
 
   if (path.startsWith("/publish") || path.startsWith("/sites") || path.startsWith("/feedback")) return { route: "api" };
   if (path === "/docs" || path === "/docs/") return { route: "docs" };
-  if (path === "/install.sh") return { route: "install" };
 
   return { route: "landing" };
 }
@@ -251,22 +239,7 @@ function landingPageHtml(domain: string): string {
     .setup-skill .copy-btn{background:none;border:none;cursor:pointer;color:var(--text-faintest);padding:0.25rem;line-height:0;transition:color .15s,background .15s;display:flex;align-items:center;border-radius:3px}
     .setup-skill .copy-btn:hover{color:var(--accent);background:var(--surface-hover)}
     .setup-skill .copy-btn svg{width:13px;height:13px}
-    .setup-cli{margin-bottom:0.75rem;background:var(--surface);border:1px solid var(--surface-hover);border-radius:10px;padding:0.875rem 1.25rem;transition:border-color .2s}
-    .setup-cli:hover{border-color:var(--border-hover)}
-    .setup-cli .setup-cli-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:0.625rem}
-    .setup-cli .setup-cli-left{display:flex;align-items:baseline;gap:0.5rem}
-    .setup-cli .label{font-size:0.75rem;font-weight:600;color:var(--text-muted);white-space:nowrap}
-    .setup-cli .desc{font-size:0.6875rem;color:var(--text-dim)}
-    .setup-cli .setup-cli-tabs{display:flex;gap:2px;background:var(--code-bg);border-radius:4px;padding:2px}
-    .setup-cli .tab-btn{background:none;border:none;cursor:pointer;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.625rem;color:var(--text-faintest);padding:0.175rem 0.5rem;border-radius:3px;transition:color .15s,background .15s}
-    .setup-cli .tab-btn:hover{color:var(--text-faint)}
-    .setup-cli .tab-btn.active{background:var(--surface);color:var(--text-muted);font-weight:600}
-    .setup-cli .cmd{display:inline-flex;align-items:center;background:var(--code-bg);border-radius:4px;padding:0.2rem 0.25rem 0.2rem 0.5rem;gap:0.25rem}
-    .setup-cli code{font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.6875rem;color:var(--text-faint);white-space:nowrap}
-    .setup-cli .copy-btn{background:none;border:none;cursor:pointer;color:var(--text-faintest);padding:0.25rem;line-height:0;transition:color .15s,background .15s;display:flex;align-items:center;border-radius:3px}
-    .setup-cli .copy-btn:hover{color:var(--accent);background:var(--surface-hover)}
-    .setup-cli .copy-btn svg{width:13px;height:13px}
-    @media(max-width:600px){.setup-row{grid-template-columns:1fr}.setup-skill{flex-direction:column;align-items:stretch;gap:0.5rem}.setup-skill .left{flex-direction:column;gap:0.25rem}.setup-skill .cmd{align-self:stretch;justify-content:space-between}.setup-cli .setup-cli-top{flex-direction:column;align-items:stretch;gap:0.5rem}}
+    @media(max-width:600px){.setup-row{grid-template-columns:1fr}.setup-skill{flex-direction:column;align-items:stretch;gap:0.5rem}.setup-skill .left{flex-direction:column;gap:0.25rem}.setup-skill .cmd{align-self:stretch;justify-content:space-between}}
 
     /* Demos — before/after transformation */
     .demos{margin:0 auto 5rem;scroll-margin-top:4rem}
@@ -373,13 +346,9 @@ function landingPageHtml(domain: string): string {
         <div class="left"><span class="label">Agent Skill</span><span class="desc">Teaches any agent when &amp; how to use easl</span></div>
         <div class="cmd"><code>npx skills add AdirAmsalem/easl</code><button class="copy-btn" onclick="var b=this;navigator.clipboard.writeText('npx skills add AdirAmsalem/easl').then(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><polyline points=\\'20 6 9 17 4 12\\'/></svg>';setTimeout(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><rect x=\\'9\\' y=\\'9\\' width=\\'13\\' height=\\'13\\' rx=\\'2\\'/><path d=\\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\\'/></svg>'},1500)})" aria-label="Copy to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
       </div>
-      <div class="setup-cli" id="cli-install">
-        <div class="setup-cli-top">
-          <div class="setup-cli-left"><span class="label">CLI</span><span class="desc">Publish from your terminal &mdash; <code style="background:none;padding:0;font-size:inherit;color:var(--text-faint)">easl publish report.md</code></span></div>
-          <div class="setup-cli-tabs"><button class="tab-btn active" onclick="switchCliTab('curl',this)">curl</button><button class="tab-btn" onclick="switchCliTab('npm',this)">npm</button></div>
-        </div>
-        <div class="cmd" id="cli-cmd-curl"><code>curl -fsSL https://easl.dev/install.sh | sh</code><button class="copy-btn" onclick="var b=this;navigator.clipboard.writeText('curl -fsSL https://easl.dev/install.sh | sh').then(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><polyline points=\\'20 6 9 17 4 12\\'/></svg>';setTimeout(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><rect x=\\'9\\' y=\\'9\\' width=\\'13\\' height=\\'13\\' rx=\\'2\\'/><path d=\\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\\'/></svg>'},1500)})" aria-label="Copy to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
-        <div class="cmd" id="cli-cmd-npm" style="display:none"><code>npm i -g @easl/cli</code><button class="copy-btn" onclick="var b=this;navigator.clipboard.writeText('npm i -g @easl/cli').then(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><polyline points=\\'20 6 9 17 4 12\\'/></svg>';setTimeout(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><rect x=\\'9\\' y=\\'9\\' width=\\'13\\' height=\\'13\\' rx=\\'2\\'/><path d=\\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\\'/></svg>'},1500)})" aria-label="Copy to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
+      <div class="setup-skill">
+        <div class="left"><span class="label">CLI</span><span class="desc">Publish from your terminal &mdash; <code style="background:none;padding:0;font-size:inherit;color:var(--text-faint)">easl publish report.md</code></span></div>
+        <div class="cmd"><code>npm i -g @easl/cli</code><button class="copy-btn" onclick="var b=this;navigator.clipboard.writeText('npm i -g @easl/cli').then(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><polyline points=\\'20 6 9 17 4 12\\'/></svg>';setTimeout(function(){b.innerHTML='<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><rect x=\\'9\\' y=\\'9\\' width=\\'13\\' height=\\'13\\' rx=\\'2\\'/><path d=\\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\\'/></svg>'},1500)})" aria-label="Copy to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
       </div>
       <div class="setup-row">
         <div class="setup-card">
@@ -472,7 +441,6 @@ Dave,Engineer,Infra,2024</div>
     function applyTheme(t){document.documentElement.setAttribute('data-theme',t);document.getElementById('theme-btn').textContent=t==='dark'?'\\u263E':'\\u2600';document.querySelectorAll('.nav-logo').forEach(function(img){img.src=t==='dark'?'/logo.svg':'/logo-light.svg'})}
     function toggleTheme(){var t=getTheme()==='dark'?'light':'dark';localStorage.setItem('easl-theme',t);applyTheme(t)}
     applyTheme(getTheme());
-    function switchCliTab(tab,btn){var c=document.getElementById('cli-cmd-curl'),n=document.getElementById('cli-cmd-npm');c.style.display=tab==='curl'?'':'none';n.style.display=tab==='npm'?'':'none';btn.parentElement.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});btn.classList.add('active')}
   </script>
   <script>
     (function(){
