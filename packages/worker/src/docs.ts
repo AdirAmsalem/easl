@@ -166,8 +166,7 @@ export function docsPageHtml(domain: string): string {
         <h2 id="quickstart">Quick Start</h2>
 
         <h3>With the CLI</h3>
-<pre><span class="k">curl</span> -fsSL <span class="s">https://${domain}/install.sh</span> | sh
-<span class="c"># or: npm install -g @easl/cli</span>
+<pre><span class="k">npm</span> install -g <span class="s">@easl/cli</span>
 
 <span class="k">easl</span> publish report.md
 <span class="c"># =&gt; https://warm-dawn.${domain}</span>
@@ -300,8 +299,7 @@ export function docsPageHtml(domain: string): string {
         <p>The easl CLI lets you publish files, directories, and piped content directly from the terminal. All commands output structured JSON when piped, making it easy to use in scripts and agent workflows.</p>
 
         <h3>Installation</h3>
-<pre><span class="k">curl</span> -fsSL <span class="s">https://${domain}/install.sh</span> | sh</pre>
-        <p>Or via npm: <code>npm install -g @easl/cli</code></p>
+<pre><span class="k">npm</span> install -g <span class="s">@easl/cli</span></pre>
 
         <h3>Commands</h3>
         <div class="table-wrap"><table>

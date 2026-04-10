@@ -45,7 +45,7 @@ For CSV: always include a header row. For multi-file sites with an `index.html`:
 
 ## Publishing via CLI
 
-The `@easl/cli` package provides the `easl` command. Install with `curl -fsSL https://easl.dev/install.sh | sh` or `npm i -g @easl/cli`.
+The `@easl/cli` package provides the `easl` command. Install with `npm i -g @easl/cli`.
 
 ### Agent protocol
 
