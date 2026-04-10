@@ -43,20 +43,19 @@ jobs:
         env:
           CLI_VERSION: ${{ steps.version.outputs.version }}
 
-      - name: Create GitHub Release with binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npx changelogithub
-          cd packages/cli/dist/bin
-          gh release upload "${{ github.ref_name }}" \
-            easl-darwin-arm64.tar.gz \
-            easl-darwin-x64.tar.gz \
-            easl-linux-x64.tar.gz \
-            easl-linux-arm64.tar.gz \
-            --clobber
-
       - name: Publish to npm
         run: pnpm --filter @easl/cli publish --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+
+      - name: Create GitHub Release with binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            packages/cli/dist/bin/easl-darwin-arm64.tar.gz
+            packages/cli/dist/bin/easl-darwin-x64.tar.gz
+            packages/cli/dist/bin/easl-linux-x64.tar.gz
+            packages/cli/dist/bin/easl-linux-arm64.tar.gz
+          fail_on_unmatched_files: true
