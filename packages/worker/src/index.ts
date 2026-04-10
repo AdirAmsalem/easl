@@ -106,7 +106,14 @@ async function pathBasedRouting(
   }
 
   if (path === "/install.sh") {
-    return Response.redirect("https://raw.githubusercontent.com/AdirAmsalem/easl/main/packages/cli/install.sh", 302);
+    const upstream = await fetch("https://raw.githubusercontent.com/AdirAmsalem/easl/main/packages/cli/install.sh");
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "public, max-age=300",
+      },
+    });
   }
 
   // /s/:slug — view a published site
