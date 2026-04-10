@@ -50,7 +50,7 @@ easl auto-detects your content and renders it with the right interactive viewer:
 ### CLI
 
 ```bash
-npm install -g @easl/cli
+curl -fsSL https://easl.dev/install.sh | sh
 
 easl publish report.md
 # => https://calm-river.easl.dev

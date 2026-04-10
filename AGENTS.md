@@ -44,7 +44,7 @@ Bindings: **R2** (file storage), **D1** (SQLite metadata), **KV** (rendered HTML
 Local dev uses path-based routing (`/s/:slug`) instead of subdomains.
 
 ### `packages/cli` — CLI (`@easl/cli`)
-Published to npm. Commander-based CLI (`src/cli.ts`) with commands: `publish`, `list`, `get`, `delete`, `open`, `doctor`, `completion`. Bundled to single CJS file via esbuild (`dist/cli.cjs`). Local config at `~/.config/easl/sites.json` tracks published sites and claim tokens.
+Published to npm and as standalone binaries (macOS/Linux, arm64/x64) via GitHub releases. Commander-based CLI (`src/cli.ts`) with commands: `publish`, `list`, `get`, `delete`, `open`, `doctor`, `completion`. Bundled to single CJS file via esbuild (`dist/cli.cjs`) for npm, or compiled to a single executable via `bun build --compile` (`scripts/build-binaries.mjs`). Local config at `~/.config/easl/sites.json` tracks published sites and claim tokens.
 
 ### `packages/mcp-server` — MCP Server (`@easl/mcp`)
 Published to npm. Single-file stdio MCP server (`src/index.ts`) with 5 tools: `publish_content`, `publish_file`, `publish_site`, `list_sites`, `delete_site`. Built with tsdown.

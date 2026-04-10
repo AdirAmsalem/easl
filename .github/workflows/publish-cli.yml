@@ -10,7 +10,7 @@ on:
       - "cli@*"
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -29,10 +29,33 @@ jobs:
 
       - run: pnpm build
 
-      - run: pnpm --filter @easl/cli publish --no-git-checks
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#cli@}" >> "$GITHUB_OUTPUT"
+
+      - name: Build binaries for all platforms
+        working-directory: packages/cli
+        run: bun run scripts/build-binaries.mjs
+        env:
+          CLI_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Publish to npm
+        run: pnpm --filter @easl/cli publish --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
 
-      - run: npx changelogithub
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release with binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            packages/cli/dist/bin/easl-darwin-arm64.tar.gz
+            packages/cli/dist/bin/easl-darwin-x64.tar.gz
+            packages/cli/dist/bin/easl-linux-x64.tar.gz
+            packages/cli/dist/bin/easl-linux-arm64.tar.gz
+          fail_on_unmatched_files: true
