@@ -57,7 +57,7 @@ async function fetchLatestVersion(): Promise<string | null> {
 
 function detectInstallCommand(): string {
   if (IS_BINARY) {
-    return 'curl -fsSL https://raw.githubusercontent.com/AdirAmsalem/easl/main/packages/cli/install.sh | sh';
+    return 'curl -fsSL https://easl.dev/install.sh | sh';
   }
   const agent = process.env.npm_config_user_agent ?? '';
   if (agent.startsWith('pnpm')) return 'pnpm add -g @easl/cli';

@@ -1,6 +1,6 @@
 #!/bin/sh
 # easl CLI installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/AdirAmsalem/easl/main/packages/cli/install.sh | sh
+# Usage: curl -fsSL https://easl.dev/install.sh | sh
 set -eu
 
 REPO="AdirAmsalem/easl"

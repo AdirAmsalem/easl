@@ -10,7 +10,7 @@ on:
       - "cli@*"
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -29,29 +29,6 @@ jobs:
 
       - run: pnpm build
 
-      - run: pnpm --filter @easl/cli publish --no-git-checks
-        env:
-          NPM_CONFIG_PROVENANCE: true
-
-      - run: npx changelogithub
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  binaries:
-    needs: publish
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v5
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -66,14 +43,20 @@ jobs:
         env:
           CLI_VERSION: ${{ steps.version.outputs.version }}
 
-      - name: Upload release assets
-        working-directory: packages/cli/dist/bin
+      - name: Create GitHub Release with binaries
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          npx changelogithub
+          cd packages/cli/dist/bin
           gh release upload "${{ github.ref_name }}" \
             easl-darwin-arm64.tar.gz \
             easl-darwin-x64.tar.gz \
             easl-linux-x64.tar.gz \
             easl-linux-arm64.tar.gz \
             --clobber
+
+      - name: Publish to npm
+        run: pnpm --filter @easl/cli publish --no-git-checks
+        env:
+          NPM_CONFIG_PROVENANCE: true
