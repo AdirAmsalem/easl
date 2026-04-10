@@ -1,6 +1,12 @@
 #!/bin/sh
 # easl CLI installer
 # Usage: curl -fsSL https://easl.dev/install.sh | sh
+#   Pin version: curl -fsSL https://easl.dev/install.sh | sh -s 0.2.0
+
+# Wrap in main() to protect against partial download execution.
+# If the connection drops mid-transfer, sh won't execute a truncated script.
+main() {
+
 set -eu
 
 REPO="AdirAmsalem/easl"
@@ -22,6 +28,13 @@ fi
 info()  { printf '%s[info]%s %s\n' "$tty_bold" "$tty_reset" "$1"; }
 warn()  { printf '%s[warn]%s %s\n' "$tty_yellow" "$tty_reset" "$1"; }
 error() { printf '%s[error]%s %s\n' "$tty_red" "$tty_reset" "$1" >&2; exit 1; }
+
+# --- Prerequisite Checks ---
+
+check_prerequisites() {
+  command -v curl >/dev/null 2>&1 || error "curl is required but not found. Install it and try again."
+  command -v tar  >/dev/null 2>&1 || error "tar is required but not found. Install it and try again."
+}
 
 # --- Platform Detection ---
 
@@ -48,11 +61,25 @@ detect_platform() {
       ARCH="arm64"
     fi
   fi
+
+  # musl/Alpine detection: Bun-compiled binaries require glibc
+  if [ "$PLATFORM" = "linux" ] && command -v ldd >/dev/null 2>&1; then
+    if ldd --version 2>&1 | grep -qi musl; then
+      error "Alpine Linux (musl) is not supported. Use: npm install -g @easl/cli"
+    fi
+  fi
 }
 
 # --- Version Resolution ---
 
 resolve_version() {
+  # Support positional arg: curl ... | sh -s 0.2.0
+  if [ -n "${1:-}" ]; then
+    VERSION="$1"
+    info "Using specified version: $VERSION"
+    return
+  fi
+
   if [ -n "${EASL_VERSION:-}" ]; then
     VERSION="$EASL_VERSION"
     info "Using specified version: $VERSION"
@@ -84,10 +111,16 @@ install() {
   URL="https://github.com/$REPO/releases/download/$TAG/$TARGET.tar.gz"
 
   TMPDIR="$(mktemp -d)"
-  trap 'rm -rf "$TMPDIR"' EXIT
+  trap 'rm -rf "$TMPDIR"' EXIT INT TERM
+
+  # Detect existing installation
+  if [ -x "$INSTALL_DIR/$BINARY_NAME" ]; then
+    OLD_VERSION="$("$INSTALL_DIR/$BINARY_NAME" --version 2>/dev/null || echo "unknown")"
+    info "Upgrading easl from $OLD_VERSION"
+  fi
 
   info "Downloading $TARGET.tar.gz..."
-  curl -fsSL "$URL" -o "$TMPDIR/$TARGET.tar.gz" \
+  curl -fSL --progress-bar "$URL" -o "$TMPDIR/$TARGET.tar.gz" \
     || error "Download failed. Check that version $VERSION exists at:\n  $URL"
 
   info "Extracting..."
@@ -115,7 +148,22 @@ setup_path() {
     *":$INSTALL_DIR:"*) return ;;  # already in PATH
   esac
 
-  EXPORT_LINE="export PATH=\"$INSTALL_DIR:\$PATH\""
+  # Check for shadowing: another easl binary elsewhere in PATH
+  if command -v easl >/dev/null 2>&1; then
+    existing="$(command -v easl)"
+    if [ "$existing" != "$INSTALL_DIR/$BINARY_NAME" ]; then
+      warn "Another 'easl' found at $existing — it may shadow this installation"
+    fi
+  fi
+
+  EXPORT_LINE="export PATH=\"\$HOME/.local/bin:\$PATH\""
+
+  # Skip shell config modification in CI or non-interactive environments
+  if [ -n "${CI:-}" ] || [ ! -t 1 ]; then
+    warn "$INSTALL_DIR is not in your PATH"
+    info "Add to your shell config: $EXPORT_LINE"
+    return
+  fi
 
   warn "$INSTALL_DIR is not in your PATH"
 
@@ -134,17 +182,25 @@ setup_path() {
       ;;
     fish)
       FISH_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/easl.fish"
-      mkdir -p "$(dirname "$FISH_CONFIG")"
-      printf 'set -gx PATH "%s" $PATH\n' "$INSTALL_DIR" >> "$FISH_CONFIG"
-      info "Added $INSTALL_DIR to PATH in $FISH_CONFIG"
+      if [ -f "$FISH_CONFIG" ] && grep -qF "$INSTALL_DIR" "$FISH_CONFIG" 2>/dev/null; then
+        info "PATH already configured in $FISH_CONFIG"
+      else
+        mkdir -p "$(dirname "$FISH_CONFIG")"
+        printf 'set -gx PATH "%s" $PATH\n' "$INSTALL_DIR" >> "$FISH_CONFIG"
+        info "Added $INSTALL_DIR to PATH in $FISH_CONFIG"
+      fi
       info "Run ${tty_bold}source $FISH_CONFIG${tty_reset} or restart your terminal"
       return
       ;;
   esac
 
   if [ -n "$RC_FILE" ]; then
-    printf '\n# easl CLI\n%s\n' "$EXPORT_LINE" >> "$RC_FILE"
-    info "Added $INSTALL_DIR to PATH in $RC_FILE"
+    if grep -qF "$INSTALL_DIR" "$RC_FILE" 2>/dev/null; then
+      info "PATH already configured in $RC_FILE"
+    else
+      printf '\n# easl CLI\n%s\n' "$EXPORT_LINE" >> "$RC_FILE"
+      info "Added $INSTALL_DIR to PATH in $RC_FILE"
+    fi
     info "Run ${tty_bold}source $RC_FILE${tty_reset} or restart your terminal"
   else
     info "Add the following to your shell config:"
@@ -163,14 +219,15 @@ verify() {
   fi
 }
 
-# --- Main ---
+# --- Run ---
 
-main() {
-  detect_platform
-  resolve_version
-  install
-  setup_path
-  verify
+check_prerequisites
+detect_platform
+resolve_version "$@"
+install
+setup_path
+verify
+
 }
 
-main
+main "$@"
