@@ -89,8 +89,7 @@ jobs:
         working-directory: packages/cli
         run: |
           for bin in dist/bin/easl-darwin-arm64 dist/bin/easl-darwin-x64; do
-            codesign -dv "$bin" 2>&1 | grep -q "Signature=" \
-              || { echo "::error::$bin is not signed"; exit 1; }
+            codesign --verify --verbose "$bin"
           done
 
       - uses: actions/upload-artifact@v4

@@ -37,6 +37,13 @@ for (const target of filteredTargets) {
     { stdio: 'inherit' },
   );
 
+  // bun's embedded runtime signature is invalidated after appending the
+  // compiled bundle. macOS SIGKILLs unsigned/invalid-signed arm64 binaries,
+  // so re-apply an ad-hoc signature (matches what Deno ships).
+  if (target.name.startsWith('easl-darwin-') && process.platform === 'darwin') {
+    execSync(`codesign --force --sign - ${outfile}`, { stdio: 'inherit' });
+  }
+
   // Create tar.gz — archive contains a single `easl` binary (no platform suffix)
   execSync(
     `tar -czf ${outDir}/${target.name}.tar.gz -C ${outDir} ${target.name}`,
