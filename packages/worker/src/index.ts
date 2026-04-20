@@ -276,6 +276,58 @@ function landingPageHtml(domain: string): string {
       .demo-arrow::after{content:'\\2193';font-size:1.25rem;line-height:2rem}
     }
 
+    /* Playground */
+    .playground{margin:0 auto 5rem;scroll-margin-top:4rem;max-width:640px;position:relative}
+    .playground h2{font-size:1.5rem;font-weight:700;color:var(--text-heading);text-align:center;margin-bottom:0.75rem}
+    .playground>.sub{text-align:center;color:var(--text-faint);margin-bottom:2rem;font-size:0.9375rem}
+    .pg-wrap{position:relative}
+    .pg-wrap::before{content:'';position:absolute;inset:-1px;border-radius:15px;padding:1px;background:linear-gradient(170deg,var(--demo-glow-1) 0%,transparent 40%,var(--demo-glow-2) 80%,transparent);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:1}
+    .pg-chrome{position:relative;z-index:1;background:var(--demo-bg);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+    .pg-header{display:flex;align-items:center;gap:0.5rem;padding:0.75rem 1rem;border-bottom:1px solid var(--demo-tab-border)}
+    .pg-pills{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+    .pg-pill{font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.5625rem;padding:2px 8px;border-radius:9px;background:var(--surface);color:var(--text-faintest);cursor:pointer;transition:all .2s;border:1px solid transparent;line-height:1.4}
+    .pg-pill:hover{color:var(--text-muted);border-color:var(--border-medium)}
+    .pg-pill.active{color:var(--accent);background:var(--avatar-accent-bg);border-color:rgba(96,165,250,0.25)}
+    .pg-body{position:relative;min-height:220px}
+    .pg-highlight{position:absolute;inset:0;margin:0;padding:1.25rem 1.5rem;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.8125rem;line-height:1.7;white-space:pre-wrap;word-break:break-word;overflow:hidden;pointer-events:none;box-sizing:border-box;color:var(--text);tab-size:2}
+    .pg-highlight:empty{display:none}
+    .pg-highlight>*{display:block;transform:translate(var(--pg-sx,0),var(--pg-sy,0));will-change:transform}
+    .pg-highlight pre,.pg-highlight .shiki{margin:0!important;padding:0!important;background:transparent!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;white-space:pre-wrap!important;word-break:break-word!important;overflow:visible!important}
+    .pg-highlight code{font-family:inherit;background:transparent}
+    /* Shiki dual-theme: output uses --shiki-light / --shiki-dark CSS vars */
+    .pg-highlight .shiki,.pg-highlight .shiki span{color:var(--shiki-light);background-color:transparent!important;font-style:var(--shiki-light-font-style);font-weight:var(--shiki-light-font-weight);text-decoration:var(--shiki-light-text-decoration)}
+    [data-theme="dark"] .pg-highlight .shiki,[data-theme="dark"] .pg-highlight .shiki span{color:var(--shiki-dark);font-style:var(--shiki-dark-font-style);font-weight:var(--shiki-dark-font-weight);text-decoration:var(--shiki-dark-text-decoration)}
+    .pg-textarea{position:relative;z-index:1;width:100%;min-height:220px;background:transparent;color:var(--text);border:none;padding:1.25rem 1.5rem;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.8125rem;line-height:1.7;resize:none;outline:none;display:block;box-sizing:border-box;tab-size:2;white-space:pre-wrap;word-break:break-word}
+    .pg-shiki-ready .pg-textarea{color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--text)}
+    .pg-textarea::selection{background:var(--avatar-accent-bg);color:var(--text)}
+    .pg-textarea::placeholder{color:var(--text-faintest)}
+    .pg-textarea::-webkit-scrollbar{width:8px;height:8px}
+    .pg-textarea::-webkit-scrollbar-track{background:transparent}
+    .pg-textarea::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:4px}
+    .pg-textarea::-webkit-scrollbar-thumb:hover{background:var(--border-hover)}
+    .pg-footer{display:flex;align-items:center;justify-content:space-between;gap:0.75rem;padding:0.75rem 1rem;border-top:1px solid var(--demo-tab-border);font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.6875rem;flex-wrap:wrap}
+    .pg-meta{color:var(--text-faintest);display:flex;align-items:center;gap:0.5rem}
+    .pg-meta .pg-dot{width:6px;height:6px;border-radius:50%;background:var(--green);opacity:0.7}
+    .pg-publish-btn{background:var(--accent);color:var(--btn-primary-text);border:none;padding:0.4rem 1rem;font-size:0.75rem;font-weight:600;border-radius:6px;cursor:pointer;transition:all .15s;font-family:inherit;display:inline-flex;align-items:center;gap:0.4rem}
+    .pg-publish-btn:hover{background:var(--accent-hover)}
+    .pg-publish-btn:disabled{opacity:0.5;cursor:not-allowed}
+    .pg-publish-btn svg{width:12px;height:12px}
+    .pg-result{padding:0.875rem 1.5rem;border-top:1px solid var(--demo-tab-border);display:flex;align-items:center;gap:0.625rem;flex-wrap:wrap;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:0.8125rem;background:var(--url-bg)}
+    #pg-result[hidden]{display:none}
+    .pg-result .pg-ok{color:var(--green);font-weight:600;white-space:nowrap}
+    .pg-result a.pg-link{color:var(--green);text-decoration:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .pg-result a.pg-link:hover{text-decoration:underline}
+    .pg-result .pg-copy{display:inline-flex;align-items:center;justify-content:center;height:24px;line-height:1;background:none;border:1px solid var(--border-medium);cursor:pointer;color:var(--text-muted);padding:0 0.6rem;font-size:0.625rem;border-radius:5px;transition:all .15s;font-family:inherit;text-decoration:none;box-sizing:border-box}
+    .pg-result .pg-copy:hover{border-color:var(--border-hover);color:var(--text-heading);text-decoration:none}
+    .pg-error{padding:0.875rem 1.5rem;border-top:1px solid var(--demo-tab-border);color:#ef4444;font-size:0.8125rem;font-family:'SF Mono',Menlo,Consolas,monospace}
+    .pg-publishing .pg-publish-btn{opacity:0.6;pointer-events:none}
+    @keyframes pgSpin{to{transform:rotate(360deg)}}
+    .pg-spinner{width:10px;height:10px;border:1.5px solid rgba(0,0,0,0.3);border-top-color:currentColor;border-radius:50%;animation:pgSpin 0.6s linear infinite;display:inline-block}
+    @media(max-width:600px){
+      .pg-header{flex-direction:column;align-items:stretch;gap:0.5rem}
+      .pg-pills{margin-left:0;justify-content:flex-start}
+    }
+
     /* CTA */
     .cta{text-align:center;padding:4rem 0;border-top:1px solid var(--border-subtle);margin-top:2rem}
     .cta h2{font-size:1.5rem;font-weight:700;color:var(--text-heading);margin-bottom:0.75rem}
@@ -295,7 +347,7 @@ function landingPageHtml(domain: string): string {
 
     /* Animations */
     @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-    .hero h1,.hero .sub,.hero-terminal,.setup,.demos,.cta{animation:fadeUp .5s ease both}
+    .hero h1,.hero .sub,.hero-terminal,.setup,.demos,.playground,.cta{animation:fadeUp .5s ease both}
     .hero .sub{animation-delay:.08s}
     .hero-terminal{animation-delay:.18s}
     .setup{animation-delay:.25s}
@@ -313,6 +365,7 @@ function landingPageHtml(domain: string): string {
       <a href="/" class="logo"><img src="/logo.svg" alt="easl" height="24" class="nav-logo"></a>
       <div class="links">
         <a href="#demos">Demos</a>
+        <a href="#try">Try It</a>
         <a href="/docs">Docs</a>
         <a href="https://github.com/AdirAmsalem/easl">GitHub</a>
         <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme" id="theme-btn"></button>
@@ -324,7 +377,7 @@ function landingPageHtml(domain: string): string {
   <div class="container">
     <section class="hero">
       <h1>Instant hosting for<br><span class="accent">AI agents</span></h1>
-      <p class="sub">Your agent sends content. easl turns it into a page worth sharing.</p>
+      <p class="sub">Your agent sends content. easl turns it into a page worth sharing.<br><span style="color:var(--text-faintest);font-size:0.875rem">Free. No signup. Auto-expires in 7 days.</span></p>
 
       <div class="hero-terminal">
         <div class="term-chrome">
@@ -422,9 +475,31 @@ Dave,Engineer,Infra,2024</div>
       </div>
     </section>
 
-    <section class="cta">
+    <section class="playground" id="try">
       <h2>Try it now</h2>
-      <p>Publish your first file in under 10 seconds.</p>
+      <p class="sub">Pick a format, paste content, hit publish. No signup.</p>
+      <div class="pg-wrap">
+        <div class="pg-chrome" id="pg-chrome">
+          <div class="pg-header">
+            <div class="term-dots"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div></div>
+            <div class="pg-pills" id="pg-pills"></div>
+          </div>
+          <div class="pg-body">
+            <pre class="pg-highlight" id="pg-highlight" aria-hidden="true"></pre>
+            <textarea class="pg-textarea" id="pg-content" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" rows="10"></textarea>
+          </div>
+          <div class="pg-footer">
+            <div class="pg-meta"><span class="pg-dot"></span><span id="pg-meta-text">Anonymous &middot; Expires in 7 days</span></div>
+            <button class="pg-publish-btn" id="pg-publish" type="button"><span id="pg-btn-label">Publish</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+          </div>
+          <div id="pg-result" hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta">
+      <h2>Ready to integrate?</h2>
+      <p>Add easl to your agent in under 10 seconds.</p>
       <p class="cta-sub">Free and open-source. Self-host or use our hosted version.</p>
       <div class="cta-buttons">
         <a class="btn btn-primary" href="/docs">Get Started</a>
@@ -434,7 +509,7 @@ Dave,Engineer,Infra,2024</div>
   </div>
 
   <footer>
-    <div class="container">easl &mdash; open source, MIT licensed</div>
+    <div class="container">easl &mdash; open source, MIT licensed<br><span style="opacity:0.6">Built for agents that have something worth sharing.</span></div>
   </footer>
   <script>
     function getTheme(){return localStorage.getItem('easl-theme')||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark')}
@@ -641,6 +716,160 @@ Dave,Engineer,Infra,2024</div>
       }else{
         start();
       }
+    })();
+  </script>
+  <script>
+    (function(){
+      var types=[
+        {label:'Markdown',type:'text/markdown',sample:'# Q1 Results\\n\\nRevenue grew **42%** YoY.\\n\\nKey wins:\\n- Enterprise: \`+68%\`\\n- Self-serve: \`+31%\`\\n\\n> We exceeded all targets this quarter.'},
+        {label:'CSV',type:'text/csv',sample:'name,role,team,joined\\nAlice,Engineer,Platform,2024\\nBob,Designer,Product,2023\\nCarol,PM,Growth,2025\\nDave,Engineer,Infra,2024'},
+        {label:'JSON',type:'application/json',sample:JSON.stringify({user:{name:"Alice",plan:"pro",usage:8420,features:["dashboard","api","export"],active:true}},null,2)},
+        {label:'HTML',type:'text/html',sample:'<!DOCTYPE html>\\n<html>\\n<head><title>Hello</title></head>\\n<body>\\n  <h1>Hello from easl</h1>\\n  <p>This is a live HTML page.</p>\\n</body>\\n</html>'},
+        {label:'SVG',type:'image/svg+xml',sample:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">\\n  <rect width="200" height="100" fill="#1e293b" rx="8"/>\\n  <text x="100" y="55" text-anchor="middle" fill="#60a5fa" font-family="system-ui" font-size="16">Hello from easl</text>\\n</svg>'},
+        {label:'Mermaid',type:'text/x-mermaid',sample:'graph TD\\n  A[User] --> B[Agent]\\n  B --> C{easl}\\n  C --> D[Shareable Page]\\n  C --> E[OG Image]\\n  C --> F[QR Code]'}
+      ];
+      var pillsEl=document.getElementById('pg-pills');
+      var contentEl=document.getElementById('pg-content');
+      var publishBtn=document.getElementById('pg-publish');
+      var btnLabel=document.getElementById('pg-btn-label');
+      var resultEl=document.getElementById('pg-result');
+      var chrome=document.getElementById('pg-chrome');
+      var highlightEl=document.getElementById('pg-highlight');
+      if(!pillsEl||!contentEl||!publishBtn)return;
+
+      var activeIdx=0;
+      var sampleIsPristine=true;
+
+      // Shiki syntax highlighting — lazy-loaded
+      var shikiLangs={'text/markdown':'markdown','text/csv':'csv','application/json':'json','text/html':'html','image/svg+xml':'xml','text/x-mermaid':'mermaid'};
+      var shikiFallback={'mermaid':'plaintext','csv':'plaintext'};
+      var shikiCodeToHtml=null;
+      var shikiLoading=false;
+      var highlightSeq=0;
+      var highlightTimer=null;
+
+      function loadShiki(){
+        if(shikiCodeToHtml||shikiLoading)return;
+        shikiLoading=true;
+        import('https://esm.sh/shiki@3.0.0').then(function(m){
+          shikiCodeToHtml=m.codeToHtml;
+          chrome.classList.add('pg-shiki-ready');
+          updateHighlight();
+        }).catch(function(){shikiLoading=false});
+      }
+
+      async function updateHighlight(){
+        if(!shikiCodeToHtml||!highlightEl)return;
+        var mySeq=++highlightSeq;
+        var lang=shikiLangs[types[activeIdx].type]||'plaintext';
+        var code=contentEl.value;
+        try{
+          var html=await shikiCodeToHtml(code,{lang:lang,themes:{light:'github-light',dark:'github-dark'},defaultColor:false});
+          if(mySeq!==highlightSeq)return;
+          highlightEl.innerHTML=html;
+        }catch(e){
+          // Fall back to plaintext if the language isn't available
+          try{
+            var fb=shikiFallback[lang]||'plaintext';
+            var html2=await shikiCodeToHtml(code,{lang:fb,themes:{light:'github-light',dark:'github-dark'},defaultColor:false});
+            if(mySeq!==highlightSeq)return;
+            highlightEl.innerHTML=html2;
+          }catch(_){}
+        }
+      }
+
+      function scheduleHighlight(){
+        clearTimeout(highlightTimer);
+        highlightTimer=setTimeout(updateHighlight,120);
+      }
+
+      function syncScroll(){
+        if(!highlightEl)return;
+        highlightEl.style.setProperty('--pg-sy','-'+contentEl.scrollTop+'px');
+        highlightEl.style.setProperty('--pg-sx','-'+contentEl.scrollLeft+'px');
+      }
+      contentEl.addEventListener('scroll',syncScroll);
+
+      types.forEach(function(t,i){
+        var pill=document.createElement('button');
+        pill.type='button';
+        pill.className='pg-pill'+(i===0?' active':'');
+        pill.textContent=t.label;
+        pill.onclick=function(){selectType(i)};
+        pillsEl.appendChild(pill);
+      });
+
+      function selectType(i){
+        activeIdx=i;
+        pillsEl.querySelectorAll('.pg-pill').forEach(function(p,j){p.classList.toggle('active',i===j)});
+        var current=contentEl.value.trim();
+        var anySample=types.some(function(t){return t.sample.trim()===current});
+        if(sampleIsPristine||!current||anySample){
+          contentEl.value=types[i].sample;
+          sampleIsPristine=true;
+        }
+        resultEl.hidden=true;
+        chrome.classList.remove('pg-error-state');
+        updateHighlight();
+      }
+
+      contentEl.value=types[0].sample;
+      contentEl.addEventListener('input',function(){sampleIsPristine=false;scheduleHighlight()});
+      contentEl.addEventListener('focus',loadShiki,{once:true});
+
+      if('IntersectionObserver' in window&&chrome){
+        var pgObs=new IntersectionObserver(function(entries){
+          if(entries[0].isIntersecting){pgObs.disconnect();loadShiki()}
+        },{threshold:0.2});
+        pgObs.observe(chrome);
+      }else{
+        loadShiki();
+      }
+
+      publishBtn.addEventListener('click',async function(){
+        var content=contentEl.value.trim();
+        if(!content){contentEl.focus();return}
+        chrome.classList.add('pg-publishing');
+        publishBtn.disabled=true;
+        btnLabel.textContent='Publishing...';
+        resultEl.hidden=true;
+        try{
+          var res=await fetch('/publish',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({content:content,contentType:types[activeIdx].type})
+          });
+          var data=await res.json();
+          if(!res.ok){
+            resultEl.className='pg-error';
+            resultEl.textContent=data.error||'Something went wrong';
+            resultEl.hidden=false;
+            return;
+          }
+          resultEl.className='pg-result';
+          resultEl.innerHTML='';
+          var ok=document.createElement('span');
+          ok.className='pg-ok';
+          ok.textContent='\\u2713 Published:';
+          var link=document.createElement('a');
+          link.href=data.url;link.target='_blank';link.rel='noopener';link.className='pg-link';link.textContent=data.url;
+          var copyBtn=document.createElement('button');
+          copyBtn.type='button';copyBtn.className='pg-copy';copyBtn.textContent='Copy';
+          copyBtn.onclick=function(){navigator.clipboard.writeText(data.url);copyBtn.textContent='Copied!';setTimeout(function(){copyBtn.textContent='Copy'},1500)};
+          var openLink=document.createElement('a');
+          openLink.href=data.url;openLink.target='_blank';openLink.rel='noopener';openLink.className='pg-copy';openLink.textContent='Open \\u2192';
+          resultEl.appendChild(ok);resultEl.appendChild(link);resultEl.appendChild(copyBtn);resultEl.appendChild(openLink);
+          resultEl.hidden=false;
+        }catch(e){
+          resultEl.className='pg-error';
+          resultEl.textContent='Network error. Please try again.';
+          resultEl.hidden=false;
+        }finally{
+          chrome.classList.remove('pg-publishing');
+          publishBtn.disabled=false;
+          btnLabel.textContent='Publish';
+        }
+      });
     })();
   </script>
 </body>
