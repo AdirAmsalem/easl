@@ -738,7 +738,6 @@ Dave,Engineer,Infra,2024</div>
       if(!pillsEl||!contentEl||!publishBtn)return;
 
       var activeIdx=0;
-      var sampleIsPristine=true;
 
       // Shiki syntax highlighting — lazy-loaded
       var shikiLangs={'text/markdown':'markdown','text/csv':'csv','application/json':'json','text/html':'html','image/svg+xml':'xml','text/x-mermaid':'mermaid'};
@@ -802,19 +801,14 @@ Dave,Engineer,Infra,2024</div>
       function selectType(i){
         activeIdx=i;
         pillsEl.querySelectorAll('.pg-pill').forEach(function(p,j){p.classList.toggle('active',i===j)});
-        var current=contentEl.value.trim();
-        var anySample=types.some(function(t){return t.sample.trim()===current});
-        if(sampleIsPristine||!current||anySample){
-          contentEl.value=types[i].sample;
-          sampleIsPristine=true;
-        }
+        contentEl.value=types[i].sample;
         resultEl.hidden=true;
         chrome.classList.remove('pg-error-state');
         updateHighlight();
       }
 
       contentEl.value=types[0].sample;
-      contentEl.addEventListener('input',function(){sampleIsPristine=false;scheduleHighlight()});
+      contentEl.addEventListener('input',scheduleHighlight);
       contentEl.addEventListener('focus',loadShiki,{once:true});
 
       if('IntersectionObserver' in window&&chrome){
