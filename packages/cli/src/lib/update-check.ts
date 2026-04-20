@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import pc from 'picocolors';
 import { getConfigDir } from './config';
-import { VERSION } from './version';
+import { IS_BINARY, VERSION } from './version';
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const CACHE_FILE = 'update-check.json';
@@ -56,6 +56,9 @@ async function fetchLatestVersion(): Promise<string | null> {
 }
 
 function detectInstallCommand(): string {
+  if (IS_BINARY) {
+    return 'curl -fsSL https://easl.dev/install.sh | sh';
+  }
   const agent = process.env.npm_config_user_agent ?? '';
   if (agent.startsWith('pnpm')) return 'pnpm add -g @easl/cli';
   if (agent.startsWith('yarn')) return 'yarn global add @easl/cli';
