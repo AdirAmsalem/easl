@@ -212,8 +212,10 @@ setup_path() {
 
 verify() {
   if [ -x "$INSTALL_DIR/$BINARY_NAME" ]; then
-    INSTALLED_VERSION="$("$INSTALL_DIR/$BINARY_NAME" --version 2>/dev/null || echo "unknown")"
-    printf '\n%s✓ easl %s installed to %s%s\n' "$tty_green" "$INSTALLED_VERSION" "$INSTALL_DIR/$BINARY_NAME" "$tty_reset"
+    if ! "$INSTALL_DIR/$BINARY_NAME" --version >/dev/null 2>&1; then
+      warn "Binary may not run correctly — try: $INSTALL_DIR/$BINARY_NAME --version"
+    fi
+    printf '\n%s✓ easl v%s installed to %s%s\n' "$tty_green" "$VERSION" "$INSTALL_DIR/$BINARY_NAME" "$tty_reset"
   else
     error "Installation failed — binary not found at $INSTALL_DIR/$BINARY_NAME"
   fi

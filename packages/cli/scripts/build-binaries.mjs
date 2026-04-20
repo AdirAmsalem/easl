@@ -12,10 +12,15 @@ const targets = [
   { bun: 'bun-linux-arm64', name: 'easl-linux-arm64' },
 ];
 
+const filter = process.env.BUILD_TARGETS;
+const filteredTargets = filter
+  ? targets.filter((t) => t.name.includes(filter))
+  : targets;
+
 const outDir = 'dist/bin';
 if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 
-for (const target of targets) {
+for (const target of filteredTargets) {
   console.log(`Building ${target.name}...`);
 
   const outfile = `${outDir}/${target.name}`;
