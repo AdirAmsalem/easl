@@ -25,7 +25,7 @@ else
   tty_bold="" tty_green="" tty_yellow="" tty_red="" tty_reset=""
 fi
 
-info()  { printf '%s[info]%s %s\n' "$tty_bold" "$tty_reset" "$1"; }
+info()  { printf '%s\n' "$1"; }
 warn()  { printf '%s[warn]%s %s\n' "$tty_yellow" "$tty_reset" "$1"; }
 error() { printf '%s[error]%s %s\n' "$tty_red" "$tty_reset" "$1" >&2; exit 1; }
 
@@ -86,7 +86,7 @@ resolve_version() {
     return
   fi
 
-  info "Fetching latest version..."
+  printf 'Fetching latest version... '
   # The repo has multiple release types (cli@*, mcp@*), filter for cli@ tags
   VERSION=$(
     curl -fsSL "https://api.github.com/repos/$REPO/releases" \
@@ -94,13 +94,14 @@ resolve_version() {
       | grep '"cli@' \
       | head -1 \
       | sed -E 's/.*"cli@([^"]+)".*/\1/'
-  ) || error "Failed to fetch latest version from GitHub"
+  ) || { printf '\n'; error "Failed to fetch latest version from GitHub"; }
 
   if [ -z "$VERSION" ]; then
+    printf '\n'
     error "Could not determine latest version. Set EASL_VERSION to install a specific version."
   fi
 
-  info "Latest version: $VERSION"
+  printf '%s\n' "$VERSION"
 }
 
 # --- Download & Install ---
@@ -123,7 +124,6 @@ install() {
   curl -fSL --progress-bar "$URL" -o "$TMPDIR/$TARGET.tar.gz" \
     || error "Download failed. Check that version $VERSION exists at:\n  $URL"
 
-  info "Extracting..."
   tar -xzf "$TMPDIR/$TARGET.tar.gz" -C "$TMPDIR" \
     || error "Failed to extract archive"
 
