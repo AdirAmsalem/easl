@@ -18,6 +18,45 @@ describe("generateSlug", () => {
     const slug = generateSlug();
     expect(slug).toBe(slug.toLowerCase());
   });
+
+  it("derives slug from title when provided", () => {
+    expect(generateSlug("Q1 Budget Report")).toMatch(/^q1-budget-report-[0-9a-f]{4}$/);
+  });
+
+  it("truncates long titles and stays within length cap", () => {
+    const slug = generateSlug("a".repeat(200));
+    expect(slug.length).toBeLessThanOrEqual(48);
+    expect(slug).toMatch(/^a+-[0-9a-f]{4}$/);
+    expect(isValidCustomSlug(slug)).toBe(true);
+  });
+
+  it("falls back to adjective-noun when title slugifies to empty", () => {
+    for (const title of ["", "   ", "!!!", null, undefined]) {
+      const slug = generateSlug(title);
+      expect(slug.split("-").length).toBe(3);
+      expect(slug).toMatch(/-[0-9a-f]{4}$/);
+    }
+  });
+
+  it("falls back when title would collide with reserved preview- prefix", () => {
+    for (const title of ["preview", "Preview", "Preview release", "preview-pr-4"]) {
+      const slug = generateSlug(title);
+      expect(slug.startsWith("preview-")).toBe(false);
+      expect(slug).not.toBe("preview");
+    }
+  });
+
+  it("always produces a slug that passes isValidCustomSlug", () => {
+    const titles = [
+      undefined, null, "", "   ", "!!!",
+      "a", "Q1 Budget Report", "Café Menu", "preview", "Preview release",
+      "a".repeat(200), "---", "  Hello, World!  ", "2026", "✨ launch ✨",
+    ];
+    for (const title of titles) {
+      const slug = generateSlug(title);
+      expect(isValidCustomSlug(slug)).toBe(true);
+    }
+  });
 });
 
 describe("generateVersionId", () => {

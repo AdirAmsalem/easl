@@ -118,7 +118,7 @@ app.post("/publish", async (c) => {
     }
     slug = body.slug;
   } else {
-    slug = await generateUniqueSlug(c.env.DB);
+    slug = await generateUniqueSlug(c.env.DB, body.title);
   }
 
   const versionId = generateVersionId();
@@ -210,9 +210,9 @@ async function generateSocialAssets(
   }
 }
 
-async function generateUniqueSlug(db: D1Database, maxRetries = 3): Promise<string> {
+async function generateUniqueSlug(db: D1Database, title?: string | null, maxRetries = 3): Promise<string> {
   for (let i = 0; i < maxRetries; i++) {
-    const slug = generateSlug();
+    const slug = generateSlug(title);
     try {
       const existing = await db.prepare("SELECT slug FROM sites WHERE slug = ?").bind(slug).first();
       if (!existing) return slug;
