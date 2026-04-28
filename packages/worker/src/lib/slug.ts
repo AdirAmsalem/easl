@@ -36,7 +36,23 @@ function randomHex(length: number): string {
     .slice(0, length);
 }
 
-export function generateSlug(): string {
+function slugifyTitle(title: string): string | null {
+  const base = title
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/, "");
+  if (base.length < 1) return null;
+  if (base === "preview" || base.startsWith("preview-")) return null;
+  return base;
+}
+
+export function generateSlug(title?: string | null): string {
+  const base = title ? slugifyTitle(title) : null;
+  if (base) return `${base}-${randomHex(4)}`;
   return `${randomFrom(ADJECTIVES)}-${randomFrom(NOUNS)}-${randomHex(4)}`;
 }
 
