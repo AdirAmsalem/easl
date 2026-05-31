@@ -6,11 +6,12 @@ description: >-
   each rendered with an interactive viewer. Use when the user wants to share,
   publish, or host generated content as a web page, create a shareable URL for
   data analysis results, reports, dashboards, tables, charts, or diagrams,
-  or when the user mentions easl. Available as CLI (`easl`), MCP server
-  (`@easl/mcp`), or HTTP API.
+  or when the user mentions easl. Pages are public by default; mark them
+  private to gate access behind a password. Available as CLI (`easl`),
+  MCP server (`@easl/mcp`), or HTTP API.
 metadata:
   author: easl
-  version: "0.2"
+  version: "0.3"
 ---
 
 # easl
@@ -88,6 +89,8 @@ The CLI auto-detects non-TTY environments and outputs JSON — no `--json` flag 
 | `--template <tpl>` | `minimal`, `report`, or `dashboard` |
 | `--slug <slug>` | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
 | `--ttl <seconds>` | Time to live in seconds |
+| `--private` | Password-protect the page. Server generates a password if `--password` is omitted |
+| `--password <pw>` | Password for a private page (implies `--private`) |
 | `--open` | Open in browser after publishing |
 | `--copy` | Copy URL to clipboard |
 
@@ -119,6 +122,12 @@ easl publish ./my-site/
 # Custom slug
 easl publish chart.svg --slug my-chart
 
+# Private (password-protected) — password auto-generated and printed once
+easl publish board-update.md --private
+
+# Private with a chosen password
+easl publish board-update.md --private --password "spring-harbor-77"
+
 # Delete a site (non-interactive)
 easl delete my-chart --yes
 
@@ -145,7 +154,7 @@ The `@easl/mcp` server provides five tools:
 - **`list_sites`** — List sites published in this session.
 - **`delete_site`** — Delete a site by slug (session sites only).
 
-All publish tools accept optional `title` and `template` parameters.
+All publish tools accept optional `title` and `template` parameters, plus `private` (boolean) and `password` (string) to password-protect the page. When `private` is set and no `password` is given, the server generates one and returns it in the response — surface it to the user, it is shown only once.
 
 ## Publishing via HTTP API
 
@@ -193,6 +202,8 @@ All publish tools accept optional `title` and `template` parameters.
 | `title` | No | Page title |
 | `template` | No | `minimal`, `report`, or `dashboard` |
 | `slug` | No | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
+| `private` | No | `true` to password-protect the page |
+| `password` | No | Password for a private page (4–128 chars). Implies `private`; if omitted with `private: true`, the server generates one and returns it |
 
 *Provide either `{content, contentType}` or `{files}`.
 
@@ -219,6 +230,36 @@ The `claimToken` is needed to delete the site later. The `embed` snippet provide
 DELETE https://api.easl.dev/sites/{slug}
 Header: X-Claim-Token: {claimToken}
 ```
+
+## Private easls
+
+Any easl can be password-protected. Pass `private: true` (and optionally `password`) at publish time:
+
+```json
+{ "content": "# Confidential", "contentType": "text/markdown", "private": true }
+```
+
+The publish response then includes the password (generated if you didn't supply one):
+
+```json
+{ "url": "https://cool-maze.easl.dev", "slug": "cool-maze", "visibility": "private", "password": "dust-arch-fern-dark-1181", ... }
+```
+
+How it behaves:
+- Visitors hit a password gate; after unlocking, a signed cookie keeps them in for 30 days.
+- The password is shown **once** — there is no recovery. The owner can rotate it (below).
+- Private pages are never cached, never indexed, and skip OG-image generation. No `ogImage`/`qrCode` in the response.
+- Via the CLI, the password is also saved to `~/.config/easl/sites.json` and surfaced by `easl open <slug>`.
+
+### Toggle privacy / rotate the password
+
+```
+PATCH https://api.easl.dev/sites/{slug}/privacy
+Header: X-Claim-Token: {claimToken}
+Body: { "private": true, "password": "new-pass" }   // omit password to auto-generate; { "private": false } makes it public
+```
+
+Rotating the password immediately invalidates everyone's existing unlock sessions.
 
 ## Limits
 

@@ -48,6 +48,8 @@ Then ask your agent:
 | `list_sites` | List sites published in the current session. |
 | `delete_site` | Delete a published site by slug. |
 
+The three publish tools also accept `private` (boolean) and `password` (string) to password-protect the page. When `private` is set without a `password`, the server generates one and returns it in the response — shown only once.
+
 ## Supported Formats
 
 | Format | Rendered as |

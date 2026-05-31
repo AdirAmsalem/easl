@@ -157,10 +157,10 @@ function landingPageHtml(domain: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>easl — Instant hosting for AI agents</title>
-  <meta name="description" content="Turn agent output into pages worth sharing. One API call turns CSV into sortable tables, Markdown into styled prose, JSON into interactive trees. Zero config.">
+  <meta name="description" content="Turn agent output into pages worth sharing. One API call turns CSV into sortable tables, Markdown into styled prose, JSON into interactive trees. Zero config. Public by default — password-protect any page when you need to.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="easl — Instant hosting for AI agents">
-  <meta property="og:description" content="Turn agent output into pages worth sharing. CSV into sortable tables, Markdown into styled prose, JSON into interactive trees.">
+  <meta property="og:description" content="Turn agent output into pages worth sharing. CSV into sortable tables, Markdown into styled prose, JSON into interactive trees. Public by default, private when you need it.">
   <meta property="og:image" content="https://${domain}/og.png">
   <meta property="og:url" content="https://${domain}">
   <meta name="twitter:card" content="summary_large_image">
@@ -406,7 +406,7 @@ function landingPageHtml(domain: string): string {
   <div class="container">
     <section class="hero">
       <h1>Instant hosting for<br><span class="accent">AI agents</span></h1>
-      <p class="sub">Your agent sends content. easl turns it into a page worth sharing.<br><span style="color:var(--text-faintest);font-size:0.875rem">Free. No signup. Auto-expires in 7 days.</span></p>
+      <p class="sub">Your agent sends content. easl turns it into a page worth sharing.<br><span style="color:var(--text-faintest);font-size:0.875rem">Free. No signup. Auto-expires in 7 days. Private when you need it.</span></p>
 
       <div class="hero-terminal">
         <div class="term-chrome">

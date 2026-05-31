@@ -52,6 +52,15 @@ echo '{"status":"ok"}' | easl publish --type json
 easl publish --content "# Hello World" --type markdown
 ```
 
+### Publish a private (password-protected) page
+
+```bash
+easl publish board-update.md --private              # password generated & printed once
+easl publish board-update.md --private --password "spring-harbor-77"
+```
+
+Visitors enter the password once, then stay unlocked for 30 days. The password is also saved to your local config and shown again by `easl open <slug>`.
+
 ### Manage sites
 
 ```bash
@@ -83,6 +92,8 @@ easl open <slug>       # Open site in browser
 | `--template <tpl>` | `minimal`, `report`, or `dashboard` |
 | `--slug <slug>` | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
 | `--ttl <seconds>` | Time to live in seconds (default: 7 days) |
+| `--private` | Password-protect the page (auto-generates a password if `--password` is omitted) |
+| `--password <pw>` | Password for a private page (implies `--private`) |
 | `--open` | Open in browser after publishing |
 | `--copy` | Copy URL to clipboard |
 
@@ -126,7 +137,7 @@ easl completion fish > ~/.config/fish/completions/easl.fish
 
 ## Local config
 
-Published sites and their claim tokens are tracked in `~/.config/easl/sites.json`. This enables `easl list` and `easl delete` to work without re-entering tokens. Only sites published from the current machine are tracked.
+Published sites and their claim tokens are tracked in `~/.config/easl/sites.json`. This enables `easl list` and `easl delete` to work without re-entering tokens. Only sites published from the current machine are tracked. For private sites, the password is stored here too so `easl open <slug>` can surface it.
 
 ## Agent usage
 

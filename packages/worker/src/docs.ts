@@ -66,6 +66,7 @@ export function docsPageHtml(domain: string): string {
     .method{font-size:0.75rem;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:0.03em;font-family:inherit}
     .method-post{background:var(--method-post-bg);color:var(--accent)}
     .method-get{background:var(--method-get-bg);color:var(--green)}
+    .method-patch{background:var(--method-get-bg);color:var(--yellow)}
     .method-delete{background:var(--method-del-bg);color:var(--red)}
     .endpoint .path{font-family:'SF Mono',monospace;font-weight:600;color:var(--text)}
     .endpoint .desc{font-size:0.8125rem;color:var(--text-faint);margin-bottom:0}
@@ -140,6 +141,7 @@ export function docsPageHtml(domain: string): string {
         <div class="group">
           <div class="group-title">Concepts</div>
           <a href="#anonymous-sites">Anonymous Sites</a>
+          <a href="#private-easls">Private easls</a>
           <a href="#rate-limits">Rate Limits</a>
           <a href="#errors">Error Codes</a>
         </div>
@@ -329,6 +331,9 @@ export function docsPageHtml(domain: string): string {
 <span class="c"># Publish inline content</span>
 <span class="k">easl</span> publish --content <span class="s">"# Hello World"</span> --type markdown
 
+<span class="c"># Private — password auto-generated and printed once</span>
+<span class="k">easl</span> publish board-update.md --private
+
 <span class="c"># JSON output for scripting</span>
 <span class="k">easl</span> publish report.md --json
 <span class="c"># {"url":"...","slug":"...","claimToken":"...","expiresAt":"..."}</span></pre>
@@ -342,6 +347,8 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>--title &lt;title&gt;</code></td><td>Page title</td></tr>
             <tr><td><code>--slug &lt;slug&gt;</code></td><td>Custom slug (3-48 chars)</td></tr>
             <tr><td><code>--ttl &lt;seconds&gt;</code></td><td>Time to live (default: 7 days)</td></tr>
+            <tr><td><code>--private</code></td><td>Password-protect the page (auto-generates a password if none given)</td></tr>
+            <tr><td><code>--password &lt;pw&gt;</code></td><td>Password for a private page (implies <code>--private</code>)</td></tr>
             <tr><td><code>--open</code></td><td>Open in browser after publishing</td></tr>
             <tr><td><code>--copy</code></td><td>Copy URL to clipboard</td></tr>
             <tr><td><code>--json</code></td><td>Force JSON output</td></tr>
@@ -370,6 +377,8 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>contentType</code></td><td>string <span class="badge badge-required">required</span></td><td>MIME type (e.g. <code>text/markdown</code>)</td></tr>
             <tr><td><code>title</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Page title shown in header &amp; browser tab</td></tr>
             <tr><td><code>template</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Template: <code>minimal</code>, <code>report</code>, or <code>dashboard</code></td></tr>
+            <tr><td><code>private</code></td><td>boolean <span class="badge badge-optional">optional</span></td><td>Password-protect the page (see <a href="#private-easls">Private easls</a>)</td></tr>
+            <tr><td><code>password</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Password for a private page (4–128 chars). Implies <code>private</code>; auto-generated if omitted</td></tr>
           </tbody>
         </table></div>
 
@@ -382,6 +391,8 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>title</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Site title</td></tr>
             <tr><td><code>template</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Template name</td></tr>
             <tr><td><code>ttl</code></td><td>number <span class="badge badge-optional">optional</span></td><td>TTL in seconds (default: 7 days)</td></tr>
+            <tr><td><code>private</code></td><td>boolean <span class="badge badge-optional">optional</span></td><td>Password-protect the site (see <a href="#private-easls">Private easls</a>)</td></tr>
+            <tr><td><code>password</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Password (4–128 chars). Implies <code>private</code>; auto-generated if omitted</td></tr>
           </tbody>
         </table></div>
 
@@ -405,6 +416,12 @@ export function docsPageHtml(domain: string): string {
           <div class="method-path"><span class="method method-get">GET</span> <span class="path">/sites/:slug</span></div>
           <p class="desc">Get site metadata including title, files, version, and expiry.</p>
           <p class="auth">Auth: None required</p>
+        </div>
+
+        <div class="endpoint">
+          <div class="method-path"><span class="method method-patch">PATCH</span> <span class="path">/sites/:slug/privacy</span></div>
+          <p class="desc">Toggle visibility and rotate the password. Body: <code>{ "private": true, "password"?: "..." }</code> — omit <code>password</code> to auto-generate one (returned once); send <code>{ "private": false }</code> to make the site public. Rotating the password invalidates existing unlock sessions.</p>
+          <p class="auth">Auth: <code>X-Claim-Token</code> header</p>
         </div>
 
         <div class="endpoint">
@@ -516,6 +533,22 @@ export function docsPageHtml(domain: string): string {
         </table></div>
         <p>Each publish returns a <code>claimToken</code> — save it if you need to delete the site later. Send it as the <code>X-Claim-Token</code> header on <code>DELETE /sites/:slug</code>.</p>
 
+        <h2 id="private-easls">Private easls</h2>
+        <p>Public is the default. Pass <code>private: true</code> at publish time (or <code>--private</code> on the CLI, or <code>private</code> on the MCP publish tools) to gate the page behind a password.</p>
+        <p>You can supply your own <code>password</code>, or leave it out and easl generates a strong one. Either way the password is returned in the publish response under <code>password</code> — it is shown <strong>once</strong>, with no recovery.</p>
+<pre><span class="k">curl</span> -X POST https://${api}/publish \\
+  -H <span class="s">"Content-Type: application/json"</span> \\
+  -d <span class="s">'{"content":"# Confidential","contentType":"text/markdown","private":true}'</span>
+<span class="c"># → { "url": "...", "visibility": "private", "password": "dust-arch-fern-dark-1181", ... }</span></pre>
+        <div class="table-wrap"><table>
+          <tbody>
+            <tr><td><strong>Unlock</strong></td><td>Visitors enter the password once; a signed cookie keeps them in for 30 days (sliding)</td></tr>
+            <tr><td><strong>Not cached / not indexed</strong></td><td>Private pages skip the edge cache, send <code>noindex</code>, and skip OG-image generation</td></tr>
+            <tr><td><strong>Rotate or unlock</strong></td><td><code>PATCH /sites/:slug/privacy</code> with the claim token; rotating invalidates existing sessions</td></tr>
+            <tr><td><strong>CLI</strong></td><td>The password is saved to <code>~/.config/easl/sites.json</code> and shown again by <code>easl open &lt;slug&gt;</code></td></tr>
+          </tbody>
+        </table></div>
+
         <h2 id="rate-limits">Rate Limits</h2>
         <p>Publish endpoints are rate-limited per IP.</p>
         <div class="table-wrap"><table>
@@ -530,6 +563,8 @@ export function docsPageHtml(domain: string): string {
           <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
           <tbody>
             <tr><td><code>400</code></td><td>Bad request — missing or invalid parameters</td></tr>
+            <tr><td><code>401</code></td><td>Unauthorized — missing claim token, or password required to view a private page</td></tr>
+            <tr><td><code>403</code></td><td>Forbidden — invalid claim token</td></tr>
             <tr><td><code>404</code></td><td>Not found — site or version doesn't exist</td></tr>
             <tr><td><code>409</code></td><td>Conflict — slug taken or version mismatch</td></tr>
             <tr><td><code>422</code></td><td>Unprocessable — invalid request</td></tr>
