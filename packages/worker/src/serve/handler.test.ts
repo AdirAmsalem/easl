@@ -79,6 +79,7 @@ describe("serveSite noindex", () => {
       createdAt: "2025-01-01T00:00:00Z",
       visibility: "public",
       passwordHash: null,
+      ownerId: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -116,6 +117,7 @@ describe("serveSite D1-based metadata", () => {
       createdAt: "2025-01-01T00:00:00Z",
       visibility: "public",
       passwordHash: null,
+      ownerId: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -159,6 +161,7 @@ describe("serveSite D1-based metadata", () => {
       createdAt: "2019-12-01T00:00:00Z",
       visibility: "public",
       passwordHash: null,
+      ownerId: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -180,6 +183,7 @@ describe("serveSite D1-based metadata", () => {
       createdAt: "2025-01-01T00:00:00Z",
       visibility: "public",
       passwordHash: null,
+      ownerId: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -218,6 +222,7 @@ describe("serveSite Cache API L1", () => {
       createdAt: "2025-01-01T00:00:00Z",
       visibility: "public",
       passwordHash: null,
+      ownerId: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -258,6 +263,7 @@ describe("serveSite Cache API L1", () => {
       createdAt: "2025-01-01T00:00:00Z",
       visibility: "public",
       passwordHash: null,
+      ownerId: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });

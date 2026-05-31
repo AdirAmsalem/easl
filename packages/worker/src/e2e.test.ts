@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env, SELF } from "cloudflare:test";
 import type { Env } from "./types";
+import { signShareToken } from "./lib/session";
 
 const db = (env as unknown as Env).DB;
+// Mirror of the value injected via vitest.config.e2e.mts miniflare.bindings.
+const E2E_SESSION_SECRET = "e2e-test-session-secret-not-for-prod";
 
 // Mirror of migrations/ — single-line for D1 exec compatibility
 const SCHEMA = [
@@ -353,5 +356,78 @@ describe("private easls", () => {
 
     // The site should now gate
     expect((await serve(`/s/${slug}`)).status).toBe(401);
+  });
+});
+
+// Account-gate (visibility=private + owner_id) serving. The owner-session path is
+// fully exercised in Phase 2b (which mints a real better-auth session); here we
+// cover the parts of the two-gate tree that need no session: the anonymous→login
+// redirect and the share-token bypass. Sites are inserted directly into D1 so the
+// test doesn't depend on the (not-yet-migrated) authenticated publish API.
+describe("account-private easls (account gate)", () => {
+  // Publish a normal (public) site through the API so its file content is written
+  // to R2 *by the worker* (test-side env.CONTENT.put is not visible to SELF), then
+  // promote the D1 row to account-private by setting owner_id (+ optional password).
+  // This stands in for the not-yet-migrated authenticated-publish API.
+  async function seedOwned(
+    opts: { ownerId?: string | null; passwordHash?: string | null } = {},
+  ): Promise<string> {
+    const { body } = await publish({ content: "hello", contentType: "text/markdown" });
+    const slug = body.slug as string;
+    await db
+      .prepare(`UPDATE sites SET visibility = 'private', is_anonymous = 0, owner_id = ?, password_hash = ? WHERE slug = ?`)
+      .bind(opts.ownerId ?? "owner-user-1", opts.passwordHash ?? null, slug)
+      .run();
+    return slug;
+  }
+
+  it("redirects an anonymous viewer to /auth/login with a next param (no password prompt)", async () => {
+    const slug = await seedOwned();
+    const res = await SELF.fetch(`http://localhost/s/${slug}`, { redirect: "manual" });
+    expect(res.status).toBe(302);
+    const location = res.headers.get("Location")!;
+    expect(location).toContain("/auth/login");
+    expect(location).toContain(`next=${encodeURIComponent(`http://localhost/s/${slug}`)}`);
+    expect(res.headers.get("Cache-Control")).toContain("no-store");
+    // The account gate must resolve before the password gate — no password page leaks.
+    expect(await res.text()).not.toContain("This easl is private");
+  });
+
+  it("serves content for a valid ?share= token", async () => {
+    const slug = await seedOwned();
+    const { token } = await signShareToken(E2E_SESSION_SECRET, slug);
+    const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toContain("no-store");
+    expect(await res.text()).toContain("hello");
+  });
+
+  it("rejects an expired share token (falls back to login redirect)", async () => {
+    const slug = await seedOwned();
+    const { token } = await signShareToken(E2E_SESSION_SECRET, slug, -1000);
+    const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`, {
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toContain("/auth/login");
+  });
+
+  it("rejects a share token minted for a different slug", async () => {
+    const slug = await seedOwned();
+    const { token } = await signShareToken(E2E_SESSION_SECRET, "some-other-slug");
+    const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`, {
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toContain("/auth/login");
+  });
+
+  it("share token satisfies only the account gate — a stacked password still prompts", async () => {
+    // owner-bound AND password-protected: share token clears Gate 1, password gate (Gate 2) remains.
+    const slug = await seedOwned({ passwordHash: "$argon2id$placeholder-never-matches" });
+    const { token } = await signShareToken(E2E_SESSION_SECRET, slug);
+    const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`);
+    expect(res.status).toBe(401);
+    expect(await res.text()).toContain("This easl is private");
   });
 });

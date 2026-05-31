@@ -147,6 +147,73 @@ export function buildClearCookie(name: string, opts: Pick<CookieOptions, "path" 
 
 export const SESSION_DEFAULT_TTL_MS = COOKIE_TTL_MS;
 
+// ── Share tokens (private easls v2) ─────────────────────────────────────────
+// A share token lets an owner grant a non-account-holder access through the
+// ACCOUNT gate of a private site (it does NOT satisfy a password gate — a
+// `private + password` site still prompts the recipient for the password).
+//
+// Stateless, no DB: it reuses the same HMAC machinery as the unlock cookie, so
+// revocation is global only (rotate SESSION_SECRET). Format is identical in
+// shape to the unlock cookie minus the password fingerprint:
+//   `<b64url(slug|exp)>.<b64url(hmac)>`
+// A token is bound to a single slug and carries its own expiry, so a leaked
+// token can't be replayed against another site and lapses on its own.
+
+/** Default share-token lifetime: 7 days (see the v2 plan's share-link defaults). */
+export const SHARE_TOKEN_DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Maximum share-token lifetime: 30 days. */
+export const SHARE_TOKEN_MAX_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Sign a share token granting account-gate access to `slug` for `ttlMs`.
+ * Format: `<b64url(slug|exp)>.<b64url(hmac)>` (same shape as the unlock cookie,
+ * without the password fingerprint). Returns `{ token, exp }` where `exp` is the
+ * absolute expiry in epoch milliseconds, for the API to surface as `expiresAt`.
+ */
+export async function signShareToken(
+  secret: string,
+  slug: string,
+  ttlMs = SHARE_TOKEN_DEFAULT_TTL_MS,
+): Promise<{ token: string; exp: number }> {
+  const exp = Date.now() + ttlMs;
+  const payload = `${slug}|${exp}`;
+  const sig = await hmac(secret, payload);
+  const token = `${b64urlEncode(new TextEncoder().encode(payload))}.${b64urlEncode(sig)}`;
+  return { token, exp };
+}
+
+/**
+ * Verify a share token against the expected slug. Returns `{ valid, exp? }`.
+ * Invalid signatures, expired tokens, and slug mismatches all return
+ * `{ valid: false }`. Mirrors `verifyCookie` but with a two-field payload.
+ */
+export async function verifyShareToken(
+  secret: string,
+  slug: string,
+  value: string,
+): Promise<{ valid: boolean; exp?: number }> {
+  const dot = value.indexOf(".");
+  if (dot <= 0 || dot === value.length - 1) return { valid: false };
+  const payloadB64 = value.slice(0, dot);
+  const sigB64 = value.slice(dot + 1);
+  const payloadBytes = b64urlDecode(payloadB64);
+  const sigBytes = b64urlDecode(sigB64);
+  if (!payloadBytes || !sigBytes) return { valid: false };
+  const payload = new TextDecoder().decode(payloadBytes);
+  const expectedSig = await hmac(secret, payload);
+  if (!constantTimeEqual(b64urlEncode(sigBytes), b64urlEncode(expectedSig))) {
+    return { valid: false };
+  }
+  // Payload fields never contain "|": slug is [a-z0-9-], exp is digits.
+  const parts = payload.split("|");
+  if (parts.length !== 2) return { valid: false };
+  const [tokenSlug, expStr] = parts;
+  if (tokenSlug !== slug) return { valid: false };
+  const exp = Number(expStr);
+  if (!Number.isInteger(exp) || exp <= Date.now()) return { valid: false };
+  return { valid: true, exp };
+}
+
 async function hmac(secret: string, payload: string): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     "raw",

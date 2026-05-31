@@ -39,6 +39,10 @@ export interface SiteMeta {
   createdAt: string;
   visibility: Visibility;
   passwordHash: string | null;
+  // Account that owns the site (set at authenticated publish or via claim). Null
+  // for anonymous sites. The serve handler's account gate compares this against
+  // the resolved session user's id.
+  ownerId: string | null;
 }
 
 // D1 row types

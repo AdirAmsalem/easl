@@ -126,7 +126,12 @@ async function pathBasedRouting(
   if (siteMatch) {
     const slug = siteMatch[1];
     const subPath = siteMatch[2] ?? "/";
-    const rewritten = new Request(new URL(subPath, request.url), request);
+    // Preserve the original query string when stripping the /s/:slug prefix — the
+    // serve handler reads it (e.g. ?share=<token> for the private account gate,
+    // ?render=true for raw files). new URL(subPath, base) alone would drop it.
+    const rewrittenUrl = new URL(subPath, request.url);
+    rewrittenUrl.search = url.search;
+    const rewritten = new Request(rewrittenUrl, request);
     return serveSite(rewritten, env, slug, ctx, `/s/${slug}`);
   }
 
