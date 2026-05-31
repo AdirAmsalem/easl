@@ -212,6 +212,65 @@ describe("password-protected easls (v1 password gate, no account)", () => {
     expect(res.status).toBe(400);
   });
 
+  // Fix A — server-picks-a-password on PUBLISH (v1 regression restored). With
+  // `generatePassword: true` and no explicit `password`, the worker mints a strong
+  // password, returns the plaintext ONCE, and gates the site on it. Reachable via
+  // the PASSWORD path (anonymous, visibility stays public — NOT account-private).
+  it("auto-generates a password when generatePassword:true and gates the site (anonymous)", async () => {
+    const { res, body } = await publish({
+      content: "secret content",
+      contentType: "text/markdown",
+      generatePassword: true,
+    });
+    expect(res.status).toBe(201);
+    // The generated plaintext is returned once, with the shown-once notice.
+    expect(typeof body.password).toBe("string");
+    expect((body.password as string).length).toBeGreaterThan(0);
+    expect(body.passwordNotice).toBeDefined();
+    // Password gate, not an account gate — visibility stays public, anonymous.
+    expect(body.visibility).toBe("public");
+    expect(body.anonymous).toBe(true);
+    // Gated → no OG/QR.
+    expect(body.ogImage).toBeUndefined();
+    expect(body.qrCode).toBeUndefined();
+
+    const generated = body.password as string;
+    const slug = body.slug as string;
+
+    // Without the password the site is gated (401), and the content never leaks.
+    const gated = await serve(`/s/${slug}`);
+    expect(gated.status).toBe(401);
+    const gatedHtml = await gated.text();
+    expect(gatedHtml).toContain("This easl is private");
+    expect(gatedHtml).not.toContain("secret content");
+
+    // The generated password unlocks the site.
+    const redirect = `/s/${slug}`;
+    const unlock = await SELF.fetch(`http://localhost/s/${slug}/__unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ password: generated, redirect }).toString(),
+      redirect: "manual",
+    });
+    expect(unlock.status).toBe(303);
+    const cookie = unlock.headers.get("Set-Cookie")!.split(";")[0];
+    const view = await SELF.fetch(`http://localhost${redirect}`, { headers: { Cookie: cookie } });
+    expect(view.status).toBe(200);
+    expect(await view.text()).toContain("secret content");
+  });
+
+  it("an explicit password takes precedence over generatePassword:true", async () => {
+    const { res, body } = await publish({
+      content: "x",
+      contentType: "text/plain",
+      password: "explicit-wins",
+      generatePassword: true,
+    });
+    expect(res.status).toBe(201);
+    // The caller's explicit value is returned verbatim — generate is ignored.
+    expect(body.password).toBe("explicit-wins");
+  });
+
   it("renders the gate (401) for a viewer without the password", async () => {
     const { body } = await publish({
       content: "secret content",

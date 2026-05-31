@@ -4,7 +4,7 @@ import { generateSlug, generateVersionId, generateClaimToken, isValidCustomSlug 
 import { siteUrl as buildSiteUrl } from "../lib/url";
 import { generateOgImage } from "../og";
 import { generateQrSvg } from "../lib/qr";
-import { hashPassword } from "../lib/password";
+import { generatePassword, hashPassword } from "../lib/password";
 import { getOptionalUser } from "../auth/middleware";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -38,6 +38,11 @@ interface PublishRequest {
   slug?: string;
   private?: boolean;
   password?: string;
+  // Password gate, server-picks-the-secret variant. When `true` AND no explicit
+  // `password` is supplied, the server mints a strong 4-word+4-digit password,
+  // hashes it, and returns the plaintext ONCE in the response (v1 ergonomics).
+  // Ignored when `password` is an explicit string (that takes precedence).
+  generatePassword?: boolean;
 }
 
 const PASSWORD_MIN_LEN = 4;
@@ -137,18 +142,23 @@ app.post("/publish", async (c) => {
   //  - ACCOUNT gate  (`private: true`): requires authentication. Binds owner_id
   //    and marks the site visibility=private. The serve handler then requires the
   //    owner's session (or a signed share link). Anonymous `private: true` → 401.
-  //  - PASSWORD gate (`password`): a per-site password. Anonymous-publishable —
-  //    this is v1's password-only mode, now decoupled from the `private` flag.
-  //  Both, either, or neither may be set; `private: true` + `password` stacks them.
+  //  - PASSWORD gate (`password` | `generatePassword`): a per-site password.
+  //    Anonymous-publishable — this is v1's password-only mode, now decoupled from
+  //    the `private` flag. Supply `password: "value"` to choose it, or
+  //    `generatePassword: true` to have the server mint one and return it once.
+  //  Both, either, or neither may be set; `private: true` + a password stacks them.
   const isPrivate = body.private === true;
   if (isPrivate && !user) {
     return c.json({ error: "private: true requires authentication. Sign in or pass a valid API key." }, 401);
   }
 
-  // Password gate: hash a caller-supplied password if present. Independent of the
-  // account gate, so `password` works with or without `private` and with or
-  // without authentication. (v1 auto-generated a password for bare `private: true`;
-  // in v2 the password gate is opt-in via the explicit `password` field.)
+  // Password gate. Independent of the account gate, so a password works with or
+  // without `private` and with or without authentication. Two ways to opt in:
+  //   - explicit `password: "value"` → use it verbatim (validated for length).
+  //   - `generatePassword: true` (and no explicit `password`) → the server mints
+  //     a strong 4-word+4-digit password (v1 ergonomics, restored). The plaintext
+  //     is returned ONCE below and never recoverable afterwards.
+  // An explicit `password` always wins over `generatePassword` to avoid surprises.
   let plaintextPassword: string | null = null;
   let passwordHash: string | null = null;
   if (body.password != null) {
@@ -158,6 +168,10 @@ app.post("/publish", async (c) => {
       return c.json({ error: `password must be ${PASSWORD_MIN_LEN}-${PASSWORD_MAX_LEN} chars` }, 400);
     }
     plaintextPassword = body.password;
+  } else if (body.generatePassword === true) {
+    plaintextPassword = generatePassword();
+  }
+  if (plaintextPassword != null) {
     passwordHash = await hashPassword(plaintextPassword);
   }
 

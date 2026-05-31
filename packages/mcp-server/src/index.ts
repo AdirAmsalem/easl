@@ -38,7 +38,12 @@ const privacyProps = {
   password: {
     type: "string" as const,
     description:
-      "Password gate. Optional caller-supplied password (4-128 chars) that protects the page behind a password prompt. Works anonymously — no account needed and does NOT imply `private`. Combine with `private: true` (and EASL_API_KEY) to require BOTH login AND the password.",
+      "Password gate. Optional caller-supplied password (4-128 chars) that protects the page behind a password prompt. Works anonymously — no account needed and does NOT imply `private`. Combine with `private: true` (and EASL_API_KEY) to require BOTH login AND the password. To have easl pick a strong password for you instead, omit this and set `generatePassword: true`.",
+  },
+  generatePassword: {
+    type: "boolean" as const,
+    description:
+      "Password gate, server-generated variant. If true (and no explicit `password` is given), easl mints a strong password and returns it ONCE in the response under `password` — store it, there is no recovery. Works anonymously, like `password`. Ignored when `password` is supplied (the explicit value wins).",
   },
 };
 
@@ -46,7 +51,7 @@ const toolDefinitions = [
   {
     name: "publish_content",
     description:
-      "Publish raw content (Markdown, CSV, HTML, JSON, SVG, Mermaid) as a shareable page. The fastest way — content goes in, URL comes out. Max 256KB. Pass a `password` for a password-protected page (anonymous OK), `private: true` for an account-private page (requires the server to be logged in via EASL_API_KEY), or both to stack the two gates.",
+      "Publish raw content (Markdown, CSV, HTML, JSON, SVG, Mermaid) as a shareable page. The fastest way — content goes in, URL comes out. Max 256KB. Pass a `password` (or `generatePassword: true` to have easl mint one, returned once) for a password-protected page (anonymous OK), `private: true` for an account-private page (requires the server to be logged in via EASL_API_KEY), or both to stack the two gates.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -65,7 +70,7 @@ const toolDefinitions = [
   {
     name: "publish_file",
     description:
-      "Publish a single file from disk — returns a URL to a shareable page. easl auto-detects the file type and renders it with the best viewer. Pass a `password` for a password-protected page (anonymous OK), `private: true` for an account-private page (requires the server to be logged in via EASL_API_KEY), or both to stack the two gates.",
+      "Publish a single file from disk — returns a URL to a shareable page. easl auto-detects the file type and renders it with the best viewer. Pass a `password` (or `generatePassword: true` to have easl mint one, returned once) for a password-protected page (anonymous OK), `private: true` for an account-private page (requires the server to be logged in via EASL_API_KEY), or both to stack the two gates.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -80,7 +85,7 @@ const toolDefinitions = [
   {
     name: "publish_site",
     description:
-      "Publish a directory of files as a site. If the directory has an index.html, it's served as-is. Otherwise, easl auto-generates navigation. Pass a `password` for a password-protected site (anonymous OK), `private: true` for an account-private site (requires the server to be logged in via EASL_API_KEY), or both to stack the two gates.",
+      "Publish a directory of files as a site. If the directory has an index.html, it's served as-is. Otherwise, easl auto-generates navigation. Pass a `password` (or `generatePassword: true` to have easl mint one, returned once) for a password-protected site (anonymous OK), `private: true` for an account-private site (requires the server to be logged in via EASL_API_KEY), or both to stack the two gates.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -150,13 +155,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Two independent, composable privacy gates (private easls v2), mirroring the
 // CLI and the worker (publish.ts): `private` is the ACCOUNT gate and is set ONLY
 // from the explicit flag (it always requires auth — anonymous `private: true`
-// → 401). `password` is the PASSWORD gate and is passed through independently —
-// password-only publishing works anonymously, with no account needed. Do NOT
-// derive `private` from `password`; that re-introduces the v1 coupling.
-function extractPrivacy(args: Json): { private?: true; password?: string } {
-  const out: { private?: true; password?: string } = {};
+// → 401). The PASSWORD gate is passed through independently — password publishing
+// works anonymously, with no account needed — and can be requested two ways:
+// an explicit `password` string, or `generatePassword: true` to have the server
+// mint one and return it once. An explicit `password` wins over `generatePassword`,
+// matching the worker. Do NOT derive `private` from a password; that re-introduces
+// the v1 coupling.
+function extractPrivacy(args: Json): { private?: true; password?: string; generatePassword?: true } {
+  const out: { private?: true; password?: string; generatePassword?: true } = {};
   if (args.private === true) out.private = true;
   if (typeof args.password === "string" && args.password.length > 0) out.password = args.password;
+  else if (args.generatePassword === true) out.generatePassword = true;
   return out;
 }
 

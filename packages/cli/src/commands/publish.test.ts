@@ -83,6 +83,71 @@ describe('publish --private auth gate', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  // Fix A — `--password` is an optional-value flag. Helper: stub the publish
+  // response and capture the JSON body the action sends, so we can assert the exact
+  // shape (`password` vs `generatePassword`) for each form of the flag.
+  function stubPublishResponse(overrides: Record<string, unknown> = {}): void {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          url: 'https://x.easl.dev',
+          slug: 'x',
+          claimToken: 't',
+          embed: '',
+          shareText: '',
+          expiresAt: new Date().toISOString(),
+          anonymous: true,
+          visibility: 'public',
+          ...overrides,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+  }
+
+  function sentBody(): Record<string, unknown> {
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [, init] = fetchSpy.mock.calls[0];
+    return JSON.parse((init as RequestInit).body as string);
+  }
+
+  test('--password with a value sends { password } and not generatePassword', async () => {
+    stubPublishResponse();
+    const program = rootWithPublish();
+    await program.parseAsync(
+      ['publish', '--content', '# hi', '--type', 'markdown', '--password', 'hunter2', '--json'],
+      { from: 'user' },
+    );
+    const body = sentBody();
+    expect(body.password).toBe('hunter2');
+    expect(body.generatePassword).toBeUndefined();
+  });
+
+  test('value-less --password sends { generatePassword: true } and no password', async () => {
+    // Server mints and returns the password once.
+    stubPublishResponse({ password: 'gen-erated-pass-1234' });
+    const program = rootWithPublish();
+    await program.parseAsync(
+      ['publish', '--content', '# hi', '--type', 'markdown', '--password', '--json'],
+      { from: 'user' },
+    );
+    const body = sentBody();
+    expect(body.generatePassword).toBe(true);
+    expect(body.password).toBeUndefined();
+  });
+
+  test('no --password sends neither password nor generatePassword', async () => {
+    stubPublishResponse();
+    const program = rootWithPublish();
+    await program.parseAsync(
+      ['publish', '--content', '# hi', '--type', 'markdown', '--json'],
+      { from: 'user' },
+    );
+    const body = sentBody();
+    expect(body.password).toBeUndefined();
+    expect(body.generatePassword).toBeUndefined();
+  });
+
   test('--private with --api-key passes the auth gate (reaches the network)', async () => {
     // Stub the publish response so the action completes past the auth gate.
     fetchSpy.mockResolvedValue(

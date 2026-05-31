@@ -58,22 +58,26 @@ export const publishCommand = new Command('publish')
   .option('--slug <slug>', 'Custom slug (lowercase alphanumeric + hyphens, 3-48 chars)')
   .option('--ttl <seconds>', 'Time to live in seconds')
   .option('--private', 'Account-private: only you (signed in) can view. Requires login.')
-  .option('--password <password>', 'Password-protect the URL with a password gate (works with or without --private)')
+  .option(
+    '--password [password]',
+    'Password-protect the URL. Pass a value to set it, or use the flag alone to auto-generate one (shown once). Works with or without --private.',
+  )
   .option('--open', 'Open in browser after publishing')
   .option('--copy', 'Copy URL to clipboard after publishing')
   .addHelpText(
     'after',
     buildHelpText({
       context:
-        `Publishes content and returns a shareable URL.\nSupports file path, directory, --content flag, or piped stdin.\n\n${pc.gray('Privacy modes (composable):')}\n  ${pc.bold('public')}              default — anyone with the link can view\n  ${pc.bold('password-protected')}  --password X — gated by a password page\n  ${pc.bold('account-private')}     --private — only you (signed in); share via ${pc.blue('easl share')}\n  ${pc.bold('both')}                --private --password X — sign-in AND password required\n\n--private requires authentication (run ${pc.blue('easl login')} or set EASL_API_KEY).`,
+        `Publishes content and returns a shareable URL.\nSupports file path, directory, --content flag, or piped stdin.\n\n${pc.gray('Privacy modes (composable):')}\n  ${pc.bold('public')}              default — anyone with the link can view\n  ${pc.bold('password-protected')}  --password X — gated by a password page\n  ${pc.bold('                  ')}  --password (no value) — easl generates one, shown once\n  ${pc.bold('account-private')}     --private — only you (signed in); share via ${pc.blue('easl share')}\n  ${pc.bold('both')}                --private --password X — sign-in AND password required\n\n--private requires authentication (run ${pc.blue('easl login')} or set EASL_API_KEY).`,
       output:
-        '  {"url":"...","slug":"...","claimToken":"...","expiresAt":"...","visibility":"..."}',
+        '  {"url":"...","slug":"...","claimToken":"...","expiresAt":"...","visibility":"...","password":"..."}',
       errorCodes: ['publish_error', 'file_error', 'stdin_error', 'auth_error'],
       examples: [
         'easl publish report.md',
         'easl publish ./my-site/',
         'cat data.csv | easl publish --type csv',
         'easl publish report.md --password hunter2',
+        'easl publish report.md --password   # auto-generate a password',
         'easl login && easl publish secret.md --private',
         'easl publish secret.md --private --password hunter2',
       ],
@@ -180,13 +184,24 @@ export const publishCommand = new Command('publish')
       );
     }
 
+    // `--password` is an optional-value flag (commander `[password]`):
+    //   - absent            → opts.password === undefined  (no password gate)
+    //   - `--password X`     → opts.password === "X"        (explicit password)
+    //   - `--password`       → opts.password === true       (server auto-generates)
+    // A supplied string is sent verbatim; the value-less flag sends the
+    // `generatePassword` signal so the server mints one and returns it once.
+    const explicitPassword =
+      typeof opts.password === 'string' ? opts.password : undefined;
+    const generatePassword = opts.password === true;
+
     const body: Record<string, unknown> = { files };
     if (opts.title) body.title = opts.title;
     if (opts.template) body.template = opts.template;
     if (opts.slug) body.slug = opts.slug;
     if (opts.ttl) body.ttl = Number(opts.ttl);
     if (opts.private) body.private = true;
-    if (opts.password) body.password = opts.password;
+    if (explicitPassword != null) body.password = explicitPassword;
+    else if (generatePassword) body.generatePassword = true;
 
     const result = await withSpinner(
       'Publishing...',
@@ -208,7 +223,9 @@ export const publishCommand = new Command('publish')
       title: opts.title,
       expiresAt: result.expiresAt,
       visibility: result.visibility,
-      password: opts.password ?? result.password,
+      // The plaintext password to persist locally: the explicit value if the
+      // caller supplied one, otherwise the server-generated one returned once.
+      password: explicitPassword ?? result.password,
       owner: result.anonymous === false ? 'me' : undefined,
     });
 
@@ -233,9 +250,12 @@ export const publishCommand = new Command('publish')
       console.log(
         `  ${pc.gray('Expires:')}  ${result.expiresAt ? new Date(result.expiresAt).toLocaleDateString() : 'never'}`,
       );
-      // Privacy summary across the two composable gates.
+      // Privacy summary across the two composable gates. The plaintext password to
+      // surface is the explicit value, else whatever the server generated and
+      // returned once (when `--password` was used value-less).
+      const password = explicitPassword ?? result.password;
       const accountPrivate = result.visibility === 'private';
-      const passwordProtected = Boolean(opts.password ?? result.password);
+      const passwordProtected = Boolean(password);
       if (accountPrivate || passwordProtected) {
         const modes: string[] = [];
         if (accountPrivate) modes.push('account-private (sign-in required)');
@@ -246,7 +266,6 @@ export const publishCommand = new Command('publish')
             `  ${pc.gray('        ')}  ${pc.dim(`Share with non-account viewers via: easl share ${result.slug}`)}`,
           );
         }
-        const password = opts.password ?? result.password;
         if (password) {
           console.log(
             `  ${pc.gray('Password:')} ${pc.yellow(pc.bold(password))}`,

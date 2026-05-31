@@ -52,14 +52,24 @@ echo '{"status":"ok"}' | easl publish --type json
 easl publish --content "# Hello World" --type markdown
 ```
 
-### Publish a private (password-protected) page
+### Publish a password-protected page
 
 ```bash
-easl publish board-update.md --private              # password generated & printed once
-easl publish board-update.md --private --password "spring-harbor-77"
+easl publish board-update.md --password                     # password generated & printed once
+easl publish board-update.md --password "spring-harbor-77"  # choose your own
 ```
 
 Visitors enter the password once, then stay unlocked for 30 days. The password is also saved to your local config and shown again by `easl open <slug>`.
+
+### Publish an account-private page
+
+```bash
+easl login                                          # one-time browser sign-in
+easl publish board-update.md --private              # only you (signed in) can view
+easl publish board-update.md --private --password   # require BOTH login AND a password
+```
+
+`--private` requires authentication and binds the site to your account. Share with non-account viewers via `easl share <slug>`.
 
 ### Manage sites
 
@@ -92,8 +102,8 @@ easl open <slug>       # Open site in browser
 | `--template <tpl>` | `minimal`, `report`, or `dashboard` |
 | `--slug <slug>` | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
 | `--ttl <seconds>` | Time to live in seconds (default: 7 days) |
-| `--private` | Password-protect the page (auto-generates a password if `--password` is omitted) |
-| `--password <pw>` | Password for a private page (implies `--private`) |
+| `--private` | Account-private — only you (signed in) can view. Requires `easl login` |
+| `--password [pw]` | Password-protect the page. Pass a value, or use the flag alone to auto-generate one (shown once). Works with or without `--private` |
 | `--open` | Open in browser after publishing |
 | `--copy` | Copy URL to clipboard |
 

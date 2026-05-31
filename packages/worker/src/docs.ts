@@ -331,8 +331,8 @@ export function docsPageHtml(domain: string): string {
 <span class="c"># Publish inline content</span>
 <span class="k">easl</span> publish --content <span class="s">"# Hello World"</span> --type markdown
 
-<span class="c"># Private — password auto-generated and printed once</span>
-<span class="k">easl</span> publish board-update.md --private
+<span class="c"># Password-protected — password auto-generated and printed once</span>
+<span class="k">easl</span> publish board-update.md --password
 
 <span class="c"># JSON output for scripting</span>
 <span class="k">easl</span> publish report.md --json
@@ -347,8 +347,8 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>--title &lt;title&gt;</code></td><td>Page title</td></tr>
             <tr><td><code>--slug &lt;slug&gt;</code></td><td>Custom slug (3-48 chars)</td></tr>
             <tr><td><code>--ttl &lt;seconds&gt;</code></td><td>Time to live (default: 7 days)</td></tr>
-            <tr><td><code>--private</code></td><td>Password-protect the page (auto-generates a password if none given)</td></tr>
-            <tr><td><code>--password &lt;pw&gt;</code></td><td>Password for a private page (implies <code>--private</code>)</td></tr>
+            <tr><td><code>--private</code></td><td>Account-private — only you (signed in) can view. Requires <code>easl login</code></td></tr>
+            <tr><td><code>--password [pw]</code></td><td>Password-protect the page. Pass a value, or use the flag alone to auto-generate one (shown once)</td></tr>
             <tr><td><code>--open</code></td><td>Open in browser after publishing</td></tr>
             <tr><td><code>--copy</code></td><td>Copy URL to clipboard</td></tr>
             <tr><td><code>--json</code></td><td>Force JSON output</td></tr>
@@ -377,8 +377,9 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>contentType</code></td><td>string <span class="badge badge-required">required</span></td><td>MIME type (e.g. <code>text/markdown</code>)</td></tr>
             <tr><td><code>title</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Page title shown in header &amp; browser tab</td></tr>
             <tr><td><code>template</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Template: <code>minimal</code>, <code>report</code>, or <code>dashboard</code></td></tr>
-            <tr><td><code>private</code></td><td>boolean <span class="badge badge-optional">optional</span></td><td>Password-protect the page (see <a href="#private-easls">Private easls</a>)</td></tr>
-            <tr><td><code>password</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Password for a private page (4–128 chars). Implies <code>private</code>; auto-generated if omitted</td></tr>
+            <tr><td><code>private</code></td><td>boolean <span class="badge badge-optional">optional</span></td><td>Account-private gate — requires auth (see <a href="#private-easls">Private easls</a>)</td></tr>
+            <tr><td><code>password</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Password gate (4–128 chars). Works alone or stacked with <code>private</code></td></tr>
+            <tr><td><code>generatePassword</code></td><td>boolean <span class="badge badge-optional">optional</span></td><td>Set true (and omit <code>password</code>) to have easl mint a password, returned once in the response</td></tr>
           </tbody>
         </table></div>
 
@@ -391,8 +392,9 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>title</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Site title</td></tr>
             <tr><td><code>template</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Template name</td></tr>
             <tr><td><code>ttl</code></td><td>number <span class="badge badge-optional">optional</span></td><td>TTL in seconds (default: 7 days)</td></tr>
-            <tr><td><code>private</code></td><td>boolean <span class="badge badge-optional">optional</span></td><td>Password-protect the site (see <a href="#private-easls">Private easls</a>)</td></tr>
-            <tr><td><code>password</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Password (4–128 chars). Implies <code>private</code>; auto-generated if omitted</td></tr>
+            <tr><td><code>private</code></td><td>boolean <span class="badge badge-optional">optional</span></td><td>Account-private gate — requires auth (see <a href="#private-easls">Private easls</a>)</td></tr>
+            <tr><td><code>password</code></td><td>string <span class="badge badge-optional">optional</span></td><td>Password gate (4–128 chars). Works alone or stacked with <code>private</code></td></tr>
+            <tr><td><code>generatePassword</code></td><td>boolean <span class="badge badge-optional">optional</span></td><td>Set true (and omit <code>password</code>) to have easl mint a password, returned once in the response</td></tr>
           </tbody>
         </table></div>
 
@@ -534,12 +536,12 @@ export function docsPageHtml(domain: string): string {
         <p>Each publish returns a <code>claimToken</code> — save it if you need to delete the site later. Send it as the <code>X-Claim-Token</code> header on <code>DELETE /sites/:slug</code>.</p>
 
         <h2 id="private-easls">Private easls</h2>
-        <p>Public is the default. Pass <code>private: true</code> at publish time (or <code>--private</code> on the CLI, or <code>private</code> on the MCP publish tools) to gate the page behind a password.</p>
-        <p>You can supply your own <code>password</code>, or leave it out and easl generates a strong one. Either way the password is returned in the publish response under <code>password</code> — it is shown <strong>once</strong>, with no recovery.</p>
+        <p>Public is the default. Two independent, composable gates protect a page: a <strong>password gate</strong> (<code>password</code> / <code>--password</code>, anonymous-publishable) and an <strong>account gate</strong> (<code>private: true</code> / <code>--private</code>, requires login). Set either, both, or neither.</p>
+        <p>For the password gate you can supply your own <code>password</code>, or omit it and set <code>generatePassword: true</code> (CLI: <code>--password</code> with no value) to have easl mint a strong one. Either way the password is returned in the publish response under <code>password</code> — it is shown <strong>once</strong>, with no recovery.</p>
 <pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
-  -d <span class="s">'{"content":"# Confidential","contentType":"text/markdown","private":true}'</span>
-<span class="c"># → { "url": "...", "visibility": "private", "password": "dust-arch-fern-dark-1181", ... }</span></pre>
+  -d <span class="s">'{"content":"# Confidential","contentType":"text/markdown","generatePassword":true}'</span>
+<span class="c"># → { "url": "...", "visibility": "public", "password": "dust-arch-fern-dark-1181", ... }</span></pre>
         <div class="table-wrap"><table>
           <tbody>
             <tr><td><strong>Unlock</strong></td><td>Visitors enter the password once; a signed cookie keeps them in for 30 days (sliding)</td></tr>
