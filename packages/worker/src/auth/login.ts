@@ -5,6 +5,59 @@ import { isBetterAuthSecretConfigured, signCliCallbackMarker } from "../lib/sess
 
 type Ctx = Context<{ Bindings: Env }>;
 
+/** KV key prefix for the per-IP CLI-marker mint throttle. */
+const CLI_MARKER_RL_PREFIX = "cli-mark-rl:";
+
+/**
+ * Per-IP throttle on CLI-marker minting. Only the `cli_port` branch of the login
+ * page mints a worker-signed `cb` marker, and that endpoint is unauthenticated, so
+ * an attacker could otherwise harvest an unlimited supply of fresh valid markers
+ * (each one a single CSRF attempt against a logged-in victim's cli-callback). This
+ * caps minting to `MARKER_MINT_MAX` per `MARKER_MINT_WINDOW_S` per client IP, so a
+ * harvest-and-replay campaign is rate-limited at the source. The non-CLI gate flow
+ * (no `cli_port`, no marker) is never throttled — it mints nothing.
+ */
+const MARKER_MINT_MAX = 10;
+const MARKER_MINT_WINDOW_S = 10 * 60; // 10 minutes — comfortably above one real `easl login`.
+
+/**
+ * Resolve the client IP from Cloudflare's trusted edge header. `cf-connecting-ip`
+ * is set by Cloudflare (un-spoofable, single IP), the same header makeAuth keys
+ * its magic-link limiter on. Returns null when absent (e.g. the local test
+ * runtime) so the caller can skip throttling rather than collapse every client
+ * into one shared bucket.
+ */
+function clientIp(c: Ctx): string | null {
+  return c.req.header("cf-connecting-ip") ?? null;
+}
+
+/**
+ * Returns true if minting a CLI marker for this IP is allowed (and records the
+ * attempt), false if the per-IP cap is exceeded. Best-effort, KV-backed: a KV
+ * error fails OPEN (allow) — the marker is still single-use + port-bound + capped
+ * downstream, so this throttle is defense-in-depth, not the sole gate, and must not
+ * break legitimate logins on a transient KV blip. Skips (allows) when no client IP
+ * is resolvable.
+ */
+async function allowMarkerMint(c: Ctx): Promise<boolean> {
+  const ip = clientIp(c);
+  if (!ip) return true;
+  const key = `${CLI_MARKER_RL_PREFIX}${ip}`;
+  try {
+    const raw = await c.env.SITES_KV.get(key);
+    const count = raw ? Number(raw) : 0;
+    if (Number.isFinite(count) && count >= MARKER_MINT_MAX) return false;
+    // expirationTtl floors at 60s; MARKER_MINT_WINDOW_S is well above. This is a
+    // fixed-window counter — good enough to throttle a harvest campaign.
+    await c.env.SITES_KV.put(key, String((Number.isFinite(count) ? count : 0) + 1), {
+      expirationTtl: MARKER_MINT_WINDOW_S,
+    });
+    return true;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Validate the `next` redirect target so an attacker can't turn the login page
  * into an open redirect. We only allow:
@@ -101,7 +154,10 @@ export function sanitizeCliState(state: string | null | undefined): string | nul
  * The `cb` marker is a single-use, worker-SIGNED value bound to the port (see
  * lib/session.ts signCliCallbackMarker). cli-callback verifies it BEFORE minting
  * a key, so a logged-in user lured straight to /auth/cli-callback (carrying only
- * the SameSite=Lax session cookie, no marker) can't mint anything. The optional
+ * the SameSite=Lax session cookie, no marker) can't mint anything. Because THIS
+ * page is unauthenticated, marker minting is rate-limited per IP (allowMarkerMint)
+ * so an attacker can't cheaply harvest a fresh marker per CSRF attempt; over the
+ * cap we render the bare sign-in UI WITHOUT a marker (429). The optional
  * `cli_state` is the CLI-generated nonce echoed back to the loopback so the CLI
  * can reject a response not tied to THIS login attempt.
  *
@@ -117,6 +173,14 @@ export async function handleLoginPage(c: Ctx): Promise<Response> {
 
   let callbackURL: string;
   if (cliPort && isBetterAuthSecretConfigured(c.env.BETTER_AUTH_SECRET)) {
+    // Throttle marker minting per IP: this endpoint is unauthenticated, so without
+    // a cap an attacker could harvest unlimited fresh markers to fuel CSRF attempts
+    // against logged-in victims' cli-callback. Over the cap, refuse to mint a marker
+    // (429) — the bare sign-in UI still renders, but no `cb` is emitted.
+    if (!(await allowMarkerMint(c))) {
+      console.log(JSON.stringify({ event: "auth_login_page_marker_throttled" }));
+      return c.html(loginPageHtml(sanitizeNext(c.env, c.req.url, c.req.query("next"))), 429);
+    }
     const { marker } = await signCliCallbackMarker(c.env.BETTER_AUTH_SECRET, cliPort);
     const params = new URLSearchParams({ port: cliPort, cb: marker });
     if (cliState) params.set("cli_state", cliState);

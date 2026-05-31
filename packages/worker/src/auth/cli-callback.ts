@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { Env } from "../types";
-import { makeAuth, AUTH_BASE_PATH, AuthSecretUnconfiguredError, authBaseURL } from "./index";
+import { makeAuth, AUTH_BASE_PATH, AuthSecretUnconfiguredError, authBaseURL, type EaslAuth } from "./index";
 import { sanitizeCliState } from "./login";
 import {
   CLI_CALLBACK_MARKER_TTL_MS,
@@ -29,6 +29,100 @@ const CLI_KEY_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 /** KV key prefix for spent CLI-callback marker nonces (single-use enforcement). */
 const CLI_NONCE_KV_PREFIX = "cli-cb-nonce:";
+
+/** The fixed name every CLI-handshake key is minted under (see the mint below). */
+const CLI_KEY_NAME = "easl-cli";
+
+/**
+ * Max active CLI-handshake (`easl-cli`) keys to keep per account. After each
+ * successful mint we revoke all but the newest, so the account never accumulates
+ * more than this many CLI keys — the bound that turns "unbounded key sprawl" into
+ * a fixed, self-rotating ceiling.
+ *
+ * Why 1: re-running `easl login` (the only legitimate way to reach this path)
+ * always supersedes the prior CLI key, so a single newest key is all a user ever
+ * needs. Crucially this also bounds the residual CSRF: the marker is minted by the
+ * UNAUTHENTICATED login page, so an attacker who harvests a marker and rides a
+ * logged-in victim's SameSite=Lax cookie here can still trip ONE mint per harvested
+ * marker (the single-use nonce only stops re-firing the SAME marker). Capping +
+ * rotating means each such mint REVOKES the previous CLI key instead of piling up —
+ * the account holds at most one `easl-cli` key, so there is no key sprawl, only a
+ * self-healing rotation of the (attacker-never-receives-it) CLI credential.
+ */
+const MAX_ACTIVE_CLI_KEYS = 1;
+
+type ApiKeyListEntry = { id?: unknown; name?: unknown; createdAt?: unknown };
+
+/**
+ * Revoke the account's older CLI-handshake keys, keeping only the newest
+ * `MAX_ACTIVE_CLI_KEYS`. Runs after a fresh mint (the new key is the newest), so
+ * with the cap at 1 every prior `easl-cli` key is revoked.
+ *
+ * Replays the session cookie to better-auth's own `/api-key/list` + `/api-key/delete`
+ * (the same server-side-handler pattern as the mint). `/api-key/delete` enforces
+ * `referenceId === session.user.id`, so it can only ever touch THIS session owner's
+ * own keys — a harvested-marker CSRF can rotate the victim's own CLI key but never
+ * reach another account's. Best-effort: a failure here never blocks handing the
+ * freshly-minted key back to the CLI (the mint already succeeded); we only log.
+ */
+async function pruneOldCliKeys(
+  auth: EaslAuth,
+  origin: string,
+  cookie: string,
+  keepKeyId: string | undefined,
+): Promise<void> {
+  try {
+    const listRes = await auth.handler(
+      new Request(`${origin}${AUTH_BASE_PATH}/api-key/list`, { headers: { cookie } }),
+    );
+    if (!listRes.ok) {
+      console.log(JSON.stringify({ event: "cli_callback_prune_list_failed", status: listRes.status }));
+      return;
+    }
+    const listed = await listRes.json<{ apiKeys?: ApiKeyListEntry[] }>();
+    const cliKeys = (listed.apiKeys ?? [])
+      .filter((k) => typeof k.id === "string" && k.name === CLI_KEY_NAME)
+      .map((k) => ({ id: k.id as string, createdAt: toMillis(k.createdAt) }))
+      // Newest first; the just-minted key sorts to the front so it survives.
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    // Always keep the freshly-minted key even if its createdAt ties an older one.
+    const ordered = keepKeyId
+      ? [...cliKeys.filter((k) => k.id === keepKeyId), ...cliKeys.filter((k) => k.id !== keepKeyId)]
+      : cliKeys;
+
+    const toRevoke = ordered.slice(MAX_ACTIVE_CLI_KEYS);
+    for (const key of toRevoke) {
+      const delRes = await auth.handler(
+        new Request(`${origin}${AUTH_BASE_PATH}/api-key/delete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", cookie, origin },
+          body: JSON.stringify({ keyId: key.id }),
+        }),
+      );
+      if (!delRes.ok) {
+        console.log(JSON.stringify({ event: "cli_callback_prune_delete_failed", status: delRes.status }));
+      }
+    }
+    if (toRevoke.length > 0) {
+      console.log(JSON.stringify({ event: "cli_callback_keys_rotated", revoked: toRevoke.length }));
+    }
+  } catch (err) {
+    // Best-effort: never let rotation failure block the handshake.
+    console.log(JSON.stringify({ event: "cli_callback_prune_error", error: String(err) }));
+  }
+}
+
+/** Coerce a better-auth `createdAt` (Date | ISO string | epoch) to epoch ms; 0 if unknown. */
+function toMillis(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const n = Date.parse(value);
+    return Number.isNaN(n) ? 0 : n;
+  }
+  return 0;
+}
 
 /**
  * Atomically-ish claim a CLI-callback marker nonce for single use. Returns true
@@ -79,16 +173,30 @@ export function loopbackCallbackUrl(port: string | null | undefined): string | n
  *      so the waiting CLI server (auth-server.ts waitForKey) receives the key and
  *      can confirm `state` matches the value THIS login generated.
  *
- * SECURITY — why the marker gate exists: the better-auth session cookie is
- * `SameSite=Lax` with `Domain=.<DOMAIN>`, and Lax cookies ARE sent on top-level
- * cross-site GET navigations. Without the marker, a logged-in user lured to
- * `api.<DOMAIN>/auth/cli-callback?port=N` would mint an API key on the strength of
- * that cookie alone (CSRF → unbounded key sprawl). The marker is an HMAC the
- * worker itself computes when it builds the magic-link callbackURL, so a
- * cross-site navigation that merely names this URL carries no valid `cb` and is
- * rejected (403) — no key is minted. The port binding stops cross-handshake
- * replay; the single-use nonce stops replay of a captured marker; the key TTL
- * bounds the blast radius if one is ever over-minted.
+ * SECURITY — defense in depth, because no single gate fully closes the CSRF here:
+ * the better-auth session cookie is `SameSite=Lax` with `Domain=.<DOMAIN>`, and Lax
+ * cookies ARE sent on top-level cross-site GET navigations. A Sec-Fetch-Site /
+ * Origin check can NOT distinguish the attack from the real flow: the legitimate
+ * redirect into this route arrives via the email-click → /magic-link/verify → 302
+ * chain, which downgrades Sec-Fetch-Site to `cross-site` across the redirect chain
+ * (per the Fetch Metadata spec) — identical to a lured cross-site navigation. So
+ * the marker is the first gate: it is an HMAC the worker computes when it builds the
+ * magic-link callbackURL, so a cross-site navigation that merely names this URL
+ * carries no valid `cb` and is rejected (403) — no key is minted. The port binding
+ * stops cross-handshake replay; the single-use nonce stops replay of a captured
+ * marker; the key TTL bounds the blast radius of any over-mint.
+ *
+ * The residual hole the marker alone leaves: the marker is minted by the
+ * UNAUTHENTICATED login page, so an attacker can harvest a fresh, valid marker per
+ * attempt and trip ONE mint per harvest by riding a logged-in victim's Lax cookie
+ * (the single-use nonce only blocks re-firing the SAME marker). We close the stated
+ * harm — "unbounded key sprawl" — at two more layers: (1) login-page marker minting
+ * is rate-limited per IP (see login.ts allowMarkerMint), throttling the harvest; and
+ * (2) after each mint we cap + rotate the account's `easl-cli` keys to the newest
+ * one (pruneOldCliKeys), so the account NEVER accumulates more than one CLI key —
+ * each CSRF mint merely rotates the victim's own (attacker-never-receives-it) key
+ * instead of piling up. The attacker never receives the key (it 302s to 127.0.0.1),
+ * so this is a self-healing rotation nuisance, not key sprawl or takeover.
  *
  * This is the ONLY place a loopback redirect is allowed, and only to 127.0.0.1 on
  * a validated numeric port — the general open-redirect guard (login.ts sanitizeNext)
@@ -193,6 +301,14 @@ export async function handleCliCallback(c: Ctx): Promise<Response> {
     console.error(JSON.stringify({ event: "cli_callback_key_missing" }));
     return c.json({ error: "Could not create an API key for this session." }, 502);
   }
+
+  // Cap + rotate: revoke all but the newest `easl-cli` key for this account. This
+  // bounds key sprawl — the freshly minted key supersedes any prior CLI key, so a
+  // logged-in victim lured here with a harvested marker (the residual CSRF: the
+  // marker is minted by the unauthenticated login page) can only rotate the victim's
+  // OWN single CLI key, never accumulate keys on the account. /api-key/delete
+  // enforces ownership against the session, so this can't reach another account.
+  await pruneOldCliKeys(auth, origin, cookie, created.id);
 
   const target = new URL(loopback);
   target.searchParams.set("key", created.key);

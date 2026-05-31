@@ -222,10 +222,16 @@ export async function verifyShareToken(
 //
 // Why this exists: the better-auth session cookie is `SameSite=Lax`, so a
 // logged-in user lured to `api.<DOMAIN>/auth/cli-callback?port=N` via a
-// top-level cross-site GET would otherwise mint an unbounded API key on the
-// strength of that cookie alone (CSRF → key sprawl). A caller-supplied value is
-// not enough — the marker is an HMAC the worker computes itself, so a cross-site
-// navigation that simply names the URL carries no valid marker and is rejected.
+// top-level cross-site GET would otherwise mint an API key on the strength of
+// that cookie alone (CSRF → key sprawl). A caller-supplied value is not enough —
+// the marker is an HMAC the worker computes itself, so a cross-site navigation
+// that simply names the URL carries no valid marker and is rejected.
+//
+// The marker is the FIRST gate, not the whole defense: it is minted by the
+// unauthenticated login page, so an attacker can still harvest a fresh valid
+// marker per attempt. The "unbounded key sprawl" harm is closed downstream by
+// rate-limiting marker minting per IP (login.ts) and capping + rotating the
+// account's CLI keys on each mint (cli-callback.ts) — see those files.
 //
 // The marker is bound to the loopback `port` (so it can't be replayed against a
 // different CLI handshake) and carries its own expiry. Single-use is enforced

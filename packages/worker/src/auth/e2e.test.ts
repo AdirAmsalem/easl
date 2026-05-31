@@ -522,6 +522,59 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
     expect(second.status).toBe(403);
   });
 
+  it("caps + rotates CLI keys: a second handshake revokes the first key (no key sprawl)", async () => {
+    // Defense-in-depth against the residual CSRF: since the marker is minted by the
+    // UNAUTHENTICATED login page, an attacker can harvest a fresh marker per attempt
+    // and trip a mint each time. Capping + rotating the account's `easl-cli` keys to
+    // the newest one means the account never accumulates keys — each successful mint
+    // revokes the prior CLI key instead of piling up.
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const email = "rotate-cli@example.com";
+    const cookie = await signInAndGetCookie(auth, email, sent);
+    const app = probeApp();
+
+    // Complete a handshake and return the minted key from the loopback redirect.
+    async function handshake(port: number): Promise<string> {
+      const { relative } = await fetchCliCallbackTarget(port);
+      const res = await SELF.fetch(`http://localhost${relative}`, {
+        headers: { cookie },
+        redirect: "manual",
+      });
+      expect(res.status).toBe(302);
+      const key = new URL(res.headers.get("location")!).searchParams.get("key");
+      expect(key).toBeTruthy();
+      return key!;
+    }
+    const keyResolves = async (key: string): Promise<boolean> => {
+      const res = await app.request(
+        "http://localhost/whoami",
+        { headers: { authorization: `Bearer ${key}` } },
+        testEnv,
+      );
+      const body = await res.json<{ user: { email?: string } | null }>();
+      return body.user?.email === email;
+    };
+
+    // First login mints key #1, which resolves.
+    const key1 = await handshake(51100);
+    expect(await keyResolves(key1)).toBe(true);
+
+    // A second login (e.g. an attacker tripping a mint, or a real re-login) mints
+    // key #2 and rotates key #1 OUT — only the newest CLI key survives.
+    const key2 = await handshake(51101);
+    expect(await keyResolves(key2)).toBe(true);
+    expect(await keyResolves(key1)).toBe(false);
+
+    // The account holds at most one active `easl-cli` key, regardless of how many
+    // handshakes (markers) were tripped.
+    const listRes = await auth.handler(
+      new Request("https://api.easl.dev/auth/api-key/list", { headers: { cookie } }),
+    );
+    const listed = await listRes.json<{ apiKeys: Array<{ id: string; name: string | null }> }>();
+    expect(listed.apiKeys.filter((k) => k.name === "easl-cli").length).toBe(1);
+  });
+
   it("bounces back to the sign-in page (preserving cli_port + cli_state) when no session is present", async () => {
     const port = 49000;
     const cliState = "no-session-state-0000001";
@@ -594,5 +647,32 @@ describe("login page wiring for the CLI handshake", () => {
     const html = await res.text();
     expect(html).toContain('data-next="http://localhost/s/my-slug"');
     expect(html).not.toContain("cli-callback");
+  });
+
+  it("rate-limits marker minting per IP so an attacker can't harvest unlimited markers (429, no cb)", async () => {
+    // The marker is minted by THIS unauthenticated page, so without a cap an
+    // attacker could harvest unlimited fresh markers to fuel CSRF attempts against a
+    // logged-in victim's cli-callback. The per-IP throttle (allowMarkerMint, max 10)
+    // caps the harvest; over the cap the page renders the bare sign-in UI with NO
+    // marker and a 429. cf-connecting-ip is the trusted edge header the throttle keys
+    // on (a unique IP isolates this test's bucket from the rest of the suite).
+    const ip = "203.0.113.99"; // TEST-NET-3, distinct from any other test's IP.
+    const port = 53000;
+    const fire = () =>
+      SELF.fetch(`http://localhost/auth/login?cli_port=${port}`, {
+        headers: { "cf-connecting-ip": ip },
+      });
+
+    // The first 10 mints succeed and each embeds a worker-signed marker.
+    for (let i = 0; i < 10; i++) {
+      const res = await fire();
+      expect(res.status, `mint ${i + 1} should succeed`).toBe(200);
+      expect(await res.text()).toContain("/auth/cli-callback");
+    }
+
+    // The 11th is throttled: 429, bare sign-in UI, and crucially NO cb marker.
+    const blocked = await fire();
+    expect(blocked.status).toBe(429);
+    expect(await blocked.text()).not.toContain("cli-callback");
   });
 });
