@@ -214,6 +214,84 @@ export async function verifyShareToken(
   return { valid: true, exp };
 }
 
+// ── CLI login-handshake state marker (private easls v2, Fix B) ──────────────
+// A short-lived, worker-SIGNED marker that gates API-key minting at
+// GET /auth/cli-callback. The login page (which the worker controls) mints it
+// when it builds the magic-link `callbackURL`; the post-verify redirect carries
+// it back to cli-callback, which verifies it BEFORE minting a key.
+//
+// Why this exists: the better-auth session cookie is `SameSite=Lax`, so a
+// logged-in user lured to `api.<DOMAIN>/auth/cli-callback?port=N` via a
+// top-level cross-site GET would otherwise mint an unbounded API key on the
+// strength of that cookie alone (CSRF → key sprawl). A caller-supplied value is
+// not enough — the marker is an HMAC the worker computes itself, so a cross-site
+// navigation that simply names the URL carries no valid marker and is rejected.
+//
+// The marker is bound to the loopback `port` (so it can't be replayed against a
+// different CLI handshake) and carries its own expiry. Single-use is enforced
+// separately by consuming the embedded `nonce` in KV (see cli-callback.ts) — the
+// nonce is returned by both sign + verify for that purpose.
+// Format: `<b64url(cli|port|exp|nonce)>.<b64url(hmac)>`.
+
+/** CLI-callback marker lifetime: 15 minutes — matches the magic-link TTL it rides. */
+export const CLI_CALLBACK_MARKER_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Sign a single-use marker authorizing one `/auth/cli-callback?port=<port>` key
+ * mint. Returns `{ marker, nonce, exp }`: `marker` goes into the magic-link
+ * callbackURL, `nonce` is the single-use token to record in KV, `exp` is the
+ * absolute expiry (epoch ms). `port` MUST be the normalized numeric string.
+ */
+export async function signCliCallbackMarker(
+  secret: string,
+  port: string,
+  ttlMs = CLI_CALLBACK_MARKER_TTL_MS,
+): Promise<{ marker: string; nonce: string; exp: number }> {
+  const exp = Date.now() + ttlMs;
+  const nonce = b64urlEncode(crypto.getRandomValues(new Uint8Array(18)));
+  const payload = `cli|${port}|${exp}|${nonce}`;
+  const sig = await hmac(secret, payload);
+  const marker = `${b64urlEncode(new TextEncoder().encode(payload))}.${b64urlEncode(sig)}`;
+  return { marker, nonce, exp };
+}
+
+/**
+ * Verify a CLI-callback marker against the expected `port`. Returns
+ * `{ valid, nonce?, exp? }`. Invalid signatures, expired markers, and port
+ * mismatches all return `{ valid: false }`. The caller is still responsible for
+ * enforcing single-use by consuming `nonce` (a valid signature only proves the
+ * worker issued the marker, not that it hasn't already been redeemed).
+ */
+export async function verifyCliCallbackMarker(
+  secret: string,
+  port: string,
+  value: string,
+): Promise<{ valid: boolean; nonce?: string; exp?: number }> {
+  const dot = value.indexOf(".");
+  if (dot <= 0 || dot === value.length - 1) return { valid: false };
+  const payloadB64 = value.slice(0, dot);
+  const sigB64 = value.slice(dot + 1);
+  const payloadBytes = b64urlDecode(payloadB64);
+  const sigBytes = b64urlDecode(sigB64);
+  if (!payloadBytes || !sigBytes) return { valid: false };
+  const payload = new TextDecoder().decode(payloadBytes);
+  const expectedSig = await hmac(secret, payload);
+  if (!constantTimeEqual(b64urlEncode(sigBytes), b64urlEncode(expectedSig))) {
+    return { valid: false };
+  }
+  // Payload fields never contain "|": the literal "cli", a numeric port, a
+  // numeric exp, and a b64url nonce.
+  const parts = payload.split("|");
+  if (parts.length !== 4) return { valid: false };
+  const [tag, markerPort, expStr, nonce] = parts;
+  if (tag !== "cli") return { valid: false };
+  if (markerPort !== port) return { valid: false };
+  const exp = Number(expStr);
+  if (!Number.isInteger(exp) || exp <= Date.now()) return { valid: false };
+  if (!nonce) return { valid: false };
+  return { valid: true, nonce, exp };
+}
+
 async function hmac(secret: string, payload: string): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     "raw",

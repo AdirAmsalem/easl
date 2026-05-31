@@ -8,9 +8,11 @@ import {
   isSessionSecretConfigured,
   parseCookieHeader,
   passwordFingerprint,
+  signCliCallbackMarker,
   signCookie,
   signShareToken,
   unlockCookieName,
+  verifyCliCallbackMarker,
   verifyCookie,
   verifyShareToken,
 } from "./session";
@@ -211,5 +213,51 @@ describe("buildSetCookie", () => {
 describe("unlockCookieName", () => {
   it("namespaces by slug", () => {
     expect(unlockCookieName("abc-def")).toBe("easl_pk_abc-def");
+  });
+});
+
+describe("signCliCallbackMarker + verifyCliCallbackMarker", () => {
+  it("round-trips for the same port and yields a single-use nonce", async () => {
+    const { marker, nonce, exp } = await signCliCallbackMarker(SECRET, "51234");
+    expect(nonce).toBeTruthy();
+    expect(exp).toBeGreaterThan(Date.now());
+    const result = await verifyCliCallbackMarker(SECRET, "51234", marker);
+    expect(result.valid).toBe(true);
+    expect(result.nonce).toBe(nonce);
+  });
+
+  it("rejects a marker bound to a different port (no cross-handshake replay)", async () => {
+    const { marker } = await signCliCallbackMarker(SECRET, "51234");
+    const result = await verifyCliCallbackMarker(SECRET, "49999", marker);
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects a marker signed with a different secret (forgery)", async () => {
+    const { marker } = await signCliCallbackMarker(SECRET, "51234");
+    const result = await verifyCliCallbackMarker("a-different-secret", "51234", marker);
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects an expired marker", async () => {
+    const { marker } = await signCliCallbackMarker(SECRET, "51234", -1000);
+    const result = await verifyCliCallbackMarker(SECRET, "51234", marker);
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects garbage / tampered marker shapes", async () => {
+    expect((await verifyCliCallbackMarker(SECRET, "51234", "")).valid).toBe(false);
+    expect((await verifyCliCallbackMarker(SECRET, "51234", "nodot")).valid).toBe(false);
+    expect((await verifyCliCallbackMarker(SECRET, "51234", "a.b.c")).valid).toBe(false);
+    const { marker } = await signCliCallbackMarker(SECRET, "51234");
+    // Flip the signature half → no longer verifies.
+    const [payload] = marker.split(".");
+    expect((await verifyCliCallbackMarker(SECRET, "51234", `${payload}.deadbeef`)).valid).toBe(false);
+  });
+
+  it("issues a distinct nonce + marker on each call (markers are not deterministic)", async () => {
+    const a = await signCliCallbackMarker(SECRET, "51234");
+    const b = await signCliCallbackMarker(SECRET, "51234");
+    expect(a.nonce).not.toBe(b.nonce);
+    expect(a.marker).not.toBe(b.marker);
   });
 });

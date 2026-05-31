@@ -1,11 +1,33 @@
 import { createServer, type Server } from 'node:http';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import type { AddressInfo } from 'node:net';
+
+/** Constant-time string compare (length-safe) for the state nonce check. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
 
 /** Default loopback host. Bound to 127.0.0.1 only — never exposed off-box. */
 const CALLBACK_HOST = '127.0.0.1';
 
 /** Path the browser handshake redirects back to with the minted API key. */
 export const CALLBACK_PATH = '/callback';
+
+/**
+ * Generate a random, URL-safe state nonce for the login handshake. The CLI threads
+ * it through the sign-in URL (`cli_state`), the worker echoes it back on the
+ * loopback redirect (`state`), and this server rejects any /callback whose state
+ * doesn't match — so a local page racing the ephemeral port during the login
+ * window can't inject an attacker-owned key. base64url of 24 random bytes (32
+ * chars) fits the worker's sanitizeCliState shape (`[A-Za-z0-9_-]{16,128}`).
+ */
+export function generateState(): string {
+  return randomBytes(24).toString('base64url');
+}
 
 export interface CallbackResult {
   /** The full `easl_<…>` API key handed back by the browser handshake. */
@@ -57,8 +79,17 @@ h1{font-size:1.125rem;margin:0 0 .5rem}p{color:#b91c1c;font-size:.9rem;margin:0}
  * Bound to 127.0.0.1 on an ephemeral port so nothing off the machine can reach it,
  * and the port is chosen by the OS to avoid collisions. `timeoutMs` bounds the
  * wait so a never-completed sign-in doesn't hang the CLI forever.
+ *
+ * `expectedState` (when provided) binds the callback to THIS login attempt: the
+ * server rejects any /callback whose `state` query param doesn't match it. The
+ * caller passes the same value to the sign-in page as `cli_state` and the worker
+ * echoes it back, so a different local page that scans the ephemeral port and
+ * fires its own /callback (with an attacker key but no/wrong state) is refused.
  */
-export async function startCallbackServer(timeoutMs = 5 * 60_000): Promise<CallbackServer> {
+export async function startCallbackServer(
+  timeoutMs = 5 * 60_000,
+  expectedState?: string,
+): Promise<CallbackServer> {
   let resolveKey: (r: CallbackResult) => void;
   let rejectKey: (e: Error) => void;
   const keyPromise = new Promise<CallbackResult>((resolve, reject) => {
@@ -74,6 +105,20 @@ export async function startCallbackServer(timeoutMs = 5 * 60_000): Promise<Callb
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('Not found');
       return;
+    }
+    // Reject any response not tied to THIS login attempt. Checked BEFORE reading
+    // the key so a mismatched-state request can never inject a credential — even a
+    // page that races the ephemeral port and supplies a `key` is refused.
+    if (expectedState) {
+      const state = url.searchParams.get('state')?.trim();
+      if (!state || !timingSafeEqualStr(state, expectedState)) {
+        res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(ERROR_HTML);
+        // Don't reject the wait: a stray/forged hit must not abort a still-pending
+        // legitimate sign-in. The real callback (matching state) still resolves it;
+        // the overall timeout bounds the wait if none ever arrives.
+        return;
+      }
     }
     const apiKey = url.searchParams.get('key')?.trim();
     if (!apiKey) {

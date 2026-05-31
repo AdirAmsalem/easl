@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Env } from "../types";
-import { sanitizeNext, sanitizeCliPort } from "./login";
+import { sanitizeNext, sanitizeCliPort, sanitizeCliState } from "./login";
 
 // Only DOMAIN is read by sanitizeNext; cast a minimal stub through Env.
 const env = { DOMAIN: "easl.dev" } as unknown as Env;
@@ -71,5 +71,26 @@ describe("sanitizeCliPort (easl login handshake port validation)", () => {
     expect(sanitizeCliPort("80abc")).toBeNull();
     expect(sanitizeCliPort("80/../evil")).toBeNull();
     expect(sanitizeCliPort("-1")).toBeNull();
+  });
+});
+
+describe("sanitizeCliState (CLI handshake state nonce validation)", () => {
+  it("accepts an opaque URL-safe token of bounded length", () => {
+    const ok = "abcDEF012_-abcDEF012"; // 20 chars, base64url-shaped
+    expect(sanitizeCliState(ok)).toBe(ok);
+    expect(sanitizeCliState("a".repeat(16))).toBe("a".repeat(16));
+    expect(sanitizeCliState("Z9_-".repeat(32))).toBe("Z9_-".repeat(32)); // 128 chars
+  });
+
+  it("rejects absent, too-short/long, or injection-shaped values", () => {
+    expect(sanitizeCliState(null)).toBeNull();
+    expect(sanitizeCliState(undefined)).toBeNull();
+    expect(sanitizeCliState("")).toBeNull();
+    expect(sanitizeCliState("short")).toBeNull(); // < 16
+    expect(sanitizeCliState("a".repeat(129))).toBeNull(); // > 128
+    // Characters that could break out of the query param / smuggle extra params.
+    expect(sanitizeCliState("abcdef0123456789&key=evil")).toBeNull();
+    expect(sanitizeCliState("abcdef0123456789/../x")).toBeNull();
+    expect(sanitizeCliState("abcdef0123456789 with space")).toBeNull();
   });
 });

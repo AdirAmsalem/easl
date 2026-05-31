@@ -352,18 +352,46 @@ describe("api-key requests are not per-key rate limited", () => {
 // to the CLI's loopback. This is the server side the CLI's loopback server waits on.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Fetch the login page for a CLI handshake and pull out the worker-signed `cb`
+ * marker (+ the relative cli-callback path) it embedded in the callbackURL. This
+ * is exactly what better-auth carries through magic-link verify and 302s the
+ * browser to — so the test drives the real, worker-issued marker rather than
+ * fabricating one.
+ */
+async function fetchCliCallbackTarget(
+  port: number,
+  cliState?: string,
+): Promise<{ relative: string; cb: string }> {
+  const qs = new URLSearchParams({ cli_port: String(port) });
+  if (cliState) qs.set("cli_state", cliState);
+  const res = await SELF.fetch(`http://localhost/auth/login?${qs.toString()}`);
+  expect(res.status).toBe(200);
+  const html = await res.text();
+  const m = html.match(/data-next="([^"]*\/auth\/cli-callback[^"]*)"/);
+  expect(m, "login page should embed a cli-callback callbackURL").toBeTruthy();
+  // data-next is HTML-escaped (& → &amp;); unescape to a usable path.
+  const relative = m![1].replace(/&amp;/g, "&");
+  const cb = new URL(relative, "http://localhost").searchParams.get("cb");
+  expect(cb, "callbackURL must carry a worker-signed cb marker").toBeTruthy();
+  return { relative, cb: cb! };
+}
+
 describe("CLI login handshake: GET /auth/cli-callback", () => {
-  it("mints an api-key for the session and 302s to the loopback with ?key=&id=&email=", async () => {
+  it("mints a scoped, expiring api-key and 302s to the loopback with ?key=&id=&email=&state=", async () => {
     // Establish a session the way magic-link verify would, then hit cli-callback
     // through the REAL worker (path-based routing) carrying that cookie — exactly
-    // what the browser does after better-auth redirects it to the callbackURL.
+    // what the browser does after better-auth redirects it to the callbackURL,
+    // INCLUDING the worker-signed cb marker the login page issued.
     const { sent, sender } = recordingSender();
     const auth = makeAuth(testEnv, { emailSender: sender });
     const email = "cli-handshake@example.com";
     const cookie = await signInAndGetCookie(auth, email, sent);
 
     const port = 51234;
-    const res = await SELF.fetch(`http://localhost/auth/cli-callback?port=${port}`, {
+    const cliState = "cli-state-nonce-abc123XYZ";
+    const { relative } = await fetchCliCallbackTarget(port, cliState);
+    const res = await SELF.fetch(`http://localhost${relative}`, {
       headers: { cookie },
       redirect: "manual",
     });
@@ -383,6 +411,8 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
     expect(key!.startsWith("easl_")).toBe(true);
     expect(loc.searchParams.get("id"), "loopback URL should carry the key id").toBeTruthy();
     expect(loc.searchParams.get("email")).toBe(email);
+    // The CLI's state nonce is echoed back so the loopback can bind the response.
+    expect(loc.searchParams.get("state")).toBe(cliState);
 
     // The handed-back key is real: it resolves to the signed-in user via Bearer auth.
     const app = probeApp();
@@ -395,17 +425,82 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
     expect((await whoami.json<{ email: string }>()).email).toBe(email);
   });
 
-  it("bounces back to the sign-in page (preserving cli_port) when no session is present", async () => {
+  it("REJECTS a cross-site GET with no marker even when a valid session cookie rides in (CSRF / key sprawl)", async () => {
+    // The headline attack: a logged-in user is lured to
+    // api.<DOMAIN>/auth/cli-callback?port=N. The SameSite=Lax session cookie is
+    // sent on this top-level cross-site GET, but with NO worker-issued cb marker
+    // the request must be refused and NO key minted.
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const cookie = await signInAndGetCookie(auth, "csrf-victim@example.com", sent);
+
+    const res = await SELF.fetch("http://localhost/auth/cli-callback?port=51000", {
+      headers: { cookie },
+      redirect: "manual",
+    });
+    expect(res.status).toBe(403);
+    // Definitely no loopback redirect carrying a key.
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("REJECTS a forged/tampered marker (signature or port mismatch)", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const cookie = await signInAndGetCookie(auth, "forge@example.com", sent);
+
+    // A made-up marker value never verifies.
+    const forged = await SELF.fetch(
+      "http://localhost/auth/cli-callback?port=51001&cb=not.a.real.marker",
+      { headers: { cookie }, redirect: "manual" },
+    );
+    expect(forged.status).toBe(403);
+
+    // A genuine marker minted for one port can't be replayed against another port.
+    const { cb } = await fetchCliCallbackTarget(51002);
+    const wrongPort = await SELF.fetch(
+      `http://localhost/auth/cli-callback?port=51003&cb=${encodeURIComponent(cb)}`,
+      { headers: { cookie }, redirect: "manual" },
+    );
+    expect(wrongPort.status).toBe(403);
+  });
+
+  it("REJECTS a replayed (already-used) marker — single use", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const cookie = await signInAndGetCookie(auth, "replay@example.com", sent);
+
+    const port = 51004;
+    const { relative } = await fetchCliCallbackTarget(port);
+
+    // First redemption succeeds (mints a key, 302 to loopback).
+    const first = await SELF.fetch(`http://localhost${relative}`, {
+      headers: { cookie },
+      redirect: "manual",
+    });
+    expect(first.status).toBe(302);
+
+    // Replaying the very same callbackURL (same nonce) is refused.
+    const second = await SELF.fetch(`http://localhost${relative}`, {
+      headers: { cookie },
+      redirect: "manual",
+    });
+    expect(second.status).toBe(403);
+  });
+
+  it("bounces back to the sign-in page (preserving cli_port + cli_state) when no session is present", async () => {
     const port = 49000;
-    const res = await SELF.fetch(`http://localhost/auth/cli-callback?port=${port}`, {
+    const cliState = "no-session-state-0000001";
+    const { relative } = await fetchCliCallbackTarget(port, cliState);
+    const res = await SELF.fetch(`http://localhost${relative}`, {
       redirect: "manual",
     });
     expect(res.status).toBe(302);
     const location = res.headers.get("location")!;
     // No loopback redirect without auth — send the user back to sign in, keeping the
-    // port so a fresh magic link routes back through the handshake.
+    // port + state so a fresh magic link (with a new marker) routes back through.
     expect(location).toContain("/auth/login");
     expect(location).toContain(`cli_port=${port}`);
+    expect(location).toContain(`cli_state=${cliState}`);
     expect(location).not.toContain("127.0.0.1");
   });
 
@@ -427,14 +522,32 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("login page wiring for the CLI handshake", () => {
-  it("sets callbackURL to /auth/cli-callback?port=<port> when cli_port is present", async () => {
+  it("sets callbackURL to /auth/cli-callback?port=<port>&cb=<marker>&cli_state=<state> when cli_port is present", async () => {
     const port = 52525;
-    const res = await SELF.fetch(`http://localhost/auth/login?cli_port=${port}`);
+    const cliState = "wiring-state-nonce-12345678";
+    const res = await SELF.fetch(
+      `http://localhost/auth/login?cli_port=${port}&cli_state=${cliState}`,
+    );
     expect(res.status).toBe(200);
     const html = await res.text();
-    // The page carries the callbackURL in data-next, which its JS sends as the
-    // magic-link callbackURL — so after verify the browser lands on cli-callback.
-    expect(html).toContain(`data-next="/auth/cli-callback?port=${port}"`);
+    // The page carries the callbackURL in data-next (HTML-escaped, so & → &amp;),
+    // which its JS sends as the magic-link callbackURL — so after verify the
+    // browser lands on cli-callback WITH the worker-signed marker + echoed state.
+    const m = html.match(/data-next="([^"]*)"/);
+    expect(m).toBeTruthy();
+    const relative = m![1].replace(/&amp;/g, "&");
+    const u = new URL(relative, "http://localhost");
+    expect(u.pathname).toBe("/auth/cli-callback");
+    expect(u.searchParams.get("port")).toBe(String(port));
+    expect(u.searchParams.get("cb"), "must embed a worker-signed marker").toBeTruthy();
+    expect(u.searchParams.get("cli_state")).toBe(cliState);
+  });
+
+  it("issues a fresh, distinct marker on each login-page load (single-use, not a fixed value)", async () => {
+    const port = 52526;
+    const a = await fetchCliCallbackTarget(port);
+    const b = await fetchCliCallbackTarget(port);
+    expect(a.cb).not.toBe(b.cb);
   });
 
   it("ignores cli_port and falls back to next when cli_port is not a valid port", async () => {

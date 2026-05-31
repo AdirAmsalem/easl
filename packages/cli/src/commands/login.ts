@@ -2,7 +2,7 @@ import * as p from '@clack/prompts';
 import { Command } from '@commander-js/extra-typings';
 import pc from 'picocolors';
 import { type GlobalOpts, apiRequest, getWebUrl } from '../lib/client';
-import { startCallbackServer } from '../lib/auth-server';
+import { generateState, startCallbackServer } from '../lib/auth-server';
 import { openInBrowser } from '../lib/browser';
 import { credentialsExist, writeCredentials } from '../lib/credentials';
 import { buildHelpText } from '../lib/help-text';
@@ -93,10 +93,16 @@ export const loginCommand = new Command('login')
     // rebuilds the exact `http://127.0.0.1:<port>/callback` target server-side, and
     // its /auth/cli-callback route mints the API key after sign-in and redirects
     // there. (A loopback `next` would be rejected by the worker's open-redirect guard.)
-    const server = await startCallbackServer();
+    //
+    // A random `state` nonce binds the callback to THIS attempt: we send it as
+    // `cli_state`, the worker echoes it back as `state`, and the loopback server
+    // rejects any /callback whose state doesn't match — so a local page racing the
+    // ephemeral port can't inject an attacker-owned key.
+    const state = generateState();
+    const server = await startCallbackServer(undefined, state);
     try {
       const webUrl = getWebUrl(globalOpts.apiUrl);
-      const loginUrl = `${webUrl}/auth/login?cli_port=${server.port}`;
+      const loginUrl = `${webUrl}/auth/login?cli_port=${server.port}&cli_state=${state}`;
 
       if (isInteractive() && !globalOpts.json) {
         console.log('');

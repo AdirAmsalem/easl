@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { Env } from "../types";
 import { AUTH_BASE_PATH } from "./index";
+import { isBetterAuthSecretConfigured, signCliCallbackMarker } from "../lib/session";
 
 type Ctx = Context<{ Bindings: Env }>;
 
@@ -60,6 +61,23 @@ export function sanitizeCliPort(port: string | null | undefined): string | null 
 }
 
 /**
+ * Validate the CLI-generated `cli_state` nonce the `easl login` handshake threads
+ * through the login page (GET /auth/login?cli_port=<port>&cli_state=<state>).
+ *
+ * The CLI mints a random state, the worker echoes it back on the loopback
+ * redirect, and the CLI's loopback server rejects any /callback whose state does
+ * not match — so a local page racing the ephemeral port during the login window
+ * can't inject an attacker-owned key. We only accept an opaque, URL-safe token of
+ * bounded length (base64url/hex shaped); anything else is dropped (returns null)
+ * so a malformed value can't smuggle extra query params into the callbackURL.
+ */
+export function sanitizeCliState(state: string | null | undefined): string | null {
+  if (!state) return null;
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(state)) return null;
+  return state;
+}
+
+/**
  * Serve the magic-link sign-in page (GET /auth/login?next=<url> | ?cli_port=<port>).
  *
  * better-auth is headless — it exposes only API endpoints (/auth/sign-in/magic-link,
@@ -74,16 +92,39 @@ export function sanitizeCliPort(port: string | null | undefined): string | null 
  * token, sets the (cross-subdomain) session cookie, and redirects to that URL:
  *   - Browser gate flow: `callbackURL = next` (the denied private site) — the
  *     visitor lands back on the page they were gated from.
- *   - CLI handshake (`?cli_port=<port>`): `callbackURL = /auth/cli-callback?port=<port>`
- *     (a root-relative same-origin path sanitizeNext permits), which mints an API key
+ *   - CLI handshake (`?cli_port=<port>`): `callbackURL =
+ *     /auth/cli-callback?port=<port>&cb=<marker>[&cli_state=<state>]` (a
+ *     root-relative same-origin path sanitizeNext permits), which mints an API key
  *     and 302s to the CLI's loopback. `cli_port` takes precedence over `next` since
  *     the two flows are mutually exclusive (the CLI never sets `next`).
+ *
+ * The `cb` marker is a single-use, worker-SIGNED value bound to the port (see
+ * lib/session.ts signCliCallbackMarker). cli-callback verifies it BEFORE minting
+ * a key, so a logged-in user lured straight to /auth/cli-callback (carrying only
+ * the SameSite=Lax session cookie, no marker) can't mint anything. The optional
+ * `cli_state` is the CLI-generated nonce echoed back to the loopback so the CLI
+ * can reject a response not tied to THIS login attempt.
+ *
+ * Returns a promise: minting the marker is async (HMAC). The CLI path needs
+ * BETTER_AUTH_SECRET (cli-callback can't complete without it either), so when the
+ * secret is unconfigured we render the page WITHOUT CLI wiring — the bare sign-in
+ * UI still renders (it 503s at sign-in like any other auth route), but no
+ * unsigned cli-callback target is ever emitted.
  */
-export function handleLoginPage(c: Ctx): Response {
+export async function handleLoginPage(c: Ctx): Promise<Response> {
   const cliPort = sanitizeCliPort(c.req.query("cli_port"));
-  const callbackURL = cliPort
-    ? `${AUTH_BASE_PATH}/cli-callback?port=${cliPort}`
-    : sanitizeNext(c.env, c.req.url, c.req.query("next"));
+  const cliState = sanitizeCliState(c.req.query("cli_state"));
+
+  let callbackURL: string;
+  if (cliPort && isBetterAuthSecretConfigured(c.env.BETTER_AUTH_SECRET)) {
+    const { marker } = await signCliCallbackMarker(c.env.BETTER_AUTH_SECRET, cliPort);
+    const params = new URLSearchParams({ port: cliPort, cb: marker });
+    if (cliState) params.set("cli_state", cliState);
+    callbackURL = `${AUTH_BASE_PATH}/cli-callback?${params.toString()}`;
+  } else {
+    callbackURL = sanitizeNext(c.env, c.req.url, c.req.query("next"));
+  }
+
   console.log(JSON.stringify({ event: "auth_login_page", cli: Boolean(cliPort) }));
   return c.html(loginPageHtml(callbackURL));
 }
