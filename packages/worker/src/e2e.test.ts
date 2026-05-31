@@ -232,9 +232,11 @@ describe("private easls", () => {
   });
 
   it("unlocks with the right password, sets cookie, and serves content with it", async () => {
+    // Use markdown so the body is inlined into the rendered HTML (text/plain uses the
+    // download viewer, which embeds a file reference rather than the raw text).
     const { body } = await publish({
       content: "secret content",
-      contentType: "text/plain",
+      contentType: "text/markdown",
       private: true,
       password: "open-sesame",
     });
