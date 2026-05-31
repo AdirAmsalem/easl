@@ -90,9 +90,13 @@ export const loginCommand = new Command('login')
     // Browser handshake: spin up a loopback callback server, open the sign-in page
     // with this server's port as `cli_port`, and wait for the minted key to arrive
     // on the callback. We pass only the port (not a loopback `next` URL): the worker
-    // rebuilds the exact `http://127.0.0.1:<port>/callback` target server-side, and
-    // its /auth/cli-callback route mints the API key after sign-in and redirects
-    // there. (A loopback `next` would be rejected by the worker's open-redirect guard.)
+    // rebuilds the exact `http://127.0.0.1:<port>/callback` target server-side.
+    //
+    // After sign-in the worker's /auth/cli-callback GET renders a CONSENT page (it
+    // mints NOTHING); the user must click Authorize, which POSTs same-origin with a
+    // CSRF token and is the ONLY thing that mints the API key and redirects here.
+    // The loopback `waitForKey` timeout (5 min) comfortably covers that extra click.
+    // (A loopback `next` would be rejected by the worker's open-redirect guard.)
     //
     // A random `state` nonce binds the callback to THIS attempt: we send it as
     // `cli_state`, the worker echoes it back as `state`, and the loopback server
@@ -110,10 +114,17 @@ export const loginCommand = new Command('login')
         console.log(`  ${pc.dim(loginUrl)}`);
         console.log('');
         console.log(
-          `  ${pc.gray('If the browser does not open, paste the URL above. After signing in,')}`,
+          `  ${pc.gray('After signing in, click')} ${pc.bold('Authorize')} ${pc.gray('on the consent page to')}`,
         );
         console.log(
-          `  ${pc.gray('return here. Or run')} ${pc.blue('easl login --with-key easl_…')} ${pc.gray('with a key from the dashboard.')}`,
+          `  ${pc.gray('finish connecting this device, then return here.')}`,
+        );
+        console.log('');
+        console.log(
+          `  ${pc.gray('If the browser does not open, paste the URL above. Or run')}`,
+        );
+        console.log(
+          `  ${pc.blue('easl login --with-key easl_…')} ${pc.gray('with a key from the dashboard.')}`,
         );
         console.log('');
       }

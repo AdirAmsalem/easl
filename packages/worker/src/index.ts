@@ -8,7 +8,7 @@ import claimApi from "./api/claim";
 import feedbackApi from "./api/feedback";
 import { mountAuth } from "./auth/handler";
 import { handleLoginPage } from "./auth/login";
-import { handleCliCallback } from "./auth/cli-callback";
+import { handleCliCallback, handleCliAuthorize } from "./auth/cli-callback";
 import { serveSite } from "./serve/handler";
 import { docsPageHtml } from "./docs";
 
@@ -41,12 +41,18 @@ api.get("/health", (c) => c.json({ ok: true }));
 // mountAuth so it claims /auth/login ahead of better-auth's wildcard handler.
 api.get("/auth/login", (c) => handleLoginPage(c));
 
-// GET /auth/cli-callback — completes the `easl login` browser handshake. After the
-// magic-link verify sets the session cookie, better-auth 302s here (the login page
-// sets it as the callbackURL when `cli_port` is present); this route mints an API
-// key for the session and 302s to the CLI's loopback http://127.0.0.1:<port>/callback.
-// Registered BEFORE mountAuth so it claims this path ahead of better-auth's wildcard.
+// /auth/cli-callback — the `easl login` browser handshake, split so a GET has NO
+// side effects and minting requires an unforgeable same-origin POST:
+//   GET  — after magic-link verify, renders a same-origin CONSENT page (mints
+//          nothing); without a session it bounces back to /auth/login. This closes
+//          the residual CSRF hole where a harvested marker + the SameSite=Lax
+//          session cookie could mint a key on a logged-in victim via a cross-site GET.
+//   POST — the consent page's Authorize button submits here (same-origin) with a
+//          CSRF synchronizer token + Strict double-submit cookie; ONLY this mints
+//          the API key and 303s to the CLI's loopback http://127.0.0.1:<port>/callback.
+// Both registered BEFORE mountAuth so they claim this path ahead of better-auth's wildcard.
 api.get("/auth/cli-callback", (c) => handleCliCallback(c));
+api.post("/auth/cli-callback", (c) => handleCliAuthorize(c));
 
 // better-auth owns the rest of /auth/* (magic-link, sessions, api-keys). Mount
 // before the catch-all 404 and before the other sub-routers so it claims its prefix.

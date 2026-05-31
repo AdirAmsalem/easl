@@ -26,6 +26,10 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS "idx_apikey_configId" ON "apikey" ("configId")`,
   `CREATE INDEX IF NOT EXISTS "idx_apikey_referenceId" ON "apikey" ("referenceId")`,
   `CREATE INDEX IF NOT EXISTS "idx_apikey_key" ON "apikey" ("key")`,
+  // Mirror of migrations/0004_cli_handshake.sql — atomic single-use stores for the
+  // `easl login` consent-click handshake (marker nonce + CSRF synchronizer token).
+  `CREATE TABLE IF NOT EXISTS "cli_handshake_nonce" ("nonce" text NOT NULL PRIMARY KEY, "expires_at" integer NOT NULL, "created_at" integer NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS "cli_csrf_token" ("token" text NOT NULL PRIMARY KEY, "session_id" text NOT NULL, "expires_at" integer NOT NULL, "created_at" integer NOT NULL)`,
 ];
 
 beforeAll(async () => {

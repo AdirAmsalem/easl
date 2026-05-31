@@ -383,8 +383,13 @@ describe("api-key requests are not per-key rate limited", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// `easl login` browser handshake — GET /auth/cli-callback mints a key + redirects
-// to the CLI's loopback. This is the server side the CLI's loopback server waits on.
+// `easl login` browser handshake — split for CSRF safety:
+//   GET  /auth/cli-callback — renders the same-origin CONSENT page (mints nothing).
+//   POST /auth/cli-callback — the Authorize click; the ONLY thing that mints a key
+//                             and 303s to the CLI's loopback. Requires a CSRF
+//                             synchronizer token + Strict double-submit cookie.
+// These tests assert the close (a GET mints nothing; a POST without a valid CSRF
+// token is refused), not just the happy path.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -412,12 +417,91 @@ async function fetchCliCallbackTarget(
   return { relative, cb: cb! };
 }
 
-describe("CLI login handshake: GET /auth/cli-callback", () => {
-  it("mints a scoped, expiring api-key and 302s to the loopback with ?key=&id=&email=&state=", async () => {
-    // Establish a session the way magic-link verify would, then hit cli-callback
-    // through the REAL worker (path-based routing) carrying that cookie — exactly
-    // what the browser does after better-auth redirects it to the callbackURL,
-    // INCLUDING the worker-signed cb marker the login page issued.
+/** Extract the value of a hidden input from the consent page HTML. */
+function hiddenField(html: string, name: string): string | null {
+  // The consent page renders `<input type="hidden" name="<name>" value="...">`.
+  const re = new RegExp(`name="${name}"[^>]*value="([^"]*)"`);
+  const m = html.match(re);
+  return m ? m[1].replace(/&amp;/g, "&") : null;
+}
+
+/** Pull the `easl_cli_csrf` cookie name=value out of a consent-page Set-Cookie. */
+function csrfCookieFromSetCookie(setCookie: string | null): string | null {
+  if (!setCookie) return null;
+  for (const part of setCookie.split(/,(?=[^ ;]+=)/)) {
+    const pair = part.split(";")[0].trim();
+    if (pair.startsWith("easl_cli_csrf=")) return pair;
+  }
+  return null;
+}
+
+/**
+ * Render the consent page for a (port, cliState) and return everything needed to
+ * drive the Authorize POST: the form fields, the CSRF double-submit cookie, and the
+ * combined Cookie header (session + CSRF) the browser would send back same-origin.
+ */
+async function getConsent(
+  cookie: string,
+  port: number,
+  cliState?: string,
+): Promise<{
+  status: number;
+  html: string;
+  setCookie: string | null;
+  csrfCookiePair: string | null;
+  fields: { csrf: string | null; cb: string | null; port: string | null; cli_state: string | null };
+  postHeaders: Record<string, string>;
+  postBody: string;
+}> {
+  const { relative } = await fetchCliCallbackTarget(port, cliState);
+  const res = await SELF.fetch(`http://localhost${relative}`, {
+    headers: { cookie },
+    redirect: "manual",
+  });
+  const html = res.status === 200 ? await res.text() : "";
+  const setCookie = res.headers.get("set-cookie");
+  const csrfCookiePair = csrfCookieFromSetCookie(setCookie);
+  const fields = {
+    csrf: hiddenField(html, "csrf"),
+    cb: hiddenField(html, "cb"),
+    port: hiddenField(html, "port"),
+    cli_state: hiddenField(html, "cli_state"),
+  };
+  const body = new URLSearchParams();
+  if (fields.csrf) body.set("csrf", fields.csrf);
+  if (fields.cb) body.set("cb", fields.cb);
+  if (fields.port) body.set("port", fields.port);
+  if (fields.cli_state) body.set("cli_state", fields.cli_state);
+  return {
+    status: res.status,
+    html,
+    setCookie,
+    csrfCookiePair,
+    fields,
+    postHeaders: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      // The browser sends back BOTH the session cookie and the Strict CSRF cookie.
+      cookie: csrfCookiePair ? `${cookie}; ${csrfCookiePair}` : cookie,
+    },
+    postBody: body.toString(),
+  };
+}
+
+/** POST the Authorize form (same-origin) and return the raw response. */
+function postAuthorize(headers: Record<string, string>, body: string): Promise<Response> {
+  return SELF.fetch("http://localhost/auth/cli-callback", {
+    method: "POST",
+    headers,
+    body,
+    redirect: "manual",
+  });
+}
+
+describe("CLI login handshake: consent-click flow", () => {
+  it("happy path: login → consent GET → Authorize POST → 303 to loopback with ?key=&id=&email=&state=", async () => {
+    // Establish a session the way magic-link verify would, then walk the full
+    // browser flow through the REAL worker: GET renders the consent page, the
+    // Authorize POST mints the key and 303s to the CLI's loopback.
     const { sent, sender } = recordingSender();
     const auth = makeAuth(testEnv, { emailSender: sender });
     const email = "cli-handshake@example.com";
@@ -425,17 +509,22 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
 
     const port = 51234;
     const cliState = "cli-state-nonce-abc123XYZ";
-    const { relative } = await fetchCliCallbackTarget(port, cliState);
-    const res = await SELF.fetch(`http://localhost${relative}`, {
-      headers: { cookie },
-      redirect: "manual",
-    });
-    expect(res.status).toBe(302);
+    const consent = await getConsent(cookie, port, cliState);
+    expect(consent.status).toBe(200);
+    // The consent page is the security boundary: it must be unframeable + uncached.
+    // (Header assertions live in their own test below; here assert the form wiring.)
+    expect(consent.fields.csrf, "consent page must embed a CSRF token").toBeTruthy();
+    expect(consent.csrfCookiePair, "consent page must set a Strict CSRF cookie").toBeTruthy();
+    expect(consent.fields.cli_state).toBe(cliState);
+    expect(consent.html).toContain("Authorize");
+
+    const res = await postAuthorize(consent.postHeaders, consent.postBody);
+    // 303 so the browser follows the loopback with a GET.
+    expect(res.status).toBe(303);
 
     const location = res.headers.get("location");
-    expect(location, "cli-callback should redirect to the loopback").toBeTruthy();
+    expect(location, "authorize POST should redirect to the loopback").toBeTruthy();
     const loc = new URL(location!);
-    // Redirect target is locked to the CLI's loopback on the requested port.
     expect(loc.protocol).toBe("http:");
     expect(loc.hostname).toBe("127.0.0.1");
     expect(loc.port).toBe(String(port));
@@ -446,7 +535,6 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
     expect(key!.startsWith("easl_")).toBe(true);
     expect(loc.searchParams.get("id"), "loopback URL should carry the key id").toBeTruthy();
     expect(loc.searchParams.get("email")).toBe(email);
-    // The CLI's state nonce is echoed back so the loopback can bind the response.
     expect(loc.searchParams.get("state")).toBe(cliState);
 
     // The handed-back key is real: it resolves to the signed-in user via Bearer auth.
@@ -460,88 +548,189 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
     expect((await whoami.json<{ email: string }>()).email).toBe(email);
   });
 
-  it("REJECTS a cross-site GET with no marker even when a valid session cookie rides in (CSRF / key sprawl)", async () => {
-    // The headline attack: a logged-in user is lured to
-    // api.<DOMAIN>/auth/cli-callback?port=N. The SameSite=Lax session cookie is
-    // sent on this top-level cross-site GET, but with NO worker-issued cb marker
-    // the request must be refused and NO key minted.
+  it("GET (even authenticated, with a valid marker) MINTS NOTHING — renders the consent page only", async () => {
+    // The close: the GET has zero side effects. Even with a valid session cookie AND
+    // a genuine worker-signed marker, the GET must mint no api key — it only renders
+    // consent. This is what defangs the harvested-marker + Lax-cookie cross-site GET.
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const email = "get-no-mint@example.com";
+    const cookie = await signInAndGetCookie(auth, email, sent);
+
+    const before = await listCliKeyCount(auth, cookie);
+    const port = 51500;
+    const { relative } = await fetchCliCallbackTarget(port);
+    const res = await SELF.fetch(`http://localhost${relative}`, {
+      headers: { cookie },
+      redirect: "manual",
+    });
+    // 200 consent page, NOT a 302/303 to any loopback (no key handed back on GET).
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+    const html = await res.text();
+    expect(html).toContain("Authorize");
+    // The consent page may display the loopback port (it shows what's authorized),
+    // but it must NOT contain a minted key — the GET never mints.
+    expect(html).not.toContain("easl_");
+
+    // No api key was created by the GET.
+    const after = await listCliKeyCount(auth, cookie);
+    expect(after).toBe(before);
+  });
+
+  it("serves the consent page with anti-framing + no-store headers and a Strict CSRF cookie", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const cookie = await signInAndGetCookie(auth, "consent-headers@example.com", sent);
+
+    const { relative } = await fetchCliCallbackTarget(53500);
+    const res = await SELF.fetch(`http://localhost${relative}`, {
+      headers: { cookie },
+      redirect: "manual",
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(res.headers.get("cache-control")).toContain("no-store");
+    const setCookie = res.headers.get("set-cookie")!;
+    expect(setCookie).toContain("easl_cli_csrf=");
+    expect(setCookie).toContain("SameSite=Strict");
+    expect(setCookie).toContain("HttpOnly");
+  });
+
+  it("POST is REJECTED (403, mints nothing) when the CSRF token is missing or wrong — cross-site forgery", async () => {
+    // Simulate the cross-site forgery: the attacker can ride the Lax session cookie
+    // on a top-level POST, but cannot read the synchronizer token nor set the Strict
+    // CSRF cookie. So a POST with no CSRF (or a mismatched one) must be refused.
     const { sent, sender } = recordingSender();
     const auth = makeAuth(testEnv, { emailSender: sender });
     const cookie = await signInAndGetCookie(auth, "csrf-victim@example.com", sent);
 
-    const res = await SELF.fetch("http://localhost/auth/cli-callback?port=51000", {
-      headers: { cookie },
-      redirect: "manual",
-    });
+    const before = await listCliKeyCount(auth, cookie);
+    const port = 51000;
+    const consent = await getConsent(cookie, port);
+    expect(consent.status).toBe(200);
+
+    // (a) No CSRF cookie and no CSRF field — bare session cookie only. Refused.
+    const noCsrf = await postAuthorize(
+      { "Content-Type": "application/x-www-form-urlencoded", cookie },
+      new URLSearchParams({ cb: consent.fields.cb!, port: String(port) }).toString(),
+    );
+    expect(noCsrf.status).toBe(403);
+    expect(noCsrf.headers.get("location")).toBeNull();
+
+    // (b) A made-up CSRF field with no matching Strict cookie. Refused.
+    const wrongCsrf = await postAuthorize(
+      { "Content-Type": "application/x-www-form-urlencoded", cookie },
+      new URLSearchParams({ csrf: "totally-bogus-token", cb: consent.fields.cb!, port: String(port) }).toString(),
+    );
+    expect(wrongCsrf.status).toBe(403);
+
+    // (c) Field present + a Strict cookie that matches the field (double-submit
+    // satisfied) but the token was never issued server-side (synchronizer fails).
+    const forgedBoth = await postAuthorize(
+      {
+        "Content-Type": "application/x-www-form-urlencoded",
+        cookie: `${cookie}; easl_cli_csrf=attacker-chosen-value`,
+      },
+      new URLSearchParams({ csrf: "attacker-chosen-value", cb: consent.fields.cb!, port: String(port) }).toString(),
+    );
+    expect(forgedBoth.status).toBe(403);
+
+    // No key minted by any of the rejected POSTs.
+    expect(await listCliKeyCount(auth, cookie)).toBe(before);
+  });
+
+  it("POST is REJECTED (403) without a session even with a valid-looking CSRF pair", async () => {
+    // No session cookie at all → never mint, regardless of CSRF.
+    const res = await postAuthorize(
+      {
+        "Content-Type": "application/x-www-form-urlencoded",
+        cookie: "easl_cli_csrf=x",
+      },
+      new URLSearchParams({ csrf: "x", port: "51777" }).toString(),
+    );
     expect(res.status).toBe(403);
-    // Definitely no loopback redirect carrying a key.
     expect(res.headers.get("location")).toBeNull();
   });
 
-  it("REJECTS a forged/tampered marker (signature or port mismatch)", async () => {
+  it("POST REJECTS a forged/tampered or wrong-port marker (403)", async () => {
     const { sent, sender } = recordingSender();
     const auth = makeAuth(testEnv, { emailSender: sender });
     const cookie = await signInAndGetCookie(auth, "forge@example.com", sent);
 
-    // A made-up marker value never verifies.
-    const forged = await SELF.fetch(
-      "http://localhost/auth/cli-callback?port=51001&cb=not.a.real.marker",
-      { headers: { cookie }, redirect: "manual" },
-    );
+    // Get a valid consent page (real CSRF token + cookie) but swap the marker for a
+    // garbage value: the CSRF check passes, the marker check fails → 403, no mint.
+    const consent = await getConsent(cookie, 51001);
+    const body = new URLSearchParams({
+      csrf: consent.fields.csrf!,
+      cb: "not.a.real.marker",
+      port: "51001",
+    });
+    const forged = await postAuthorize(consent.postHeaders, body.toString());
     expect(forged.status).toBe(403);
 
-    // A genuine marker minted for one port can't be replayed against another port.
-    const { cb } = await fetchCliCallbackTarget(51002);
-    const wrongPort = await SELF.fetch(
-      `http://localhost/auth/cli-callback?port=51003&cb=${encodeURIComponent(cb)}`,
-      { headers: { cookie }, redirect: "manual" },
+    // A genuine marker minted for one port can't be redeemed against another port.
+    const consent2 = await getConsent(cookie, 51002);
+    const wrongPort = await postAuthorize(
+      consent2.postHeaders,
+      new URLSearchParams({ csrf: consent2.fields.csrf!, cb: consent2.fields.cb!, port: "51003" }).toString(),
     );
     expect(wrongPort.status).toBe(403);
   });
 
-  it("REJECTS a replayed (already-used) marker — single use", async () => {
+  it("POST REJECTS a replayed marker — single-use nonce is atomic", async () => {
     const { sent, sender } = recordingSender();
     const auth = makeAuth(testEnv, { emailSender: sender });
     const cookie = await signInAndGetCookie(auth, "replay@example.com", sent);
 
     const port = 51004;
-    const { relative } = await fetchCliCallbackTarget(port);
+    // First authorize succeeds (mints + 303). It consumes the marker nonce AND the
+    // CSRF token. A genuine re-login would mint a fresh marker; here we replay the
+    // SAME marker via a fresh consent page (new CSRF) to isolate the nonce gate.
+    const consent1 = await getConsent(cookie, port);
+    const cb = consent1.fields.cb!;
+    const first = await postAuthorize(consent1.postHeaders, consent1.postBody);
+    expect(first.status).toBe(303);
 
-    // First redemption succeeds (mints a key, 302 to loopback).
-    const first = await SELF.fetch(`http://localhost${relative}`, {
-      headers: { cookie },
-      redirect: "manual",
-    });
-    expect(first.status).toBe(302);
+    // Re-render a consent page (issues a fresh, valid CSRF) but submit the OLD,
+    // already-redeemed marker. The CSRF passes; the single-use nonce claim fails.
+    const consent2 = await getConsent(cookie, port);
+    const replay = await postAuthorize(
+      consent2.postHeaders,
+      new URLSearchParams({ csrf: consent2.fields.csrf!, cb, port: String(port) }).toString(),
+    );
+    expect(replay.status).toBe(403);
+  });
 
-    // Replaying the very same callbackURL (same nonce) is refused.
-    const second = await SELF.fetch(`http://localhost${relative}`, {
-      headers: { cookie },
-      redirect: "manual",
-    });
+  it("POST REJECTS a replayed CSRF token — synchronizer token is single-use", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const cookie = await signInAndGetCookie(auth, "csrf-replay@example.com", sent);
+
+    const consent = await getConsent(cookie, 51005);
+    // First POST consumes the CSRF token (and succeeds: 303).
+    const first = await postAuthorize(consent.postHeaders, consent.postBody);
+    expect(first.status).toBe(303);
+
+    // Replaying the SAME CSRF token (same cookie + field) is refused even though
+    // the double-submit cookie still matches — the server-side token is gone.
+    const second = await postAuthorize(consent.postHeaders, consent.postBody);
     expect(second.status).toBe(403);
   });
 
-  it("caps + rotates CLI keys: a second handshake revokes the first key (no key sprawl)", async () => {
-    // Defense-in-depth against the residual CSRF: since the marker is minted by the
-    // UNAUTHENTICATED login page, an attacker can harvest a fresh marker per attempt
-    // and trip a mint each time. Capping + rotating the account's `easl-cli` keys to
-    // the newest one means the account never accumulates keys — each successful mint
-    // revokes the prior CLI key instead of piling up.
+  it("caps + rotates CLI keys: a second authorize revokes the first key (no key sprawl)", async () => {
     const { sent, sender } = recordingSender();
     const auth = makeAuth(testEnv, { emailSender: sender });
     const email = "rotate-cli@example.com";
     const cookie = await signInAndGetCookie(auth, email, sent);
     const app = probeApp();
 
-    // Complete a handshake and return the minted key from the loopback redirect.
+    // Complete a full consent → authorize handshake and return the minted key.
     async function handshake(port: number): Promise<string> {
-      const { relative } = await fetchCliCallbackTarget(port);
-      const res = await SELF.fetch(`http://localhost${relative}`, {
-        headers: { cookie },
-        redirect: "manual",
-      });
-      expect(res.status).toBe(302);
+      const consent = await getConsent(cookie, port);
+      const res = await postAuthorize(consent.postHeaders, consent.postBody);
+      expect(res.status).toBe(303);
       const key = new URL(res.headers.get("location")!).searchParams.get("key");
       expect(key).toBeTruthy();
       return key!;
@@ -556,18 +745,13 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
       return body.user?.email === email;
     };
 
-    // First login mints key #1, which resolves.
     const key1 = await handshake(51100);
     expect(await keyResolves(key1)).toBe(true);
 
-    // A second login (e.g. an attacker tripping a mint, or a real re-login) mints
-    // key #2 and rotates key #1 OUT — only the newest CLI key survives.
     const key2 = await handshake(51101);
     expect(await keyResolves(key2)).toBe(true);
     expect(await keyResolves(key1)).toBe(false);
 
-    // The account holds at most one active `easl-cli` key, regardless of how many
-    // handshakes (markers) were tripped.
     const listRes = await auth.handler(
       new Request("https://api.easl.dev/auth/api-key/list", { headers: { cookie } }),
     );
@@ -575,7 +759,7 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
     expect(listed.apiKeys.filter((k) => k.name === "easl-cli").length).toBe(1);
   });
 
-  it("bounces back to the sign-in page (preserving cli_port + cli_state) when no session is present", async () => {
+  it("GET bounces back to the sign-in page (preserving cli_port + cli_state) when no session is present", async () => {
     const port = 49000;
     const cliState = "no-session-state-0000001";
     const { relative } = await fetchCliCallbackTarget(port, cliState);
@@ -584,12 +768,23 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
     });
     expect(res.status).toBe(302);
     const location = res.headers.get("location")!;
-    // No loopback redirect without auth — send the user back to sign in, keeping the
-    // port + state so a fresh magic link (with a new marker) routes back through.
     expect(location).toContain("/auth/login");
     expect(location).toContain(`cli_port=${port}`);
     expect(location).toContain(`cli_state=${cliState}`);
     expect(location).not.toContain("127.0.0.1");
+  });
+
+  it("GET rejects a cross-site request with no marker even with a valid session (403, consent never rendered)", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const cookie = await signInAndGetCookie(auth, "no-marker@example.com", sent);
+
+    const res = await SELF.fetch("http://localhost/auth/cli-callback?port=51900", {
+      headers: { cookie },
+      redirect: "manual",
+    });
+    expect(res.status).toBe(403);
+    expect(res.headers.get("location")).toBeNull();
   });
 
   it("rejects a missing or out-of-range port with 400 (no redirect)", async () => {
@@ -602,6 +797,15 @@ describe("CLI login handshake: GET /auth/cli-callback", () => {
     expect(bad.status).toBe(400);
   });
 });
+
+/** Count the account's active `easl-cli` keys (used to assert "no key minted"). */
+async function listCliKeyCount(auth: EaslAuth, cookie: string): Promise<number> {
+  const listRes = await auth.handler(
+    new Request("https://api.easl.dev/auth/api-key/list", { headers: { cookie } }),
+  );
+  const listed = await listRes.json<{ apiKeys: Array<{ name: string | null }> }>();
+  return listed.apiKeys.filter((k) => k.name === "easl-cli").length;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The CLI handshake's login page (GET /auth/login?cli_port=<port>) must point the
