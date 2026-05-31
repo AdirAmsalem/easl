@@ -2,7 +2,10 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { env, SELF } from "cloudflare:test";
 import type { Env } from "./types";
 import { signShareToken } from "./lib/session";
+import { makeAuth, type EaslAuth } from "./auth/index";
+import type { EmailSender } from "./auth/email";
 
+const testEnv = env as unknown as Env;
 const db = (env as unknown as Env).DB;
 // Mirror of the value injected via vitest.config.e2e.mts miniflare.bindings.
 const E2E_SESSION_SECRET = "e2e-test-session-secret-not-for-prod";
@@ -177,47 +180,43 @@ it("404 for non-existent site", async () => {
   expect((await serve("/sites/does-not-exist")).status).toBe(404);
 });
 
-describe("private easls", () => {
-  it("publishes private and returns auto-generated password", async () => {
-    const { res, body } = await publish({
-      content: "# Secret",
-      contentType: "text/markdown",
-      private: true,
-    });
-    expect(res.status).toBe(201);
-    expect(body.visibility).toBe("private");
-    expect(typeof body.password).toBe("string");
-    expect((body.password as string).length).toBeGreaterThan(8);
-    // OG image / QR are not surfaced for private sites
-    expect(body.ogImage).toBeUndefined();
-    expect(body.qrCode).toBeUndefined();
-  });
-
-  it("publishes private with caller-supplied password", async () => {
+// v1 password-only mode (now decoupled from the `private` flag in v2). A
+// password-protected site is published with `password` ALONE (no `private`):
+// visibility stays public, the password gate still applies on serve, and it is
+// anonymous-publishable exactly as in v1. The serve-side password-gate behaviour
+// (gate page, wrong/right password, sliding cookie, rotation invalidation,
+// path-based redirect) is unchanged — only how the site is created is updated.
+describe("password-protected easls (v1 password gate, no account)", () => {
+  it("publishes a password-protected site with a caller-supplied password (anonymous)", async () => {
     const { res, body } = await publish({
       content: "x",
       contentType: "text/plain",
-      private: true,
       password: "hunter22",
     });
     expect(res.status).toBe(201);
     expect(body.password).toBe("hunter22");
+    // A password gate is not an account gate — visibility stays public.
+    expect(body.visibility).toBe("public");
+    expect(body.anonymous).toBe(true);
+    // OG image / QR are not surfaced for any gated site.
+    expect(body.ogImage).toBeUndefined();
+    expect(body.qrCode).toBeUndefined();
   });
 
-  it("rejects password without private:true", async () => {
+  it("rejects a too-short password", async () => {
     const { res } = await publish({
       content: "x",
       contentType: "text/plain",
-      password: "hunter22",
+      password: "ab",
     });
     expect(res.status).toBe(400);
   });
 
-  it("renders the gate (401) for an unauthenticated viewer", async () => {
+  it("renders the gate (401) for a viewer without the password", async () => {
     const { body } = await publish({
       content: "secret content",
       contentType: "text/plain",
-      private: true,
+      password: "gate-pass",
     });
     const slug = body.slug as string;
     const res = await serve(`/s/${slug}`);
@@ -232,7 +231,6 @@ describe("private easls", () => {
     const { body } = await publish({
       content: "x",
       contentType: "text/plain",
-      private: true,
       password: "right-one",
     });
     const slug = body.slug as string;
@@ -252,7 +250,6 @@ describe("private easls", () => {
     const { body } = await publish({
       content: "secret content",
       contentType: "text/markdown",
-      private: true,
       password: "open-sesame",
     });
     const slug = body.slug as string;
@@ -287,7 +284,6 @@ describe("private easls", () => {
     const { body } = await publish({
       content: "deep content",
       contentType: "text/plain",
-      private: true,
       password: "deep-pass",
     });
     const slug = body.slug as string;
@@ -303,7 +299,6 @@ describe("private easls", () => {
     const { body } = await publish({
       content: "rotate me",
       contentType: "text/plain",
-      private: true,
       password: "first-pass",
     });
     const slug = body.slug as string;
@@ -319,7 +314,7 @@ describe("private easls", () => {
     const cookie = unlock.headers.get("Set-Cookie")!.split(";")[0];
     expect((await SELF.fetch(`http://localhost/s/${slug}`, { headers: { Cookie: cookie } })).status).toBe(200);
 
-    // Rotate the password via the owner endpoint
+    // Rotate the password via the claim-token PATCH path (sets private + password).
     const rotate = await SELF.fetch(`http://localhost/sites/${slug}/privacy`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", "X-Claim-Token": claim },
@@ -332,7 +327,9 @@ describe("private easls", () => {
     expect(after.status).toBe(401);
   });
 
-  it("PATCH /sites/:slug/privacy requires claim token", async () => {
+  it("PATCH /sites/:slug/privacy (claim-token path) sets a password gate and gates the site", async () => {
+    // Claim-token-only PATCH with private:true keeps v1 ergonomics: no account is
+    // bound (owner_id stays null), a password is generated, and the site gates on it.
     const { body } = await publish({ content: "x", contentType: "text/plain" });
     const slug = body.slug as string;
     const claim = body.claimToken as string;
@@ -354,7 +351,7 @@ describe("private easls", () => {
     expect(data.visibility).toBe("private");
     expect(typeof data.password).toBe("string");
 
-    // The site should now gate
+    // The site should now gate (password gate — owner_id stays null).
     expect((await serve(`/s/${slug}`)).status).toBe(401);
   });
 });
@@ -429,5 +426,483 @@ describe("account-private easls (account gate)", () => {
     const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`);
     expect(res.status).toBe(401);
     expect(await res.text()).toContain("This easl is private");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 2b — owner-bound publish, account-gate serve, share-links, claim.
+//
+// These drive REAL better-auth credentials: a session cookie minted by completing
+// the magic-link flow through the better-auth handler (with an injected recording
+// sender — never real email), and a Bearer API key minted off that session. The
+// minted credentials are then replayed against the full Worker via SELF.fetch.
+// makeAuth and SELF share the same per-file D1 storage, so sessions/keys persisted
+// by one resolve in the other.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Recording mock sender: captures magic-link emails, delivers nothing. */
+function recordingSender(): { sent: { text: string }[]; sender: EmailSender } {
+  const sent: { text: string }[] = [];
+  return { sent, sender: { async send(m) { sent.push({ text: m.text }); } } };
+}
+
+/** Drive a full magic-link sign-in and return { cookie, userId } for the email. */
+async function signIn(auth: EaslAuth, email: string, sent: { text: string }[]): Promise<{ cookie: string; userId: string }> {
+  const before = sent.length;
+  const signInRes = await auth.handler(
+    new Request("https://api.easl.dev/auth/sign-in/magic-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    }),
+  );
+  expect(signInRes.status).toBe(200);
+  expect(sent.length).toBe(before + 1);
+  const urlMatch = sent[sent.length - 1].text.match(/https?:\/\/\S+/);
+  const token = new URL(urlMatch![0]).searchParams.get("token")!;
+
+  // Verify WITHOUT a callbackURL → better-auth returns JSON + sets the session cookie
+  // (the redirect path leaks an unhandled rejection through the Workers wrapper).
+  const verifyRes = await auth.handler(
+    new Request(`https://api.easl.dev/auth/magic-link/verify?token=${encodeURIComponent(token)}`),
+  );
+  expect(verifyRes.status).toBe(200);
+  const setCookie = verifyRes.headers.get("set-cookie")!;
+  const cookie = setCookie
+    .split(/,(?=[^ ;]+=)/)
+    .map((c) => c.split(";")[0].trim())
+    .join("; ");
+
+  // Resolve the user id from the session.
+  const sessionRes = await auth.handler(
+    new Request("https://api.easl.dev/auth/get-session", { headers: { cookie } }),
+  );
+  const session = await sessionRes.json<{ user: { id: string } }>();
+  return { cookie, userId: session.user.id };
+}
+
+/** Mint a Bearer API key for the signed-in user (returns the raw `easl_…` key). */
+async function mintApiKey(auth: EaslAuth, cookie: string): Promise<string> {
+  const res = await auth.handler(
+    new Request("https://api.easl.dev/auth/api-key/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie, origin: "https://api.easl.dev" },
+      body: JSON.stringify({ name: "e2e" }),
+    }),
+  );
+  expect(res.status).toBe(200);
+  return (await res.json<{ key: string }>()).key;
+}
+
+describe("account-private easls (Phase 2b: owner-bound publish + serve + share + claim)", () => {
+  it("authenticated publish with private:true binds owner_id; owner views it, non-owner 403s, anon 302s", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const owner = await signIn(auth, "owner-2b@example.com", sent);
+    const ownerKey = await mintApiKey(auth, owner.cookie);
+
+    // Publish privately as the owner via Bearer (proves owner_id is set on publish).
+    const pub = await SELF.fetch("http://localhost/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", authorization: `Bearer ${ownerKey}` },
+      body: JSON.stringify({ content: "# Owned secret", contentType: "text/markdown", private: true }),
+    });
+    expect(pub.status).toBe(201);
+    const pubBody = await pub.json<Record<string, unknown>>();
+    expect(pubBody.visibility).toBe("private");
+    expect(pubBody.anonymous).toBe(false);
+    // No password gate was requested → no password surfaced (account gate only).
+    expect(pubBody.password).toBeUndefined();
+    const slug = pubBody.slug as string;
+
+    // Owner views via session cookie → 200 with content, never cacheable.
+    const ownerView = await SELF.fetch(`http://localhost/s/${slug}`, { headers: { cookie: owner.cookie } });
+    expect(ownerView.status).toBe(200);
+    expect(ownerView.headers.get("Cache-Control")).toContain("no-store");
+    expect(await ownerView.text()).toContain("Owned secret");
+
+    // Owner also views via Bearer API key.
+    const ownerBearer = await SELF.fetch(`http://localhost/s/${slug}`, {
+      headers: { authorization: `Bearer ${ownerKey}` },
+    });
+    expect(ownerBearer.status).toBe(200);
+
+    // A different authenticated user → 403 (not your easl), no content leak.
+    const other = await signIn(auth, "intruder-2b@example.com", sent);
+    const otherView = await SELF.fetch(`http://localhost/s/${slug}`, {
+      headers: { cookie: other.cookie },
+      redirect: "manual",
+    });
+    expect(otherView.status).toBe(403);
+    const otherHtml = await otherView.text();
+    expect(otherHtml).not.toContain("Owned secret");
+    expect(otherHtml).not.toContain("This easl is private"); // account gate, not the password page
+
+    // Anonymous → 302 to login.
+    const anonView = await SELF.fetch(`http://localhost/s/${slug}`, { redirect: "manual" });
+    expect(anonView.status).toBe(302);
+    expect(anonView.headers.get("Location")).toContain("/auth/login");
+  });
+
+  it("requires auth for private:true (anonymous publish → 401)", async () => {
+    const res = await SELF.fetch("http://localhost/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "x", contentType: "text/plain", private: true }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("owner mints a share-link via the API that satisfies the account gate", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const owner = await signIn(auth, "share-owner-2b@example.com", sent);
+    const ownerKey = await mintApiKey(auth, owner.cookie);
+
+    const pub = await SELF.fetch("http://localhost/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", authorization: `Bearer ${ownerKey}` },
+      body: JSON.stringify({ content: "shared markdown", contentType: "text/markdown", private: true }),
+    });
+    const slug = (await pub.json<{ slug: string }>()).slug;
+
+    // Non-owner cannot mint a share link (403).
+    const intruder = await signIn(auth, "share-intruder-2b@example.com", sent);
+    const denied = await SELF.fetch(`http://localhost/sites/${slug}/share-links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: intruder.cookie },
+      body: JSON.stringify({}),
+    });
+    expect(denied.status).toBe(403);
+
+    // Anonymous cannot mint either (401).
+    const anonMint = await SELF.fetch(`http://localhost/sites/${slug}/share-links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(anonMint.status).toBe(401);
+
+    // Owner mints a share link.
+    const minted = await SELF.fetch(`http://localhost/sites/${slug}/share-links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: owner.cookie },
+      body: JSON.stringify({ expiresIn: 3600 }),
+    });
+    expect(minted.status).toBe(201);
+    const link = await minted.json<{ url: string; token: string; expiresAt: string }>();
+    expect(link.token).toBeTruthy();
+    expect(link.url).toContain("share=");
+    expect(new Date(link.expiresAt).getTime()).toBeGreaterThan(Date.now());
+
+    // An anonymous recipient with the share token sees the content (account gate cleared).
+    const recipient = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(link.token)}`);
+    expect(recipient.status).toBe(200);
+    expect(await recipient.text()).toContain("shared markdown");
+  });
+
+  it("rejects expiresIn over the 30-day maximum", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const owner = await signIn(auth, "share-max-2b@example.com", sent);
+    const ownerKey = await mintApiKey(auth, owner.cookie);
+    const pub = await SELF.fetch("http://localhost/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", authorization: `Bearer ${ownerKey}` },
+      body: JSON.stringify({ content: "x", contentType: "text/plain", private: true }),
+    });
+    const slug = (await pub.json<{ slug: string }>()).slug;
+
+    const res = await SELF.fetch(`http://localhost/sites/${slug}/share-links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: owner.cookie },
+      body: JSON.stringify({ expiresIn: 31 * 24 * 60 * 60 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("private + password requires BOTH gates (account first, then password)", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const owner = await signIn(auth, "both-gates-2b@example.com", sent);
+    const ownerKey = await mintApiKey(auth, owner.cookie);
+
+    // Stacked: account gate (private) + password gate.
+    const pub = await SELF.fetch("http://localhost/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", authorization: `Bearer ${ownerKey}` },
+      body: JSON.stringify({
+        content: "double secret",
+        contentType: "text/markdown",
+        private: true,
+        password: "stack-pass",
+      }),
+    });
+    expect(pub.status).toBe(201);
+    const pubBody = await pub.json<{ slug: string; password: string }>();
+    expect(pubBody.password).toBe("stack-pass");
+    const slug = pubBody.slug;
+
+    // Owner authenticated but WITHOUT the password → clears Gate 1, stopped at Gate 2.
+    const gate2 = await SELF.fetch(`http://localhost/s/${slug}`, { headers: { cookie: owner.cookie } });
+    expect(gate2.status).toBe(401);
+    const gate2Html = await gate2.text();
+    expect(gate2Html).toContain("This easl is private");
+    expect(gate2Html).not.toContain("double secret");
+
+    // Anonymous (no account) → 302 to login at Gate 1 (never reaches the password page).
+    const anon = await SELF.fetch(`http://localhost/s/${slug}`, { redirect: "manual" });
+    expect(anon.status).toBe(302);
+    expect(anon.headers.get("Location")).toContain("/auth/login");
+
+    // Owner + correct password unlock → both gates satisfied → content served.
+    const unlock = await SELF.fetch(`http://localhost/s/${slug}/__unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", cookie: owner.cookie },
+      body: new URLSearchParams({ password: "stack-pass", redirect: `/s/${slug}` }).toString(),
+      redirect: "manual",
+    });
+    expect(unlock.status).toBe(303);
+    const unlockCookie = unlock.headers.get("Set-Cookie")!.split(";")[0];
+    const view = await SELF.fetch(`http://localhost/s/${slug}`, {
+      headers: { cookie: `${owner.cookie}; ${unlockCookie}` },
+    });
+    expect(view.status).toBe(200);
+    expect(await view.text()).toContain("double secret");
+  });
+
+  it("claim adopts an anonymous site into an account, then the owner can view it privately", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const owner = await signIn(auth, "claimer-2b@example.com", sent);
+
+    // Publish anonymously (public), capture the claim token.
+    const pub = await publish({ content: "# claim me", contentType: "text/markdown" });
+    const slug = pub.body.slug as string;
+    const claimToken = pub.body.claimToken as string;
+
+    // Wrong claim token → 403.
+    const badClaim = await SELF.fetch(`http://localhost/sites/${slug}/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: owner.cookie },
+      body: JSON.stringify({ claimToken: "nope" }),
+    });
+    expect(badClaim.status).toBe(403);
+
+    // Unauthenticated claim → 401.
+    const anonClaim = await SELF.fetch(`http://localhost/sites/${slug}/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ claimToken }),
+    });
+    expect(anonClaim.status).toBe(401);
+
+    // Authenticated claim with the right token → adopts the site.
+    const claim = await SELF.fetch(`http://localhost/sites/${slug}/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: owner.cookie },
+      body: JSON.stringify({ claimToken }),
+    });
+    expect(claim.status).toBe(200);
+    expect((await claim.json<{ owned: boolean }>()).owned).toBe(true);
+
+    // Now make it account-private via the owner session (no claim token needed).
+    const priv = await SELF.fetch(`http://localhost/sites/${slug}/privacy`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", cookie: owner.cookie },
+      body: JSON.stringify({ private: true }),
+    });
+    expect(priv.status).toBe(200);
+
+    // The owner can view it; an anonymous visitor is bounced to login (account gate).
+    const ownerView = await SELF.fetch(`http://localhost/s/${slug}`, { headers: { cookie: owner.cookie } });
+    expect(ownerView.status).toBe(200);
+    const anonView = await SELF.fetch(`http://localhost/s/${slug}`, { redirect: "manual" });
+    expect(anonView.status).toBe(302);
+    expect(anonView.headers.get("Location")).toContain("/auth/login");
+  });
+
+  it("revokes the old claim token on claim — it can no longer DELETE or PATCH the owned site", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const owner = await signIn(auth, "revoke-claim-2b@example.com", sent);
+
+    // Publish anonymously and capture the (about-to-be-stale) claim token.
+    const pub = await publish({ content: "# revoke me", contentType: "text/markdown" });
+    const slug = pub.body.slug as string;
+    const staleToken = pub.body.claimToken as string;
+
+    // Adopt the site into the owner's account.
+    const claim = await SELF.fetch(`http://localhost/sites/${slug}/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: owner.cookie },
+      body: JSON.stringify({ claimToken: staleToken }),
+    });
+    expect(claim.status).toBe(200);
+
+    // The old claim token must no longer authorize a privacy flip on the owned
+    // site (would otherwise let a leaked token rotate the password / reassign owner).
+    const patchWithStale = await SELF.fetch(`http://localhost/sites/${slug}/privacy`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "X-Claim-Token": staleToken },
+      body: JSON.stringify({ private: true }),
+    });
+    expect(patchWithStale.status).toBe(403);
+
+    // …nor a delete. The site is still there afterwards (owner session deletes it).
+    const delWithStale = await SELF.fetch(`http://localhost/sites/${slug}`, {
+      method: "DELETE",
+      headers: { "X-Claim-Token": staleToken },
+    });
+    expect(delWithStale.status).toBe(403);
+
+    // The owner session still works — confirming the site was not actually deleted.
+    const ownerDel = await SELF.fetch(`http://localhost/sites/${slug}`, {
+      method: "DELETE",
+      headers: { cookie: owner.cookie },
+    });
+    expect(ownerDel.status).toBe(200);
+  });
+
+  it("DELETE accepts the owner session (no claim token) for an account-owned site", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const owner = await signIn(auth, "deleter-2b@example.com", sent);
+    const ownerKey = await mintApiKey(auth, owner.cookie);
+
+    const pub = await SELF.fetch("http://localhost/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", authorization: `Bearer ${ownerKey}` },
+      body: JSON.stringify({ content: "delete me", contentType: "text/markdown", private: true }),
+    });
+    const slug = (await pub.json<{ slug: string }>()).slug;
+
+    // A non-owner session cannot delete (403).
+    const intruder = await signIn(auth, "delete-intruder-2b@example.com", sent);
+    const denied = await SELF.fetch(`http://localhost/sites/${slug}`, {
+      method: "DELETE",
+      headers: { cookie: intruder.cookie },
+    });
+    expect(denied.status).toBe(403);
+
+    // The owner session deletes it.
+    const del = await SELF.fetch(`http://localhost/sites/${slug}`, {
+      method: "DELETE",
+      headers: { cookie: owner.cookie },
+    });
+    expect(del.status).toBe(200);
+    expect((await SELF.fetch(`http://localhost/s/${slug}`, { redirect: "manual" })).status).toBe(404);
+  });
+
+  it("GET /sites/:slug surfaces visibility and never the password hash", async () => {
+    const { body } = await publish({ content: "x", contentType: "text/plain", password: "peek" });
+    const slug = body.slug as string;
+    const res = await SELF.fetch(`http://localhost/sites/${slug}`);
+    expect(res.status).toBe(200);
+    const meta = await res.json<Record<string, unknown>>();
+    expect(meta.visibility).toBe("public"); // password gate doesn't change visibility
+    expect(meta.password).toBeUndefined();
+    expect(meta.password_hash).toBeUndefined();
+    expect(meta.passwordHash).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 2b review fixes — login page exists, anonymous publish is independent of
+// BETTER_AUTH_SECRET, and the session cookie is cross-subdomain.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("GET /auth/login (the account-gate redirect target must exist)", () => {
+  it("returns a 200 HTML sign-in page (not the better-auth /auth/* 404)", async () => {
+    const slug = "login-target-e2e";
+    const next = `http://localhost/s/${slug}`;
+    const res = await SELF.fetch(`http://localhost/auth/login?next=${encodeURIComponent(next)}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("Sign in to easl");
+    // The validated same-origin `next` is embedded so the page can pass it as the
+    // magic-link callbackURL.
+    expect(html).toContain(next);
+  });
+
+  it("falls back to the apex domain for an off-site (open-redirect) next", async () => {
+    const res = await SELF.fetch(
+      `http://localhost/auth/login?next=${encodeURIComponent("https://evil.example.com/phish")}`,
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).not.toContain("evil.example.com");
+  });
+
+  it("is reachable as the account-gate redirect destination end-to-end", async () => {
+    // Insert an owned private site directly, hit it anonymously → 302 to /auth/login,
+    // then follow that Location and confirm it serves the 200 page (no dead end).
+    const { body } = await publish({ content: "x", contentType: "text/markdown" });
+    const slug = body.slug as string;
+    await db
+      .prepare(`UPDATE sites SET visibility = 'private', is_anonymous = 0, owner_id = 'login-flow-owner' WHERE slug = ?`)
+      .bind(slug)
+      .run();
+
+    const gate = await SELF.fetch(`http://localhost/s/${slug}`, { redirect: "manual" });
+    expect(gate.status).toBe(302);
+    const location = gate.headers.get("Location")!;
+    expect(location).toContain("/auth/login");
+
+    const loginPage = await SELF.fetch(new URL(location, "http://localhost").toString());
+    expect(loginPage.status).toBe(200);
+    expect(await loginPage.text()).toContain("Sign in to easl");
+  });
+});
+
+describe("anonymous publishing + claim-token mutations are independent of BETTER_AUTH_SECRET", () => {
+  // We can't unset the suite-wide BETTER_AUTH_SECRET (injected via miniflare.bindings),
+  // but the fix's load-bearing property is that a request carrying NO auth credential
+  // never constructs better-auth at all (getOptionalUser short-circuits to null before
+  // makeAuth). So a bare anonymous publish + claim-token delete, sent with zero auth
+  // headers, exercises exactly the path that previously 500'd when the secret was unset.
+  it("publishes anonymously and deletes via X-Claim-Token with no auth headers", async () => {
+    const pub = await publish({ content: "# no auth needed", contentType: "text/markdown" });
+    expect(pub.res.status).toBe(201);
+    const slug = pub.body.slug as string;
+    const claimToken = pub.body.claimToken as string;
+
+    const del = await SELF.fetch(`http://localhost/sites/${slug}`, {
+      method: "DELETE",
+      headers: { "X-Claim-Token": claimToken },
+    });
+    expect(del.status).toBe(200);
+    expect((await serve(`/s/${slug}`)).status).toBe(404);
+  });
+});
+
+describe("better-auth session cookie is scoped to the apex domain (cross-subdomain)", () => {
+  // The serve handler's account gate runs on slug.<DOMAIN>, but the magic-link flow
+  // completes on api.<DOMAIN> and the login redirect targets <DOMAIN>. A host-only
+  // cookie would never reach the slug subdomain. Assert the verify response sets the
+  // session cookie with Domain=<DOMAIN> so the browser sends it to every subdomain.
+  it("sets Domain=<DOMAIN> on the session cookie from the magic-link verify response", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+
+    const signInRes = await auth.handler(
+      new Request("https://api.easl.dev/auth/sign-in/magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "xsub-cookie@example.com" }),
+      }),
+    );
+    expect(signInRes.status).toBe(200);
+    const token = new URL(sent[sent.length - 1].text.match(/https?:\/\/\S+/)![0]).searchParams.get("token")!;
+
+    const verifyRes = await auth.handler(
+      new Request(`https://api.easl.dev/auth/magic-link/verify?token=${encodeURIComponent(token)}`),
+    );
+    expect(verifyRes.status).toBe(200);
+    const setCookie = verifyRes.headers.get("set-cookie")!;
+    expect(setCookie).toBeTruthy();
+    // env.DOMAIN is "easl.dev" (wrangler.toml [vars]); cookie must be domain-scoped.
+    expect(setCookie.toLowerCase()).toContain("domain=easl.dev");
   });
 });

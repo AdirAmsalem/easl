@@ -3,8 +3,11 @@ import { cors } from "hono/cors";
 import type { Env } from "./types";
 import publishApi from "./api/publish";
 import sitesApi from "./api/sites";
+import shareLinksApi from "./api/share-links";
+import claimApi from "./api/claim";
 import feedbackApi from "./api/feedback";
 import { mountAuth } from "./auth/handler";
+import { handleLoginPage } from "./auth/login";
 import { serveSite } from "./serve/handler";
 import { docsPageHtml } from "./docs";
 
@@ -31,11 +34,22 @@ api.get("/", (c) => c.json({
 
 api.get("/health", (c) => c.json({ ok: true }));
 
-// better-auth owns /auth/* (magic-link, sessions, api-keys). Mount before the
-// catch-all 404 and before the other sub-routers so it claims its prefix.
+// GET /auth/login — the magic-link sign-in PAGE. better-auth is headless (no HTML
+// login route), but the serve handler's account gate 302s anonymous visitors here,
+// so this must return 200 (not the better-auth /auth/* 404). Registered BEFORE
+// mountAuth so it claims /auth/login ahead of better-auth's wildcard handler.
+api.get("/auth/login", (c) => handleLoginPage(c));
+
+// better-auth owns the rest of /auth/* (magic-link, sessions, api-keys). Mount
+// before the catch-all 404 and before the other sub-routers so it claims its prefix.
 mountAuth(api);
 
 api.route("/", publishApi);
+// The more-specific /sites/:slug/share-links and /sites/:slug/claim routers are
+// mounted before sitesApi so they claim those sub-paths ahead of the generic
+// /sites/:slug GET/PATCH/DELETE handlers.
+api.route("/", shareLinksApi);
+api.route("/", claimApi);
 api.route("/", sitesApi);
 api.route("/", feedbackApi);
 

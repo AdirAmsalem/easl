@@ -128,15 +128,26 @@ export function makeAuth(env: Env, opts: MakeAuthOptions = {}): EaslAuth {
     ],
     // v2 uses magic-link only (no email/password); keep it explicitly disabled.
     emailAndPassword: { enabled: false },
-    // Resolve the client IP from Cloudflare's trusted header. better-auth's getIp
-    // defaults to ["x-forwarded-for"], which is (a) NOT populated with the client
-    // IP in the Workers runtime — so the limiter would silently disable itself in
-    // prod (getIp → null → resolveRateLimitConfig returns null) — and (b) spoofable
-    // anyway, since a client can send its own X-Forwarded-For and Cloudflare passes
-    // that through as the first comma-separated entry (which getIp picks). Keying on
-    // `cf-connecting-ip` (set by Cloudflare's edge, un-spoofable, single IP) makes
-    // the magic-link rate limit actually fire — and per real client IP — in prod.
-    advanced: { ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] } },
+    advanced: {
+      // Resolve the client IP from Cloudflare's trusted header. better-auth's getIp
+      // defaults to ["x-forwarded-for"], which is (a) NOT populated with the client
+      // IP in the Workers runtime — so the limiter would silently disable itself in
+      // prod (getIp → null → resolveRateLimitConfig returns null) — and (b) spoofable
+      // anyway, since a client can send its own X-Forwarded-For and Cloudflare passes
+      // that through as the first comma-separated entry (which getIp picks). Keying on
+      // `cf-connecting-ip` (set by Cloudflare's edge, un-spoofable, single IP) makes
+      // the magic-link rate limit actually fire — and per real client IP — in prod.
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
+      // Scope the session cookie to the apex domain so it is `Domain=.<DOMAIN>` and
+      // therefore sent to ALL subdomains, not just the host that set it. The
+      // magic-link flow completes on `api.<DOMAIN>` and the gate's login redirect
+      // targets `<DOMAIN>/auth/login`, but private sites are served from
+      // `*.<DOMAIN>` (e.g. slug.<DOMAIN>). Without a domain-scoped cookie the browser
+      // never sends the session to the slug subdomain, so the serve handler's account
+      // gate would find no session and 302-loop the owner back to login forever.
+      // (e2e uses same-origin localhost path routing, so it didn't surface this.)
+      crossSubDomainCookies: { enabled: true, domain: env.DOMAIN },
+    },
     // Enable better-auth's rate limiter so the magic-link plugin's per-path rule
     // actually fires. It defaults to ON only in production (NODE_ENV), which this
     // Worker never sets, so without this every magic-link request would be
