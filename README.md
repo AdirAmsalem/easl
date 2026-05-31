@@ -57,7 +57,8 @@ easl publish report.md
 
 easl publish data.csv --title "Q4 Results" --open
 cat logs.json | easl publish --type json
-easl publish board-update.md --private   # password-protected; password printed once
+easl publish board-update.md --generate-password   # password-protected; password printed once
+easl publish board-update.md --private             # account-private (needs `easl login`)
 easl list
 ```
 
@@ -141,14 +142,21 @@ The MCP server gives AI agents first-class publishing capabilities through the [
 
 ## Private easls
 
-Pages are public by default. Pass `private: true` (CLI: `--private`) to gate one behind a password — supply your own or let easl generate a strong one, returned once in the publish response:
+Pages are public by default. Two independent, composable gates lock one down — set either, both, or neither:
+
+- **Password gate** — `password` (CLI: `--password <pw>` or `--generate-password`). Anonymous-publishable. Visitors enter the password once, then stay unlocked for 30 days via a signed cookie. With `--generate-password` (API: `generatePassword: true`) easl mints a strong one, returned once in the publish response.
+- **Account gate** — `private: true` (CLI: `--private`). Requires `easl login` (or an API key) and binds the site to your account; only you — or someone holding a signed share link (`easl share <slug>`) — can view it.
 
 ```bash
-easl publish board-update.md --private
+easl publish board-update.md --generate-password
 # => https://cool-maze.easl.dev   password: dust-arch-fern-dark-1181
+
+easl login
+easl publish board-update.md --private                  # account-private
+easl publish board-update.md --private --password "pw"   # require BOTH gates
 ```
 
-Visitors hit a password gate, then stay unlocked for 30 days via a signed cookie. Private pages are never cached, never indexed, and skip OG-image generation. Toggle visibility or rotate the password later with `PATCH /sites/:slug/privacy`.
+Gated pages are never cached, never indexed, and skip OG-image generation. Toggle visibility or rotate the password later with `PATCH /sites/:slug/privacy` (owner session/Bearer key or claim token).
 
 ---
 
@@ -160,8 +168,8 @@ Base URL: `https://api.easl.dev`
 |--------|----------|-------------|
 | `POST` | `/publish` | Publish content — single-file shorthand or multi-file array (`private` + `password` optional) |
 | `GET` | `/sites/:slug` | Get site metadata |
-| `PATCH` | `/sites/:slug/privacy` | Toggle visibility / rotate password (requires `X-Claim-Token` header) |
-| `DELETE` | `/sites/:slug` | Delete a site (requires `X-Claim-Token` header) |
+| `PATCH` | `/sites/:slug/privacy` | Set the account gate / rotate password (owner session/Bearer key or `X-Claim-Token` header) |
+| `DELETE` | `/sites/:slug` | Delete a site (owner session/Bearer key or `X-Claim-Token` header) |
 | `POST` | `/feedback` | Submit feedback programmatically |
 
 Full API docs: [easl.dev/docs](https://easl.dev/docs)

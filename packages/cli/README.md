@@ -148,7 +148,7 @@ easl completion fish > ~/.config/fish/completions/easl.fish
 
 ## Local config
 
-Published sites and their claim tokens are tracked in `~/.config/easl/sites.json`. This enables `easl list` and `easl delete` to work without re-entering tokens. Only sites published from the current machine are tracked. For private sites, the password is stored here too so `easl open <slug>` can surface it.
+Published sites and their claim tokens are tracked in `~/.config/easl/sites.json`. This enables `easl list` and `easl delete` to work without re-entering tokens. Only sites published from the current machine are tracked. For password-protected sites, the password is stored here too so `easl open <slug>` can surface it. Account credentials (your API key) live separately in `~/.config/easl/credentials.json`.
 
 ## Agent usage
 

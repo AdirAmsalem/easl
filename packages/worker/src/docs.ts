@@ -331,8 +331,12 @@ export function docsPageHtml(domain: string): string {
 <span class="c"># Publish inline content</span>
 <span class="k">easl</span> publish --content <span class="s">"# Hello World"</span> --type markdown
 
-<span class="c"># Password-protected — password auto-generated and printed once</span>
-<span class="k">easl</span> publish board-update.md --password
+<span class="c"># Password-protected — let easl generate &amp; print one once</span>
+<span class="k">easl</span> publish board-update.md --generate-password
+<span class="c"># or choose your own: --password "spring-harbor-77"</span>
+
+<span class="c"># Account-private — only you (signed in) can view; needs easl login first</span>
+<span class="k">easl</span> publish board-update.md --private
 
 <span class="c"># JSON output for scripting</span>
 <span class="k">easl</span> publish report.md --json
@@ -347,8 +351,9 @@ export function docsPageHtml(domain: string): string {
             <tr><td><code>--title &lt;title&gt;</code></td><td>Page title</td></tr>
             <tr><td><code>--slug &lt;slug&gt;</code></td><td>Custom slug (3-48 chars)</td></tr>
             <tr><td><code>--ttl &lt;seconds&gt;</code></td><td>Time to live (default: 7 days)</td></tr>
-            <tr><td><code>--private</code></td><td>Account-private — only you (signed in) can view. Requires <code>easl login</code></td></tr>
-            <tr><td><code>--password [pw]</code></td><td>Password-protect the page. Pass a value, or use the flag alone to auto-generate one (shown once)</td></tr>
+            <tr><td><code>--private</code></td><td>Account-private — only you (signed in) can view. Requires <code>easl login</code>. Combine with a password flag to require both gates</td></tr>
+            <tr><td><code>--password &lt;pw&gt;</code></td><td>Password-protect the page with a value you choose. Works with or without <code>--private</code>. Mutually exclusive with <code>--generate-password</code></td></tr>
+            <tr><td><code>--generate-password</code></td><td>Password-protect the page with a strong password easl mints and prints once. Works with or without <code>--private</code>. Mutually exclusive with <code>--password</code></td></tr>
             <tr><td><code>--open</code></td><td>Open in browser after publishing</td></tr>
             <tr><td><code>--copy</code></td><td>Copy URL to clipboard</td></tr>
             <tr><td><code>--json</code></td><td>Force JSON output</td></tr>
@@ -422,14 +427,14 @@ export function docsPageHtml(domain: string): string {
 
         <div class="endpoint">
           <div class="method-path"><span class="method method-patch">PATCH</span> <span class="path">/sites/:slug/privacy</span></div>
-          <p class="desc">Toggle visibility and rotate the password. Body: <code>{ "private": true, "password"?: "..." }</code> — omit <code>password</code> to auto-generate one (returned once); send <code>{ "private": false }</code> to make the site public. Rotating the password invalidates existing unlock sessions.</p>
-          <p class="auth">Auth: <code>X-Claim-Token</code> header</p>
+          <p class="desc">Set the account gate and/or rotate the password gate. Body: <code>{ "private": boolean, "password"?: "..." }</code>. <code>private: true</code> sets the account gate (an <em>authenticated</em> caller also becomes/stays the owner; a claim-token-only caller gets a pure password gate as before). <code>private: false</code> makes the site public and drops the password. <code>password</code> rotates the password gate and may only be sent with <code>private: true</code> — omitting it on the claim-token path mints one (returned once), while on the owner path it leaves the password gate off. Rotating the password invalidates existing unlock sessions.</p>
+          <p class="auth">Auth: owner session/<code>Authorization: Bearer</code> key, OR <code>X-Claim-Token</code> header (claim token works only while the site is still unowned)</p>
         </div>
 
         <div class="endpoint">
           <div class="method-path"><span class="method method-delete">DELETE</span> <span class="path">/sites/:slug</span></div>
-          <p class="desc">Delete a site. Requires the claim token from the original publish response.</p>
-          <p class="auth">Auth: <code>X-Claim-Token</code> header</p>
+          <p class="desc">Delete a site.</p>
+          <p class="auth">Auth: owner session/<code>Authorization: Bearer</code> key, OR <code>X-Claim-Token</code> header (claim token works only while the site is still unowned)</p>
         </div>
 
         <!-- Feedback -->
@@ -533,21 +538,22 @@ export function docsPageHtml(domain: string): string {
             <tr><td>Inline content limit</td><td>256 KB</td></tr>
           </tbody>
         </table></div>
-        <p>Each publish returns a <code>claimToken</code> — save it if you need to delete the site later. Send it as the <code>X-Claim-Token</code> header on <code>DELETE /sites/:slug</code>.</p>
+        <p>Each publish returns a <code>claimToken</code> — save it if you need to delete or change the privacy of an anonymous site later. Send it as the <code>X-Claim-Token</code> header on <code>DELETE /sites/:slug</code> or <code>PATCH /sites/:slug/privacy</code>. (Once the site is adopted into an account via <a href="#private-easls">claiming</a>, the claim token stops working for mutations and the owner's session/Bearer key takes over.)</p>
 
         <h2 id="private-easls">Private easls</h2>
         <p>Public is the default. Two independent, composable gates protect a page: a <strong>password gate</strong> (<code>password</code> / <code>--password</code>, anonymous-publishable) and an <strong>account gate</strong> (<code>private: true</code> / <code>--private</code>, requires login). Set either, both, or neither.</p>
-        <p>For the password gate you can supply your own <code>password</code>, or omit it and set <code>generatePassword: true</code> (CLI: <code>--password</code> with no value) to have easl mint a strong one. Either way the password is returned in the publish response under <code>password</code> — it is shown <strong>once</strong>, with no recovery.</p>
+        <p>For the password gate you can supply your own <code>password</code>, or omit it and set <code>generatePassword: true</code> (CLI: <code>--generate-password</code>) to have easl mint a strong one. Either way the password is returned in the publish response under <code>password</code> — it is shown <strong>once</strong>, with no recovery.</p>
 <pre><span class="k">curl</span> -X POST https://${api}/publish \\
   -H <span class="s">"Content-Type: application/json"</span> \\
   -d <span class="s">'{"content":"# Confidential","contentType":"text/markdown","generatePassword":true}'</span>
 <span class="c"># → { "url": "...", "visibility": "public", "password": "dust-arch-fern-dark-1181", ... }</span></pre>
         <div class="table-wrap"><table>
           <tbody>
-            <tr><td><strong>Unlock</strong></td><td>Visitors enter the password once; a signed cookie keeps them in for 30 days (sliding)</td></tr>
-            <tr><td><strong>Not cached / not indexed</strong></td><td>Private pages skip the edge cache, send <code>noindex</code>, and skip OG-image generation</td></tr>
-            <tr><td><strong>Rotate or unlock</strong></td><td><code>PATCH /sites/:slug/privacy</code> with the claim token; rotating invalidates existing sessions</td></tr>
-            <tr><td><strong>CLI</strong></td><td>The password is saved to <code>~/.config/easl/sites.json</code> and shown again by <code>easl open &lt;slug&gt;</code></td></tr>
+            <tr><td><strong>Account gate</strong></td><td>An account-private site (<code>private: true</code>) 302-redirects anonymous visitors to sign in; only the owner — or someone holding a signed share link — gets through. A non-owner who is signed in gets <code>403</code></td></tr>
+            <tr><td><strong>Password gate</strong></td><td>Visitors enter the password once; a signed cookie keeps them in for 30 days (sliding). A <code>private + password</code> site requires both — share-link recipients still face the password prompt</td></tr>
+            <tr><td><strong>Not cached / not indexed</strong></td><td>Gated pages (account-private or password-protected) skip the edge cache, send <code>noindex</code>, and skip OG-image generation</td></tr>
+            <tr><td><strong>Rotate / toggle</strong></td><td><code>PATCH /sites/:slug/privacy</code> with the owner's session/Bearer key or the claim token; rotating the password invalidates existing unlock sessions</td></tr>
+            <tr><td><strong>CLI</strong></td><td>Password-protect with <code>--password &lt;pw&gt;</code> or <code>--generate-password</code>; go account-private with <code>--private</code> (after <code>easl login</code>). Passwords are saved to <code>~/.config/easl/sites.json</code> and shown again by <code>easl open &lt;slug&gt;</code></td></tr>
           </tbody>
         </table></div>
 
@@ -565,8 +571,8 @@ export function docsPageHtml(domain: string): string {
           <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
           <tbody>
             <tr><td><code>400</code></td><td>Bad request — missing or invalid parameters</td></tr>
-            <tr><td><code>401</code></td><td>Unauthorized — missing claim token, or password required to view a private page</td></tr>
-            <tr><td><code>403</code></td><td>Forbidden — invalid claim token</td></tr>
+            <tr><td><code>401</code></td><td>Unauthorized — no credential supplied (no owner session/Bearer key and no <code>X-Claim-Token</code>), <code>private: true</code> publish without auth, or password required to view a gated page</td></tr>
+            <tr><td><code>403</code></td><td>Forbidden — credential supplied but unauthorized for this site (wrong owner, or a claim token for an already-owned site)</td></tr>
             <tr><td><code>404</code></td><td>Not found — site or version doesn't exist</td></tr>
             <tr><td><code>409</code></td><td>Conflict — slug taken or version mismatch</td></tr>
             <tr><td><code>422</code></td><td>Unprocessable — invalid request</td></tr>

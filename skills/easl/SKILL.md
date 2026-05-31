@@ -6,8 +6,9 @@ description: >-
   each rendered with an interactive viewer. Use when the user wants to share,
   publish, or host generated content as a web page, create a shareable URL for
   data analysis results, reports, dashboards, tables, charts, or diagrams,
-  or when the user mentions easl. Pages are public by default; mark them
-  private to gate access behind a password. Available as CLI (`easl`),
+  or when the user mentions easl. Pages are public by default; gate them
+  behind a password (anonymous-publishable) and/or make them account-private
+  (requires sign-in). Available as CLI (`easl`),
   MCP server (`@easl/mcp`), or HTTP API.
 metadata:
   author: easl
@@ -89,8 +90,9 @@ The CLI auto-detects non-TTY environments and outputs JSON — no `--json` flag 
 | `--template <tpl>` | `minimal`, `report`, or `dashboard` |
 | `--slug <slug>` | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
 | `--ttl <seconds>` | Time to live in seconds |
-| `--private` | Account-private — only you (signed in) can view. Requires `easl login` |
-| `--password [pw]` | Password-protect the page. Pass a value, or use the flag alone to auto-generate one (shown once). Works with or without `--private` |
+| `--private` | Account-private — only you (signed in) can view. Requires `easl login`. Combine with a password flag to require both gates |
+| `--password <pw>` | Password-protect the page with a value you choose. Works with or without `--private`. Mutually exclusive with `--generate-password` |
+| `--generate-password` | Password-protect the page with a strong password easl generates and shows once. Works with or without `--private`. Mutually exclusive with `--password` |
 | `--open` | Open in browser after publishing |
 | `--copy` | Copy URL to clipboard |
 
@@ -122,8 +124,8 @@ easl publish ./my-site/
 # Custom slug
 easl publish chart.svg --slug my-chart
 
-# Password-protected — password auto-generated and printed once
-easl publish board-update.md --password
+# Password-protected — easl generates & prints the password once
+easl publish board-update.md --generate-password
 
 # Password-protected with a chosen password
 easl publish board-update.md --password "spring-harbor-77"
@@ -232,8 +234,10 @@ The `claimToken` is needed to delete the site later. The `embed` snippet provide
 
 ```
 DELETE https://api.easl.dev/sites/{slug}
-Header: X-Claim-Token: {claimToken}
+Header: X-Claim-Token: {claimToken}   // or Authorization: Bearer <owner API key>
 ```
+
+Mutating endpoints (`DELETE`, `PATCH .../privacy`) authorize via the owner's session/`Authorization: Bearer` key OR the `X-Claim-Token` header. The claim token works only while the site is still unowned — once it's claimed into an account, only the owner's session/key can mutate it.
 
 ## Private easls
 
@@ -259,11 +263,11 @@ How it behaves:
 
 ```
 PATCH https://api.easl.dev/sites/{slug}/privacy
-Header: X-Claim-Token: {claimToken}
-Body: { "private": true, "password": "new-pass" }   // omit password to auto-generate; { "private": false } makes it public
+Header: X-Claim-Token: {claimToken}   // or Authorization: Bearer <owner API key>
+Body: { "private": true, "password": "new-pass" }   // { "private": false } makes it public + drops the password
 ```
 
-Rotating the password immediately invalidates everyone's existing unlock sessions.
+`private: true` sets the account gate; an authenticated caller also becomes/stays the owner, while a claim-token-only caller gets a pure password gate. `password` may only be sent with `private: true` — omitting it on the claim-token path mints one (returned once), and on the owner path leaves the password gate off. Rotating the password immediately invalidates everyone's existing unlock sessions.
 
 ## Limits
 
