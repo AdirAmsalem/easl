@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env, SELF } from "cloudflare:test";
 import type { Env } from "./types";
-import { signShareToken } from "./lib/session";
+import { shareFingerprint, signShareToken } from "./lib/session";
 import { makeAuth, type EaslAuth } from "./auth/index";
 import type { EmailSender } from "./auth/email";
 
@@ -441,6 +441,22 @@ describe("account-private easls (account gate)", () => {
     return slug;
   }
 
+  /** Sign a share token bound to the seeded site instance (created_at + owner_id). */
+  async function signSeededShareToken(slug: string, ttlMs?: number): Promise<string> {
+    const row = await db
+      .prepare(`SELECT created_at, owner_id FROM sites WHERE slug = ?`)
+      .bind(slug)
+      .first<{ created_at: string; owner_id: string | null }>();
+    const fp = await shareFingerprint(E2E_SESSION_SECRET, {
+      createdAt: row!.created_at,
+      ownerId: row!.owner_id,
+    });
+    const { token } = ttlMs === undefined
+      ? await signShareToken(E2E_SESSION_SECRET, slug, fp)
+      : await signShareToken(E2E_SESSION_SECRET, slug, fp, ttlMs);
+    return token;
+  }
+
   it("redirects an anonymous viewer to /auth/login with a next param (no password prompt)", async () => {
     const slug = await seedOwned();
     const res = await SELF.fetch(`http://localhost/s/${slug}`, { redirect: "manual" });
@@ -455,7 +471,7 @@ describe("account-private easls (account gate)", () => {
 
   it("serves content for a valid ?share= token", async () => {
     const slug = await seedOwned();
-    const { token } = await signShareToken(E2E_SESSION_SECRET, slug);
+    const token = await signSeededShareToken(slug);
     const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toContain("no-store");
@@ -464,7 +480,7 @@ describe("account-private easls (account gate)", () => {
 
   it("rejects an expired share token (falls back to login redirect)", async () => {
     const slug = await seedOwned();
-    const { token } = await signShareToken(E2E_SESSION_SECRET, slug, -1000);
+    const token = await signSeededShareToken(slug, -1000);
     const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`, {
       redirect: "manual",
     });
@@ -474,7 +490,9 @@ describe("account-private easls (account gate)", () => {
 
   it("rejects a share token minted for a different slug", async () => {
     const slug = await seedOwned();
-    const { token } = await signShareToken(E2E_SESSION_SECRET, "some-other-slug");
+    // signShareToken with a fingerprint for a different (nonexistent) site.
+    const fp = await shareFingerprint(E2E_SESSION_SECRET, { createdAt: "2020-01-01T00:00:00Z", ownerId: null });
+    const { token } = await signShareToken(E2E_SESSION_SECRET, "some-other-slug", fp);
     const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`, {
       redirect: "manual",
     });
@@ -485,7 +503,7 @@ describe("account-private easls (account gate)", () => {
   it("share token satisfies only the account gate — a stacked password still prompts", async () => {
     // owner-bound AND password-protected: share token clears Gate 1, password gate (Gate 2) remains.
     const slug = await seedOwned({ passwordHash: "$argon2id$placeholder-never-matches" });
-    const { token } = await signShareToken(E2E_SESSION_SECRET, slug);
+    const token = await signSeededShareToken(slug);
     const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`);
     expect(res.status).toBe(401);
     const html = await res.text();
@@ -493,6 +511,120 @@ describe("account-private easls (account gate)", () => {
     // The gate form must carry the share token so the recipient's unlock POST
     // re-clears the account gate instead of dead-ending at /auth/login.
     expect(html).toContain(`share=${encodeURIComponent(token)}`);
+  });
+
+  // FIX 1 — a share token bound to a now-deleted site instance must NOT survive a
+  // delete + re-publish under the same custom slug (the new instance has a different
+  // created_at/owner_id, so the fingerprint changes and the old token is rejected).
+  it("rejects an old share token after the slug is deleted and re-published (instance fingerprint changes)", async () => {
+    const customSlug = "fp-reuse-e2e";
+    // Publish + promote to account-private, mint a valid token for this instance.
+    const { body: first } = await publish({ content: "hello", contentType: "text/markdown", slug: customSlug });
+    expect(first.slug).toBe(customSlug);
+    await db
+      .prepare(`UPDATE sites SET visibility = 'private', is_anonymous = 0, owner_id = ?, created_at = ? WHERE slug = ?`)
+      .bind("fp-owner-A", "2021-01-01T00:00:00Z", customSlug)
+      .run();
+    const oldToken = await signSeededShareToken(customSlug);
+    // The token works for the current instance.
+    const ok = await SELF.fetch(`http://localhost/s/${customSlug}?share=${encodeURIComponent(oldToken)}`);
+    expect(ok.status).toBe(200);
+
+    // Free the SAME custom slug (an owned site rejects the claim-token DELETE, so we
+    // drop the rows directly — equivalent to an owner delete for the purposes of the
+    // slug-reuse scenario), then re-publish it as a fresh instance with a different
+    // created_at + owner.
+    await db.prepare(`DELETE FROM versions WHERE slug = ?`).bind(customSlug).run();
+    await db.prepare(`DELETE FROM sites WHERE slug = ?`).bind(customSlug).run();
+    const { body: second } = await publish({ content: "hello again", contentType: "text/markdown", slug: customSlug });
+    expect(second.slug).toBe(customSlug);
+    await db
+      .prepare(`UPDATE sites SET visibility = 'private', is_anonymous = 0, owner_id = ?, created_at = ? WHERE slug = ?`)
+      .bind("fp-owner-B", "2024-06-06T00:00:00Z", customSlug)
+      .run();
+
+    // The OLD token (bound to the prior instance's fingerprint) is rejected → 302 login.
+    const stale = await SELF.fetch(`http://localhost/s/${customSlug}?share=${encodeURIComponent(oldToken)}`, {
+      redirect: "manual",
+    });
+    expect(stale.status).toBe(302);
+    expect(stale.headers.get("Location")).toContain("/auth/login");
+
+    // A CURRENT token (bound to the new instance) works.
+    const freshToken = await signSeededShareToken(customSlug);
+    const fresh = await SELF.fetch(`http://localhost/s/${customSlug}?share=${encodeURIComponent(freshToken)}`);
+    expect(fresh.status).toBe(200);
+    expect(await fresh.text()).toContain("hello again");
+  });
+
+  // FIX 2 — after a valid ?share= request, the served response sets a path-scoped
+  // share cookie so the page's subresources (fetched WITHOUT the query param) keep
+  // clearing the account gate instead of bouncing to login.
+  it("sets a share cookie so a subresource request without ?share= still passes the account gate", async () => {
+    // A multi-file private site WITHOUT an index.html → its files are served at
+    // /<path>. The recipient first hits the nav page with ?share=, then the browser
+    // fetches a sub-file with no query param — that must succeed via the cookie.
+    const { body } = await publish({
+      files: [
+        { path: "page.html", content: "<h1>shared page</h1>", contentType: "text/html" },
+        { path: "style.css", content: "body{color:green}", contentType: "text/css" },
+      ],
+    });
+    const slug = body.slug as string;
+    await db
+      .prepare(`UPDATE sites SET visibility = 'private', is_anonymous = 0, owner_id = 'subres-owner' WHERE slug = ?`)
+      .bind(slug)
+      .run();
+    const token = await signSeededShareToken(slug);
+
+    // First request carries ?share= → 200 and a Set-Cookie for the share grant.
+    const first = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`);
+    expect(first.status).toBe(200);
+    const setCookie = first.headers.get("Set-Cookie");
+    expect(setCookie).toMatch(/easl_sh_/);
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=Lax");
+    const shareCookie = setCookie!.split(";")[0];
+
+    // A subresource request WITHOUT ?share= but WITH the cookie → served (no 302 login).
+    const sub = await SELF.fetch(`http://localhost/s/${slug}/style.css`, {
+      headers: { Cookie: shareCookie },
+      redirect: "manual",
+    });
+    expect(sub.status).toBe(200);
+    expect(sub.headers.get("Content-Type")).toContain("text/css");
+    expect(await sub.text()).toBe("body{color:green}");
+    // Gated content is never cached.
+    expect(sub.headers.get("Cache-Control")).toContain("no-store");
+
+    // Sanity: the SAME subresource WITHOUT the cookie still bounces to login.
+    const noCookie = await SELF.fetch(`http://localhost/s/${slug}/style.css`, { redirect: "manual" });
+    expect(noCookie.status).toBe(302);
+    expect(noCookie.headers.get("Location")).toContain("/auth/login");
+  });
+
+  // FIX 2 — the share cookie satisfies the ACCOUNT gate ONLY; it must not bypass a
+  // stacked password gate.
+  it("share cookie does NOT bypass a password gate on a private+password site", async () => {
+    const slug = await seedOwned({ passwordHash: "$argon2id$placeholder-never-matches" });
+    const token = await signSeededShareToken(slug);
+
+    // First ?share= request → 401 password gate, but it still mints the share cookie
+    // (Gate 1 was cleared by the token).
+    const first = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`);
+    expect(first.status).toBe(401);
+    const setCookie = first.headers.get("Set-Cookie");
+    expect(setCookie).toMatch(/easl_sh_/);
+    const shareCookie = setCookie!.split(";")[0];
+
+    // A follow-up request carrying ONLY the share cookie (no password unlock cookie)
+    // still hits the password gate — the share cookie cannot bypass Gate 2.
+    const sub = await SELF.fetch(`http://localhost/s/${slug}`, {
+      headers: { Cookie: shareCookie },
+    });
+    expect(sub.status).toBe(401);
+    const html = await sub.text();
+    expect(html).toContain("This easl is private");
   });
 });
 

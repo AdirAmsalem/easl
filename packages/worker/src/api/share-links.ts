@@ -4,6 +4,7 @@ import { siteUrl } from "../lib/url";
 import { getOptionalUser } from "../auth/middleware";
 import {
   isSessionSecretConfigured,
+  shareFingerprint,
   signShareToken,
   SHARE_TOKEN_DEFAULT_TTL_MS,
   SHARE_TOKEN_MAX_TTL_MS,
@@ -67,7 +68,13 @@ app.post("/sites/:slug/share-links", async (c) => {
     ttlSeconds = body.expiresIn;
   }
 
-  const { token, exp } = await signShareToken(c.env.SESSION_SECRET, slug, ttlSeconds * 1000);
+  // Bind the token to this site INSTANCE (created_at + owner_id) so it does not
+  // survive a delete + re-publish that reuses the same custom slug.
+  const fingerprint = await shareFingerprint(c.env.SESSION_SECRET, {
+    createdAt: site.created_at,
+    ownerId: site.owner_id,
+  });
+  const { token, exp } = await signShareToken(c.env.SESSION_SECRET, slug, fingerprint, ttlSeconds * 1000);
   const base = siteUrl(c.req.url, c.env, slug);
   const url = `${base}?share=${encodeURIComponent(token)}`;
   const expiresAt = new Date(exp).toISOString();

@@ -11,11 +11,28 @@ import {
   isUnlocked,
   renderGatePage,
 } from "./gate";
-import { isSessionSecretConfigured, verifyShareToken } from "../lib/session";
+import {
+  buildSetCookie,
+  isSessionSecretConfigured,
+  parseCookieHeader,
+  shareCookieName,
+  shareFingerprint,
+  signShareCookie,
+  verifyShareCookie,
+  verifyShareToken,
+} from "../lib/session";
 import { makeAuth, AuthSecretUnconfiguredError } from "../auth/index";
 
 /** Query param that carries a signed share token granting account-gate access. */
 const SHARE_PARAM = "share";
+
+/**
+ * Cap for the path-scoped share cookie set after a valid `?share=<token>` request,
+ * so the page's subresources (which the browser fetches without the query param)
+ * keep clearing the account gate. Capped to the token's remaining lifetime at the
+ * call site so the cookie can never outlive the share link it rode in on.
+ */
+const SHARE_COOKIE_MAX_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export async function serveSite(
   request: Request,
@@ -101,12 +118,17 @@ async function serveSiteInner(
   // before the password gate, so randoms can't learn that the slug exists.
   // `shareToken` is set only when the gate was cleared by a valid share token;
   // a stacked password gate carries it onto the unlock form so the recipient's
-  // POST re-clears the account gate.
+  // POST re-clears the account gate. `setShareCookie` is set only when a fresh
+  // `?share=<token>` cleared the gate this request — it is appended to the served
+  // response so the page's subresource requests (sent without the query param)
+  // keep clearing the account gate via the cookie.
   let shareToken: string | undefined;
+  let setShareCookie: string | undefined;
   if (accountRequired) {
-    const accountResult = await resolveAccountGate(request, env, slug, meta, url, fullPath);
+    const accountResult = await resolveAccountGate(request, env, slug, meta, url, fullPath, basePath);
     if (accountResult.kind === "stop") return accountResult.response;
     shareToken = accountResult.shareToken;
+    setShareCookie = accountResult.setShareCookie;
     // kind === "ok" → fall through to Gate 2.
   }
 
@@ -122,33 +144,51 @@ async function serveSiteInner(
     const unlocked = await isUnlocked(request, env, slug, meta.passwordHash);
     if (!unlocked) {
       console.log(JSON.stringify({ event: "private_gate_render", slug, path: path || "/" }));
-      return renderGatePage(slug, basePath, { redirect: fullPath, shareToken });
+      const gate = renderGatePage(slug, basePath, { redirect: fullPath, shareToken });
+      // A `?share=<token>` this request cleared Gate 1 but stops at Gate 2 — still
+      // persist the share cookie so the recipient's unlock POST + any retries keep
+      // clearing the account gate. The share cookie satisfies the account gate ONLY:
+      // the password gate is still in force here (we're rendering it).
+      return setShareCookie ? addPrivateHeaders(gate, setShareCookie) : gate;
     }
   }
 
   // Both applicable gates satisfied — serve as non-cacheable private content.
   const inner = await serveAuthenticatedSite(request, env, slug, ctx, basePath, meta, { cacheable: false });
-  // Slide the unlock cookie forward only when a password gate is in play (it is the
-  // only thing the cookie unlocks); account-only sites have no unlock cookie.
+  // Collect any Set-Cookie headers this gated response must carry: the sliding
+  // unlock cookie (only when a password gate is in play — it's all the cookie
+  // unlocks) and the freshly-minted share cookie (only when this request cleared
+  // Gate 1 with a `?share=<token>`).
+  const setCookies: string[] = [];
   if (passwordRequired) {
-    return addPrivateHeaders(inner, await freshUnlockCookie(env, slug, basePath, meta.passwordHash));
+    setCookies.push(await freshUnlockCookie(env, slug, basePath, meta.passwordHash));
   }
-  return addPrivateHeaders(inner);
+  if (setShareCookie) setCookies.push(setShareCookie);
+  return addPrivateHeaders(inner, setCookies);
 }
 
 // `shareToken` is set on the "ok" outcome only when the account gate was cleared
 // by a valid share token (not an owner session). A stacked password gate then
 // carries it onto the unlock form so the recipient's POST re-clears the account gate.
-type GateOutcome = { kind: "ok"; shareToken?: string } | { kind: "stop"; response: Response };
+// `setShareCookie` is a `Set-Cookie` value the caller appends to the served
+// response — set only when a fresh `?share=<token>` cleared the gate this request.
+type GateOutcome =
+  | { kind: "ok"; shareToken?: string; setShareCookie?: string }
+  | { kind: "stop"; response: Response };
 
 /**
  * Resolve the ACCOUNT gate for a private site.
  *
  * Order:
- *   1. A valid `?share=<token>` (HMAC valid, not expired, slug matches) → ok.
- *      Share tokens satisfy the account gate ONLY; a stacked password gate still
- *      applies afterwards.
- *   2. Otherwise resolve the better-auth session (cookie or `Authorization: Bearer`):
+ *   1. A valid `?share=<token>` (HMAC valid, not expired, slug + site-instance
+ *      fingerprint match) → ok, and SET a short-lived path-scoped share cookie on
+ *      the served response so the page's subresources (CSS/JS/images, download
+ *      links, generated viewer URLs) — fetched WITHOUT the `?share=` param — keep
+ *      clearing this gate.
+ *   2. Otherwise a valid share COOKIE (set by a prior step-1 request) → ok.
+ *      Share tokens/cookies satisfy the account gate ONLY; a stacked password gate
+ *      still applies afterwards.
+ *   3. Otherwise resolve the better-auth session (cookie or `Authorization: Bearer`):
  *        - session.user.id === owner_id → ok
  *        - session present but not the owner → 403 (STOP)
  *        - no session → 302 to /auth/login?next=<orig-url> (STOP)
@@ -164,20 +204,56 @@ async function resolveAccountGate(
   meta: SiteMeta,
   url: URL,
   fullPath: string,
+  basePath: string,
 ): Promise<GateOutcome> {
+  // Current site-instance fingerprint (created_at + owner_id). A token/cookie minted
+  // for a prior site that reused this slug carries a different fingerprint and is
+  // rejected — see lib/session.ts shareFingerprint.
+  const fingerprint = await shareFingerprint(env.SESSION_SECRET, {
+    createdAt: meta.createdAt,
+    ownerId: meta.ownerId,
+  });
+
   // 1. Share token (stateless HMAC, signed with SESSION_SECRET — already verified
   //    configured by the caller).
   const shareToken = url.searchParams.get(SHARE_PARAM);
   if (shareToken) {
-    const result = await verifyShareToken(env.SESSION_SECRET, slug, shareToken);
+    const result = await verifyShareToken(env.SESSION_SECRET, slug, fingerprint, shareToken);
     if (result.valid) {
       console.log(JSON.stringify({ event: "account_gate_share", slug }));
+      // Mint a path-scoped share cookie so subresource requests (which carry no
+      // `?share=`) keep clearing this gate. Cap the cookie to the token's remaining
+      // lifetime so it can never outlive the link it rode in on.
+      const remainingMs = (result.exp ?? Date.now()) - Date.now();
+      const ttlMs = Math.min(SHARE_COOKIE_MAX_TTL_MS, Math.max(0, remainingMs));
+      let setShareCookie: string | undefined;
+      if (ttlMs > 0) {
+        const cookieValue = await signShareCookie(env.SESSION_SECRET, slug, fingerprint, ttlMs);
+        setShareCookie = buildSetCookie(shareCookieName(slug), cookieValue, {
+          path: basePath || "/",
+          maxAgeSeconds: Math.floor(ttlMs / 1000),
+        });
+      }
       // Surface the token so a stacked password gate can carry it onto the unlock form.
-      return { kind: "ok", shareToken };
+      return { kind: "ok", shareToken, setShareCookie };
     }
-    // An invalid/expired share token falls through to session resolution rather
-    // than short-circuiting — the request may still carry a valid owner session.
+    // An invalid/expired share token falls through to the share cookie / session
+    // resolution rather than short-circuiting — the request may still carry a valid
+    // owner session.
     console.log(JSON.stringify({ event: "account_gate_share_invalid", slug }));
+  }
+
+  // 2. Share cookie (set by a prior valid `?share=` request, so the page's
+  //    subresources keep clearing this gate). Account gate ONLY — a stacked password
+  //    gate still applies, so this never bypasses the password page.
+  const shareCookie = parseCookieHeader(request.headers.get("Cookie"), shareCookieName(slug));
+  if (shareCookie) {
+    const result = await verifyShareCookie(env.SESSION_SECRET, slug, fingerprint, shareCookie);
+    if (result.valid) {
+      console.log(JSON.stringify({ event: "account_gate_share_cookie", slug }));
+      return { kind: "ok" };
+    }
+    console.log(JSON.stringify({ event: "account_gate_share_cookie_invalid", slug }));
   }
 
   // 2. Better-auth session or Bearer API key.
@@ -333,13 +409,17 @@ async function serveAuthenticatedSite(
 
 /**
  * For gated (account/password) responses: force `Cache-Control: private, no-store`
- * and, when a password gate is in play, append the sliding-refresh unlock cookie.
- * We rebuild the response so we can mutate immutable (e.g. Cache-API-backed) headers.
+ * and append any gate cookies (the sliding-refresh unlock cookie and/or the
+ * share-grant cookie). We rebuild the response so we can mutate immutable (e.g.
+ * Cache-API-backed) headers.
  */
-function addPrivateHeaders(response: Response, setCookie?: string): Response {
+function addPrivateHeaders(response: Response, setCookies: string | string[] = []): Response {
   const out = new Response(response.body, response);
   out.headers.set("Cache-Control", "private, no-store");
-  if (setCookie) out.headers.append("Set-Cookie", setCookie);
+  const cookies = Array.isArray(setCookies) ? setCookies : [setCookies];
+  for (const cookie of cookies) {
+    if (cookie) out.headers.append("Set-Cookie", cookie);
+  }
   return out;
 }
 

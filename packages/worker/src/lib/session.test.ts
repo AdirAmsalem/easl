@@ -8,12 +8,16 @@ import {
   isSessionSecretConfigured,
   parseCookieHeader,
   passwordFingerprint,
+  shareCookieName,
+  shareFingerprint,
   signCliCallbackMarker,
   signCookie,
+  signShareCookie,
   signShareToken,
   unlockCookieName,
   verifyCliCallbackMarker,
   verifyCookie,
+  verifyShareCookie,
   verifyShareToken,
 } from "./session";
 
@@ -69,57 +73,128 @@ describe("signCookie + verifyCookie", () => {
 });
 
 describe("signShareToken + verifyShareToken", () => {
-  it("round-trips for the same slug and reports its expiry", async () => {
-    const { token, exp } = await signShareToken(SECRET, "slug-abc");
+  it("round-trips for the same slug + fingerprint and reports its expiry", async () => {
+    const { token, exp } = await signShareToken(SECRET, "slug-abc", FP);
     expect(exp).toBeGreaterThan(Date.now());
-    const result = await verifyShareToken(SECRET, "slug-abc", token);
+    const result = await verifyShareToken(SECRET, "slug-abc", FP, token);
     expect(result.valid).toBe(true);
     expect(result.exp).toBe(exp);
   });
 
-  it("uses the b64url(slug|exp).b64url(hmac) shape (two-field payload)", async () => {
-    const { token } = await signShareToken(SECRET, "slug-abc");
+  it("uses the b64url(slug|exp|fingerprint).b64url(hmac) shape (three-field payload)", async () => {
+    const { token } = await signShareToken(SECRET, "slug-abc", FP);
     const [payload, sig] = token.split(".");
     expect(payload && sig).toBeTruthy();
     const decoded = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    expect(decoded.split("|").length).toBe(2);
+    expect(decoded.split("|").length).toBe(3);
     expect(decoded.startsWith("slug-abc|")).toBe(true);
+    expect(decoded.endsWith(`|${FP}`)).toBe(true);
   });
 
   it("rejects a token minted for a different slug", async () => {
-    const { token } = await signShareToken(SECRET, "slug-abc");
-    expect((await verifyShareToken(SECRET, "slug-xyz", token)).valid).toBe(false);
+    const { token } = await signShareToken(SECRET, "slug-abc", FP);
+    expect((await verifyShareToken(SECRET, "slug-xyz", FP, token)).valid).toBe(false);
   });
 
   it("rejects a token signed with a different secret", async () => {
-    const { token } = await signShareToken(SECRET, "slug-abc");
-    expect((await verifyShareToken("different-secret", "slug-abc", token)).valid).toBe(false);
+    const { token } = await signShareToken(SECRET, "slug-abc", FP);
+    expect((await verifyShareToken("different-secret", "slug-abc", FP, token)).valid).toBe(false);
+  });
+
+  it("rejects a token whose fingerprint no longer matches (slug re-published as a new instance)", async () => {
+    const { token } = await signShareToken(SECRET, "slug-abc", FP);
+    expect((await verifyShareToken(SECRET, "slug-abc", FP2, token)).valid).toBe(false);
   });
 
   it("rejects an expired token", async () => {
-    const { token } = await signShareToken(SECRET, "slug-abc", -1000);
-    expect((await verifyShareToken(SECRET, "slug-abc", token)).valid).toBe(false);
+    const { token } = await signShareToken(SECRET, "slug-abc", FP, -1000);
+    expect((await verifyShareToken(SECRET, "slug-abc", FP, token)).valid).toBe(false);
   });
 
   it("rejects tampered payloads", async () => {
-    const { token } = await signShareToken(SECRET, "slug-abc");
+    const { token } = await signShareToken(SECRET, "slug-abc", FP);
     const [payload, sig] = token.split(".");
     const tampered = `${payload}A.${sig}`;
-    expect((await verifyShareToken(SECRET, "slug-abc", tampered)).valid).toBe(false);
+    expect((await verifyShareToken(SECRET, "slug-abc", FP, tampered)).valid).toBe(false);
   });
 
   it("rejects malformed input", async () => {
-    expect((await verifyShareToken(SECRET, "slug-abc", "")).valid).toBe(false);
-    expect((await verifyShareToken(SECRET, "slug-abc", "no-dot")).valid).toBe(false);
-    expect((await verifyShareToken(SECRET, "slug-abc", ".onlydot")).valid).toBe(false);
+    expect((await verifyShareToken(SECRET, "slug-abc", FP, "")).valid).toBe(false);
+    expect((await verifyShareToken(SECRET, "slug-abc", FP, "no-dot")).valid).toBe(false);
+    expect((await verifyShareToken(SECRET, "slug-abc", FP, ".onlydot")).valid).toBe(false);
+  });
+});
+
+describe("shareFingerprint", () => {
+  const SITE = { createdAt: "2025-01-01T00:00:00Z", ownerId: "owner-1" };
+
+  it("is deterministic for the same instance", async () => {
+    const a = await shareFingerprint(SECRET, SITE);
+    const b = await shareFingerprint(SECRET, { ...SITE });
+    expect(a).toBe(b);
   });
 
-  it("does not validate as an unlock cookie (distinct payload shapes)", async () => {
-    // A share token has a 2-field payload; verifyCookie expects 3 fields, so a
-    // share token can never be mistaken for an unlock cookie even with the right
-    // secret + slug.
-    const { token } = await signShareToken(SECRET, "slug-abc");
-    expect((await verifyCookie(SECRET, "slug-abc", FP, token)).valid).toBe(false);
+  it("changes when created_at changes (delete + re-publish under the same slug)", async () => {
+    const a = await shareFingerprint(SECRET, SITE);
+    const b = await shareFingerprint(SECRET, { ...SITE, createdAt: "2025-06-01T00:00:00Z" });
+    expect(a).not.toBe(b);
+  });
+
+  it("changes when owner_id changes", async () => {
+    const a = await shareFingerprint(SECRET, SITE);
+    const b = await shareFingerprint(SECRET, { ...SITE, ownerId: "owner-2" });
+    expect(a).not.toBe(b);
+  });
+
+  it("treats a null owner distinctly", async () => {
+    const a = await shareFingerprint(SECRET, { createdAt: SITE.createdAt, ownerId: null });
+    const b = await shareFingerprint(SECRET, { createdAt: SITE.createdAt, ownerId: "owner-1" });
+    expect(a).not.toBe(b);
+  });
+
+  it("round-trips through a share token so a re-published instance fails verification", async () => {
+    const oldFp = await shareFingerprint(SECRET, SITE);
+    const newFp = await shareFingerprint(SECRET, { ...SITE, createdAt: "2025-09-09T00:00:00Z" });
+    const { token } = await signShareToken(SECRET, "slug-abc", oldFp);
+    expect((await verifyShareToken(SECRET, "slug-abc", oldFp, token)).valid).toBe(true);
+    expect((await verifyShareToken(SECRET, "slug-abc", newFp, token)).valid).toBe(false);
+  });
+});
+
+describe("signShareCookie + verifyShareCookie", () => {
+  const TTL = 60 * 60 * 1000;
+
+  it("round-trips for the same slug + fingerprint", async () => {
+    const value = await signShareCookie(SECRET, "slug-abc", FP, TTL);
+    const result = await verifyShareCookie(SECRET, "slug-abc", FP, value);
+    expect(result.valid).toBe(true);
+    expect(result.exp).toBeGreaterThan(Date.now());
+  });
+
+  it("rejects a cookie for a different slug, fingerprint, or secret", async () => {
+    const value = await signShareCookie(SECRET, "slug-abc", FP, TTL);
+    expect((await verifyShareCookie(SECRET, "slug-xyz", FP, value)).valid).toBe(false);
+    expect((await verifyShareCookie(SECRET, "slug-abc", FP2, value)).valid).toBe(false);
+    expect((await verifyShareCookie("different-secret", "slug-abc", FP, value)).valid).toBe(false);
+  });
+
+  it("rejects an expired cookie", async () => {
+    const value = await signShareCookie(SECRET, "slug-abc", FP, -1000);
+    expect((await verifyShareCookie(SECRET, "slug-abc", FP, value)).valid).toBe(false);
+  });
+
+  it("a share cookie and a share token of the same instance interchangeably verify (shared shape)", async () => {
+    // The two are the same payload shape by design — a share cookie is just a
+    // share token persisted in a cookie. The point is the fingerprint binding.
+    const cookie = await signShareCookie(SECRET, "slug-abc", FP, TTL);
+    expect((await verifyShareToken(SECRET, "slug-abc", FP, cookie)).valid).toBe(true);
+  });
+});
+
+describe("shareCookieName", () => {
+  it("namespaces by slug and is distinct from the unlock cookie", () => {
+    expect(shareCookieName("abc-def")).toBe("easl_sh_abc-def");
+    expect(shareCookieName("abc-def")).not.toBe(unlockCookieName("abc-def"));
   });
 });
 

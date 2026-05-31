@@ -153,11 +153,13 @@ export const SESSION_DEFAULT_TTL_MS = COOKIE_TTL_MS;
 // `private + password` site still prompts the recipient for the password).
 //
 // Stateless, no DB: it reuses the same HMAC machinery as the unlock cookie, so
-// revocation is global only (rotate SESSION_SECRET). Format is identical in
-// shape to the unlock cookie minus the password fingerprint:
-//   `<b64url(slug|exp)>.<b64url(hmac)>`
-// A token is bound to a single slug and carries its own expiry, so a leaked
-// token can't be replayed against another site and lapses on its own.
+// revocation is global only (rotate SESSION_SECRET). Format mirrors the unlock
+// cookie, slug + expiry + a site-instance fingerprint:
+//   `<b64url(slug|exp|fingerprint)>.<b64url(hmac)>`
+// A token is bound to a single slug AND a single site instance (via the
+// fingerprint) and carries its own expiry, so a leaked token can't be replayed
+// against another site, doesn't survive a delete + re-publish that reuses the
+// same custom slug (the fingerprint changes), and lapses on its own.
 
 /** Default share-token lifetime: 7 days (see the v2 plan's share-link defaults). */
 export const SHARE_TOKEN_DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -165,31 +167,53 @@ export const SHARE_TOKEN_DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const SHARE_TOKEN_MAX_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Sign a share token granting account-gate access to `slug` for `ttlMs`.
- * Format: `<b64url(slug|exp)>.<b64url(hmac)>` (same shape as the unlock cookie,
- * without the password fingerprint). Returns `{ token, exp }` where `exp` is the
- * absolute expiry in epoch milliseconds, for the API to surface as `expiresAt`.
+ * Derive a short, opaque fingerprint of a site INSTANCE — the pairing of its
+ * creation time and owner. Binding this into a share token / share cookie means a
+ * site deleted and re-published under the same custom slug (new `created_at`, and
+ * typically a new `owner_id`) gets a different fingerprint, so an old share URL
+ * for the prior site no longer authorizes the new one. Mirrors
+ * `passwordFingerprint`: never embeds the raw values, only an HMAC-derived tag.
+ */
+export async function shareFingerprint(
+  secret: string,
+  site: { createdAt: string; ownerId: string | null },
+): Promise<string> {
+  const tag = await hmac(secret, `share-fp:${site.createdAt}|${site.ownerId ?? ""}`);
+  return b64urlEncode(tag).slice(0, 16);
+}
+
+/**
+ * Sign a share token granting account-gate access to `slug` for `ttlMs`, bound to
+ * the site-instance `fingerprint` (see `shareFingerprint`).
+ * Format: `<b64url(slug|exp|fingerprint)>.<b64url(hmac)>` (same shape as the
+ * unlock cookie, with a share fingerprint in place of the password one). Returns
+ * `{ token, exp }` where `exp` is the absolute expiry in epoch milliseconds, for
+ * the API to surface as `expiresAt`.
  */
 export async function signShareToken(
   secret: string,
   slug: string,
+  fingerprint: string,
   ttlMs = SHARE_TOKEN_DEFAULT_TTL_MS,
 ): Promise<{ token: string; exp: number }> {
   const exp = Date.now() + ttlMs;
-  const payload = `${slug}|${exp}`;
+  const payload = `${slug}|${exp}|${fingerprint}`;
   const sig = await hmac(secret, payload);
   const token = `${b64urlEncode(new TextEncoder().encode(payload))}.${b64urlEncode(sig)}`;
   return { token, exp };
 }
 
 /**
- * Verify a share token against the expected slug. Returns `{ valid, exp? }`.
- * Invalid signatures, expired tokens, and slug mismatches all return
- * `{ valid: false }`. Mirrors `verifyCookie` but with a two-field payload.
+ * Verify a share token against the expected slug + current site-instance
+ * fingerprint. Returns `{ valid, exp? }`. Invalid signatures, expired tokens,
+ * slug mismatches, and fingerprint mismatches (i.e. the slug was deleted and
+ * re-published under a new instance since the token was issued) all return
+ * `{ valid: false }`. Mirrors `verifyCookie` but with the share fingerprint.
  */
 export async function verifyShareToken(
   secret: string,
   slug: string,
+  fingerprint: string,
   value: string,
 ): Promise<{ valid: boolean; exp?: number }> {
   const dot = value.indexOf(".");
@@ -204,14 +228,64 @@ export async function verifyShareToken(
   if (!constantTimeEqual(b64urlEncode(sigBytes), b64urlEncode(expectedSig))) {
     return { valid: false };
   }
-  // Payload fields never contain "|": slug is [a-z0-9-], exp is digits.
+  // Payload fields never contain "|": slug is [a-z0-9-], exp is digits, fingerprint is b64url.
   const parts = payload.split("|");
-  if (parts.length !== 2) return { valid: false };
-  const [tokenSlug, expStr] = parts;
+  if (parts.length !== 3) return { valid: false };
+  const [tokenSlug, expStr, tokenFp] = parts;
   if (tokenSlug !== slug) return { valid: false };
   const exp = Number(expStr);
   if (!Number.isInteger(exp) || exp <= Date.now()) return { valid: false };
+  if (!constantTimeEqual(tokenFp, fingerprint)) return { valid: false };
   return { valid: true, exp };
+}
+
+// ── Share cookie (private easls v2, Fix 2) ──────────────────────────────────
+// Once a recipient presents a valid `?share=<token>`, the served response sets a
+// short-lived, path-scoped share cookie so the page's relative subresources (CSS,
+// JS, images), download links, nav links, and generated viewer URLs — which the
+// browser fetches WITHOUT the `?share=` query param — still clear the ACCOUNT
+// gate. The cookie satisfies the account gate ONLY; a stacked password gate still
+// applies (the recipient must still unlock with the password).
+//
+// It reuses the same HMAC machinery and the Fix-1 share fingerprint, so a
+// slug-reuse / owner change invalidates a stale cookie exactly as it does a stale
+// token. Format mirrors the unlock cookie: `<b64url(slug|exp|fingerprint)>.<b64url(hmac)>`.
+
+/** Cookie name for the share grant of a given slug (distinct from the password unlock cookie). */
+export function shareCookieName(slug: string): string {
+  return `easl_sh_${slug}`;
+}
+
+/**
+ * Sign a share-grant cookie value tying account-gate access to `slug` + the
+ * site-instance `fingerprint` for the given lifetime. Identical shape to the
+ * unlock cookie; verified by `verifyShareCookie`.
+ */
+export async function signShareCookie(
+  secret: string,
+  slug: string,
+  fingerprint: string,
+  ttlMs: number,
+): Promise<string> {
+  const exp = Date.now() + ttlMs;
+  const payload = `${slug}|${exp}|${fingerprint}`;
+  const sig = await hmac(secret, payload);
+  return `${b64urlEncode(new TextEncoder().encode(payload))}.${b64urlEncode(sig)}`;
+}
+
+/**
+ * Verify a share-grant cookie against the expected slug + current site-instance
+ * fingerprint. Returns `{ valid, exp? }`. Identical verification to
+ * `verifyShareToken` — kept as a separate name for call-site clarity (token vs
+ * cookie) even though the payload shape is the same.
+ */
+export async function verifyShareCookie(
+  secret: string,
+  slug: string,
+  fingerprint: string,
+  value: string,
+): Promise<{ valid: boolean; exp?: number }> {
+  return verifyShareToken(secret, slug, fingerprint, value);
 }
 
 // ── CLI login-handshake state marker (private easls v2, Fix B) ──────────────
