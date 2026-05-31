@@ -33,6 +33,7 @@ bucket_name = "easl-content"
 binding = "DB"
 database_name = "easl-db"
 database_id = "8b7c3c46-7517-4459-a024-7d22ca39e28d"  # Self-hosters: replace with your own D1 database ID
+migrations_dir = "migrations"  # applied via `wrangler d1 migrations apply`
 
 [vars]
 DOMAIN = "easl.dev"
