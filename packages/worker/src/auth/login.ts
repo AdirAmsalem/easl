@@ -46,7 +46,21 @@ export function sanitizeNext(env: Env, requestUrl: string, next: string | null |
 }
 
 /**
- * Serve the magic-link sign-in page (GET /auth/login?next=<url>).
+ * Validate the `cli_port` the `easl login` handshake passes (GET
+ * /auth/login?cli_port=<port>). Returns the numeric port string when it's a
+ * plausible TCP port, else null. Used to derive the magic-link callbackURL that
+ * routes the post-verify browser to /auth/cli-callback (which mints the API key
+ * and bounces to the CLI's loopback). Mirrors cli-callback.ts loopbackCallbackUrl.
+ */
+export function sanitizeCliPort(port: string | null | undefined): string | null {
+  if (!port || !/^\d{1,5}$/.test(port)) return null;
+  const n = Number(port);
+  if (n < 1 || n > 65535) return null;
+  return String(n);
+}
+
+/**
+ * Serve the magic-link sign-in page (GET /auth/login?next=<url> | ?cli_port=<port>).
  *
  * better-auth is headless — it exposes only API endpoints (/auth/sign-in/magic-link,
  * /auth/magic-link/verify, /auth/get-session, …) and NO /auth/login HTML page. The
@@ -55,23 +69,33 @@ export function sanitizeNext(env: Env, requestUrl: string, next: string | null |
  * better-auth /auth/* catch-all (404). Mounted on the api app BEFORE mountAuth so it
  * claims /auth/login ahead of better-auth's wildcard.
  *
- * The page collects an email and POSTs it to /auth/sign-in/magic-link with
- * `callbackURL = next`, so after the user clicks the emailed link better-auth verifies
- * the token, sets the (cross-subdomain) session cookie, and redirects back to `next`.
+ * The page collects an email and POSTs it to /auth/sign-in/magic-link with a
+ * `callbackURL`. After the user clicks the emailed link, better-auth verifies the
+ * token, sets the (cross-subdomain) session cookie, and redirects to that URL:
+ *   - Browser gate flow: `callbackURL = next` (the denied private site) — the
+ *     visitor lands back on the page they were gated from.
+ *   - CLI handshake (`?cli_port=<port>`): `callbackURL = /auth/cli-callback?port=<port>`
+ *     (a root-relative same-origin path sanitizeNext permits), which mints an API key
+ *     and 302s to the CLI's loopback. `cli_port` takes precedence over `next` since
+ *     the two flows are mutually exclusive (the CLI never sets `next`).
  */
 export function handleLoginPage(c: Ctx): Response {
-  const next = sanitizeNext(c.env, c.req.url, c.req.query("next"));
-  console.log(JSON.stringify({ event: "auth_login_page", next }));
-  return c.html(loginPageHtml(next));
+  const cliPort = sanitizeCliPort(c.req.query("cli_port"));
+  const callbackURL = cliPort
+    ? `${AUTH_BASE_PATH}/cli-callback?port=${cliPort}`
+    : sanitizeNext(c.env, c.req.url, c.req.query("next"));
+  console.log(JSON.stringify({ event: "auth_login_page", cli: Boolean(cliPort) }));
+  return c.html(loginPageHtml(callbackURL));
 }
 
 function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function loginPageHtml(next: string): string {
-  // `next` is validated (sanitizeNext) and HTML-escaped here; the JS reads it from a
-  // data attribute and sends it as the magic-link callbackURL.
+function loginPageHtml(callbackURL: string): string {
+  // `callbackURL` is validated (sanitizeNext / sanitizeCliPort) and HTML-escaped
+  // here; the JS reads it from a data attribute and sends it as the magic-link
+  // callbackURL (the post-verify redirect target).
   const signInPath = `${AUTH_BASE_PATH}/sign-in/magic-link`;
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -95,7 +119,7 @@ function loginPageHtml(next: string): string {
   .msg.ok{color:#047857}
 </style></head>
 <body>
-  <form class="card" id="login-form" autocomplete="off" data-next="${escapeHtml(next)}" data-signin="${escapeHtml(signInPath)}">
+  <form class="card" id="login-form" autocomplete="off" data-next="${escapeHtml(callbackURL)}" data-signin="${escapeHtml(signInPath)}">
     <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
     <h1>Sign in to easl</h1>
     <p class="sub">Enter your email and we'll send you a sign-in link.</p>

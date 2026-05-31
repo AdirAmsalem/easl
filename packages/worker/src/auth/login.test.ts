@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Env } from "../types";
-import { sanitizeNext } from "./login";
+import { sanitizeNext, sanitizeCliPort } from "./login";
 
 // Only DOMAIN is read by sanitizeNext; cast a minimal stub through Env.
 const env = { DOMAIN: "easl.dev" } as unknown as Env;
@@ -49,5 +49,27 @@ describe("sanitizeNext (open-redirect protection for the login page)", () => {
     expect(sanitizeNext(env, localUrl, "http://localhost:8787/s/x")).toBe("http://localhost:8787/s/x");
     // A different localhost port is a different origin and not under DOMAIN → fallback.
     expect(sanitizeNext(env, localUrl, "http://localhost:9999/s/x")).toBe(fallback);
+  });
+});
+
+describe("sanitizeCliPort (easl login handshake port validation)", () => {
+  it("accepts a plausible TCP port and returns its normalized string", () => {
+    expect(sanitizeCliPort("51234")).toBe("51234");
+    expect(sanitizeCliPort("1")).toBe("1");
+    expect(sanitizeCliPort("65535")).toBe("65535");
+    // Leading zeros normalize to the numeric value (so the callback URL is canonical).
+    expect(sanitizeCliPort("0080")).toBe("80");
+  });
+
+  it("rejects absent, non-numeric, out-of-range, or injection-shaped values", () => {
+    expect(sanitizeCliPort(null)).toBeNull();
+    expect(sanitizeCliPort(undefined)).toBeNull();
+    expect(sanitizeCliPort("")).toBeNull();
+    expect(sanitizeCliPort("0")).toBeNull();
+    expect(sanitizeCliPort("65536")).toBeNull();
+    expect(sanitizeCliPort("123456")).toBeNull();
+    expect(sanitizeCliPort("80abc")).toBeNull();
+    expect(sanitizeCliPort("80/../evil")).toBeNull();
+    expect(sanitizeCliPort("-1")).toBeNull();
   });
 });

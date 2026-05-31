@@ -346,3 +346,105 @@ describe("api-key requests are not per-key rate limited", () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `easl login` browser handshake — GET /auth/cli-callback mints a key + redirects
+// to the CLI's loopback. This is the server side the CLI's loopback server waits on.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("CLI login handshake: GET /auth/cli-callback", () => {
+  it("mints an api-key for the session and 302s to the loopback with ?key=&id=&email=", async () => {
+    // Establish a session the way magic-link verify would, then hit cli-callback
+    // through the REAL worker (path-based routing) carrying that cookie — exactly
+    // what the browser does after better-auth redirects it to the callbackURL.
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const email = "cli-handshake@example.com";
+    const cookie = await signInAndGetCookie(auth, email, sent);
+
+    const port = 51234;
+    const res = await SELF.fetch(`http://localhost/auth/cli-callback?port=${port}`, {
+      headers: { cookie },
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+
+    const location = res.headers.get("location");
+    expect(location, "cli-callback should redirect to the loopback").toBeTruthy();
+    const loc = new URL(location!);
+    // Redirect target is locked to the CLI's loopback on the requested port.
+    expect(loc.protocol).toBe("http:");
+    expect(loc.hostname).toBe("127.0.0.1");
+    expect(loc.port).toBe(String(port));
+    expect(loc.pathname).toBe("/callback");
+
+    const key = loc.searchParams.get("key");
+    expect(key, "loopback URL must carry the minted key").toBeTruthy();
+    expect(key!.startsWith("easl_")).toBe(true);
+    expect(loc.searchParams.get("id"), "loopback URL should carry the key id").toBeTruthy();
+    expect(loc.searchParams.get("email")).toBe(email);
+
+    // The handed-back key is real: it resolves to the signed-in user via Bearer auth.
+    const app = probeApp();
+    const whoami = await app.request(
+      "http://localhost/protected",
+      { headers: { authorization: `Bearer ${key}` } },
+      testEnv,
+    );
+    expect(whoami.status).toBe(200);
+    expect((await whoami.json<{ email: string }>()).email).toBe(email);
+  });
+
+  it("bounces back to the sign-in page (preserving cli_port) when no session is present", async () => {
+    const port = 49000;
+    const res = await SELF.fetch(`http://localhost/auth/cli-callback?port=${port}`, {
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location")!;
+    // No loopback redirect without auth — send the user back to sign in, keeping the
+    // port so a fresh magic link routes back through the handshake.
+    expect(location).toContain("/auth/login");
+    expect(location).toContain(`cli_port=${port}`);
+    expect(location).not.toContain("127.0.0.1");
+  });
+
+  it("rejects a missing or out-of-range port with 400 (no redirect)", async () => {
+    const missing = await SELF.fetch("http://localhost/auth/cli-callback", { redirect: "manual" });
+    expect(missing.status).toBe(400);
+
+    const bad = await SELF.fetch("http://localhost/auth/cli-callback?port=99999", {
+      redirect: "manual",
+    });
+    expect(bad.status).toBe(400);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The CLI handshake's login page (GET /auth/login?cli_port=<port>) must point the
+// magic link's callbackURL at /auth/cli-callback so the post-verify browser routes
+// into the key-minting handshake (not the bare account-gate `next`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("login page wiring for the CLI handshake", () => {
+  it("sets callbackURL to /auth/cli-callback?port=<port> when cli_port is present", async () => {
+    const port = 52525;
+    const res = await SELF.fetch(`http://localhost/auth/login?cli_port=${port}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    // The page carries the callbackURL in data-next, which its JS sends as the
+    // magic-link callbackURL — so after verify the browser lands on cli-callback.
+    expect(html).toContain(`data-next="/auth/cli-callback?port=${port}"`);
+  });
+
+  it("ignores cli_port and falls back to next when cli_port is not a valid port", async () => {
+    const res = await SELF.fetch(
+      "http://localhost/auth/login?cli_port=notaport&next=" +
+        encodeURIComponent("http://localhost/s/my-slug"),
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('data-next="http://localhost/s/my-slug"');
+    expect(html).not.toContain("cli-callback");
+  });
+});

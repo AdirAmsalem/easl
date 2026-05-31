@@ -2,13 +2,18 @@
 import { Command } from '@commander-js/extra-typings';
 import pc from 'picocolors';
 import { setupCliExitHandler } from './lib/cli-exit';
+import { authCommand } from './commands/auth';
+import { claimCommand } from './commands/claim';
 import { completionCommand } from './commands/completion';
 import { deleteCommand } from './commands/delete';
 import { doctorCommand } from './commands/doctor';
 import { getCommand } from './commands/get';
 import { listCommand } from './commands/list';
+import { loginCommand } from './commands/login';
+import { logoutCommand } from './commands/logout';
 import { openCommand } from './commands/open';
 import { publishCommand } from './commands/publish';
+import { shareCommand } from './commands/share';
 import { outputError, errorMessage } from './lib/output';
 import { checkForUpdates } from './lib/update-check';
 import { PACKAGE_NAME, VERSION } from './lib/version';
@@ -36,6 +41,7 @@ const program = new Command()
   .option('--json', 'Force JSON output')
   .option('-q, --quiet', 'Suppress spinners and status output (implies --json)')
   .option('--api-url <url>', 'API URL (overrides EASL_API_URL)')
+  .option('--api-key <key>', 'API key (overrides EASL_API_KEY and saved login)')
   .hook('preAction', (_thisCommand, actionCommand) => {
     if (actionCommand.optsWithGlobals().quiet) {
       _thisCommand.setOptionValue('json', true);
@@ -72,6 +78,11 @@ ${pc.gray('Examples:')}
   .addCommand(getCommand)
   .addCommand(deleteCommand)
   .addCommand(openCommand)
+  .addCommand(loginCommand)
+  .addCommand(logoutCommand)
+  .addCommand(authCommand)
+  .addCommand(shareCommand)
+  .addCommand(claimCommand)
   .addCommand(doctorCommand)
   .addCommand(completionCommand);
 

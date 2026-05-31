@@ -8,6 +8,7 @@ import claimApi from "./api/claim";
 import feedbackApi from "./api/feedback";
 import { mountAuth } from "./auth/handler";
 import { handleLoginPage } from "./auth/login";
+import { handleCliCallback } from "./auth/cli-callback";
 import { serveSite } from "./serve/handler";
 import { docsPageHtml } from "./docs";
 
@@ -39,6 +40,13 @@ api.get("/health", (c) => c.json({ ok: true }));
 // so this must return 200 (not the better-auth /auth/* 404). Registered BEFORE
 // mountAuth so it claims /auth/login ahead of better-auth's wildcard handler.
 api.get("/auth/login", (c) => handleLoginPage(c));
+
+// GET /auth/cli-callback — completes the `easl login` browser handshake. After the
+// magic-link verify sets the session cookie, better-auth 302s here (the login page
+// sets it as the callbackURL when `cli_port` is present); this route mints an API
+// key for the session and 302s to the CLI's loopback http://127.0.0.1:<port>/callback.
+// Registered BEFORE mountAuth so it claims this path ahead of better-auth's wildcard.
+api.get("/auth/cli-callback", (c) => handleCliCallback(c));
 
 // better-auth owns the rest of /auth/* (magic-link, sessions, api-keys). Mount
 // before the catch-all 404 and before the other sub-routers so it claims its prefix.

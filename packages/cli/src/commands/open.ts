@@ -36,10 +36,18 @@ export const openCommand = new Command('open')
     const opened = await openInBrowser(url);
 
     if (globalOpts.json || !isInteractive()) {
-      outputResult({ url, opened, visibility: site?.visibility }, globalOpts);
+      outputResult(
+        { url, opened, visibility: site?.visibility, owner: site?.owner },
+        globalOpts,
+      );
     } else if (opened) {
       console.log(`\n  Opened ${url}`);
-      if (site?.visibility === 'private' && site.password) {
+      if (site?.owner === 'me') {
+        console.log(`  ${pc.gray('Privacy:')}  account-private (sign-in required)`);
+      } else if (site?.visibility === 'private') {
+        console.log(`  ${pc.gray('Privacy:')}  private`);
+      }
+      if (site?.password) {
         console.log(`  ${pc.gray('Password:')} ${pc.yellow(pc.bold(site.password))}`);
       }
       console.log('');
