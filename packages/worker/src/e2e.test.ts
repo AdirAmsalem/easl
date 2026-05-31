@@ -8,6 +8,18 @@ const db = (env as unknown as Env).DB;
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS sites (slug TEXT PRIMARY KEY, title TEXT, template TEXT, claim_token TEXT NOT NULL, is_anonymous INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), expires_at TEXT, file_count INTEGER NOT NULL DEFAULT 0, total_bytes INTEGER NOT NULL DEFAULT 0, visibility TEXT NOT NULL DEFAULT 'public', password_hash TEXT, owner_id TEXT)`,
   `CREATE TABLE IF NOT EXISTS versions (id TEXT PRIMARY KEY, slug TEXT NOT NULL REFERENCES sites(slug) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'uploading', created_at TEXT NOT NULL DEFAULT (datetime('now')), files_json TEXT NOT NULL)`,
+  // Mirror of migrations/0003_better_auth.sql — better-auth core + api-key tables.
+  `CREATE TABLE IF NOT EXISTS "user" ("id" text NOT NULL PRIMARY KEY, "name" text NOT NULL, "email" text NOT NULL UNIQUE, "emailVerified" integer NOT NULL, "image" text, "createdAt" date NOT NULL, "updatedAt" date NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS "session" ("id" text NOT NULL PRIMARY KEY, "expiresAt" date NOT NULL, "token" text NOT NULL UNIQUE, "createdAt" date NOT NULL, "updatedAt" date NOT NULL, "ipAddress" text, "userAgent" text, "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE cascade)`,
+  `CREATE TABLE IF NOT EXISTS "account" ("id" text NOT NULL PRIMARY KEY, "accountId" text NOT NULL, "providerId" text NOT NULL, "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE cascade, "accessToken" text, "refreshToken" text, "idToken" text, "accessTokenExpiresAt" date, "refreshTokenExpiresAt" date, "scope" text, "password" text, "createdAt" date NOT NULL, "updatedAt" date NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS "verification" ("id" text NOT NULL PRIMARY KEY, "identifier" text NOT NULL, "value" text NOT NULL, "expiresAt" date NOT NULL, "createdAt" date NOT NULL, "updatedAt" date NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS "apikey" ("id" text NOT NULL PRIMARY KEY, "configId" text NOT NULL, "name" text, "start" text, "referenceId" text NOT NULL, "prefix" text, "key" text NOT NULL, "refillInterval" integer, "refillAmount" integer, "lastRefillAt" date, "enabled" integer, "rateLimitEnabled" integer, "rateLimitTimeWindow" integer, "rateLimitMax" integer, "requestCount" integer, "remaining" integer, "lastRequest" date, "expiresAt" date, "createdAt" date NOT NULL, "updatedAt" date NOT NULL, "permissions" text, "metadata" text)`,
+  `CREATE INDEX IF NOT EXISTS "idx_session_userId" ON "session" ("userId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_account_userId" ON "account" ("userId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_verification_identifier" ON "verification" ("identifier")`,
+  `CREATE INDEX IF NOT EXISTS "idx_apikey_configId" ON "apikey" ("configId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_apikey_referenceId" ON "apikey" ("referenceId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_apikey_key" ON "apikey" ("key")`,
 ];
 
 beforeAll(async () => {

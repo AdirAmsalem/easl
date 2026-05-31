@@ -27,9 +27,15 @@ export default defineConfig({
     cloudflareTest({
       main: path.resolve(workerDir, "src/index.ts"),
       wrangler: { configPath: path.resolve(workerDir, "wrangler.toml") },
-      // SESSION_SECRET is intentionally absent from wrangler.toml [vars] (see comment there).
-      // Inject a test value here so private-site e2e tests have a usable signing key.
-      miniflare: { bindings: { SESSION_SECRET: "e2e-test-session-secret-not-for-prod" } },
+      // SESSION_SECRET / BETTER_AUTH_SECRET are intentionally absent from wrangler.toml
+      // [vars] (see comment there). Inject test values here so private-site and
+      // better-auth e2e tests have usable signing keys.
+      miniflare: {
+        bindings: {
+          SESSION_SECRET: "e2e-test-session-secret-not-for-prod",
+          BETTER_AUTH_SECRET: "e2e-test-better-auth-secret-not-for-prod-0123456789",
+        },
+      },
     }),
   ],
   resolve: {

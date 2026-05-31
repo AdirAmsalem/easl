@@ -4,6 +4,7 @@ import type { Env } from "./types";
 import publishApi from "./api/publish";
 import sitesApi from "./api/sites";
 import feedbackApi from "./api/feedback";
+import { mountAuth } from "./auth/handler";
 import { serveSite } from "./serve/handler";
 import { docsPageHtml } from "./docs";
 
@@ -29,6 +30,10 @@ api.get("/", (c) => c.json({
 }));
 
 api.get("/health", (c) => c.json({ ok: true }));
+
+// better-auth owns /auth/* (magic-link, sessions, api-keys). Mount before the
+// catch-all 404 and before the other sub-routers so it claims its prefix.
+mountAuth(api);
 
 api.route("/", publishApi);
 api.route("/", sitesApi);
@@ -96,7 +101,7 @@ async function pathBasedRouting(
 ): Promise<Response> {
   const path = url.pathname;
 
-  const apiPrefixes = ["/publish", "/sites", "/health", "/feedback"];
+  const apiPrefixes = ["/publish", "/sites", "/health", "/feedback", "/auth"];
   if (apiPrefixes.some((p) => path === p || path.startsWith(p + "/"))) {
     return api.fetch(request, env, ctx);
   }
@@ -139,7 +144,7 @@ function classifyRequest(hostname: string, path: string, workerEnv: Env): { rout
   const siteMatch = path.match(/^\/s\/([a-z0-9][a-z0-9-]+[a-z0-9])/);
   if (siteMatch) return { route: "site", slug: siteMatch[1] };
 
-  if (path.startsWith("/publish") || path.startsWith("/sites") || path.startsWith("/feedback")) return { route: "api" };
+  if (path.startsWith("/publish") || path.startsWith("/sites") || path.startsWith("/feedback") || path.startsWith("/auth")) return { route: "api" };
   if (path === "/docs" || path === "/docs/") return { route: "docs" };
   if (path === "/install.sh") return { route: "install" };
 

@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  BETTER_AUTH_DEFAULT_SECRET,
+  PLACEHOLDER_BETTER_AUTH_SECRET,
   PLACEHOLDER_SESSION_SECRET,
   buildSetCookie,
+  isBetterAuthSecretConfigured,
   isSessionSecretConfigured,
   parseCookieHeader,
   passwordFingerprint,
@@ -94,6 +97,25 @@ describe("isSessionSecretConfigured", () => {
 
   it("accepts a real long secret", () => {
     expect(isSessionSecretConfigured("a-genuinely-long-random-secret-value")).toBe(true);
+  });
+});
+
+describe("isBetterAuthSecretConfigured", () => {
+  it("rejects unset, short, placeholder, and better-auth's default secret", () => {
+    expect(isBetterAuthSecretConfigured(undefined)).toBe(false);
+    expect(isBetterAuthSecretConfigured(null)).toBe(false);
+    expect(isBetterAuthSecretConfigured("")).toBe(false);
+    // 31 chars — one below the 32-char minimum.
+    expect(isBetterAuthSecretConfigured("a".repeat(31))).toBe(false);
+    expect(isBetterAuthSecretConfigured(PLACEHOLDER_BETTER_AUTH_SECRET)).toBe(false);
+    // better-auth's globally-known hardcoded fallback must be rejected even though
+    // it is long enough, since better-auth boots with it when the secret is unset.
+    expect(isBetterAuthSecretConfigured(BETTER_AUTH_DEFAULT_SECRET)).toBe(false);
+  });
+
+  it("accepts a real secret of at least 32 chars", () => {
+    expect(isBetterAuthSecretConfigured("a".repeat(32))).toBe(true);
+    expect(isBetterAuthSecretConfigured("a-genuinely-long-random-better-auth-secret-value")).toBe(true);
   });
 });
 

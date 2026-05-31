@@ -24,5 +24,11 @@
     "@cloudflare/vitest-pool-workers": "^0.14.1",
     "turbo": "^2.8.20",
     "vitest": "^4.1.0"
+  },
+  "pnpm": {
+    "comment": "kysely is pinned because better-auth 1.6.13's @better-auth/kysely-adapter imports DEFAULT_MIGRATION_TABLE / DEFAULT_MIGRATION_LOCK_TABLE from the kysely package root. kysely 0.29.x moved those constants to the kysely/migration subpath and dropped them from the root entry, breaking the Worker bundle. Pin to 0.28.x (within better-auth's peer range) where they remain root exports.",
+    "overrides": {
+      "kysely": "0.28.17"
+    }
   }
 }

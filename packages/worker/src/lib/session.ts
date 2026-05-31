@@ -18,6 +18,38 @@ export function isSessionSecretConfigured(secret: string | undefined | null): se
   return typeof secret === "string" && secret.length >= 16 && secret !== PLACEHOLDER_SESSION_SECRET;
 }
 
+/**
+ * The committed development placeholder for BETTER_AUTH_SECRET (see
+ * .dev.vars.example). If this reached production as the live secret, every
+ * session, magic-link token, and API key would be forgeable by anyone with the
+ * source. `isBetterAuthSecretConfigured` rejects it so auth fails closed.
+ */
+export const PLACEHOLDER_BETTER_AUTH_SECRET = "local-dev-better-auth-secret-change-me-please";
+
+/**
+ * better-auth's own hardcoded fallback secret. When BETTER_AUTH_SECRET is unset,
+ * better-auth silently signs with this globally-known constant (its only guard,
+ * validateSecret, throws solely when process.env.NODE_ENV === "production",
+ * which this Worker never sets). We must reject it explicitly so auth fails
+ * closed instead of minting forgeable credentials.
+ */
+export const BETTER_AUTH_DEFAULT_SECRET = "better-auth-secret-12345678901234567890";
+
+/**
+ * True only when BETTER_AUTH_SECRET is set to a real value: not unset, long
+ * enough to be a meaningful key (>= 32 chars), and neither the committed
+ * placeholder nor better-auth's hardcoded default fallback. When false, callers
+ * MUST fail closed rather than boot the auth handler with a weak/known key.
+ */
+export function isBetterAuthSecretConfigured(secret: string | undefined | null): secret is string {
+  return (
+    typeof secret === "string" &&
+    secret.length >= 32 &&
+    secret !== PLACEHOLDER_BETTER_AUTH_SECRET &&
+    secret !== BETTER_AUTH_DEFAULT_SECRET
+  );
+}
+
 export type CookieOptions = {
   path?: string;
   domain?: string;
