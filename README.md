@@ -129,6 +129,7 @@ The MCP server gives AI agents first-class publishing capabilities through the [
 | `publish_content` | Publish raw content (string) → URL to a shareable page. The fastest path. |
 | `publish_file` | Publish a single file from disk with auto-detected rendering. |
 | `publish_site` | Publish a directory as a multi-page site. |
+| `create_share_link` | Mint a signed, time-limited share URL for an account-private site (requires `EASL_API_KEY`). |
 | `list_sites` | List sites published in the current session. |
 | `delete_site` | Delete a published site by slug. |
 
@@ -137,6 +138,7 @@ The MCP server gives AI agents first-class publishing capabilities through the [
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EASL_API_URL` | `https://api.easl.dev` | API base URL (override for self-hosted) |
+| `EASL_API_KEY` | — | Account API key (`easl_…`); required to publish account-private sites (`private: true`) and to use `create_share_link` |
 
 ---
 

@@ -89,6 +89,11 @@ easl open <slug>       # Open site in browser
 | `get <slug>` | Get site metadata from the API |
 | `delete <slug>` / `rm` | Delete a published site (`--yes` to skip confirmation) |
 | `open [slug]` | Open a site or easl.dev in your browser |
+| `login` | Sign in (magic link) and save an API key for this machine |
+| `logout` | Remove the saved API key |
+| `auth list-keys` / `auth revoke <id>` | List or revoke your account's API keys |
+| `share <slug>` | Mint a signed share link for an account-private site (`--expires-in 7d`) |
+| `claim <slug>` | Adopt an anonymous site into your account |
 | `doctor` | Check CLI version, API connectivity, and local config |
 | `completion [shell]` | Generate shell completions (bash, zsh, fish) |
 
@@ -115,6 +120,7 @@ easl open <slug>       # Open site in browser
 | `--json` | Force JSON output (auto-enabled when stdout is piped) |
 | `-q, --quiet` | Suppress spinners and status output (implies `--json`) |
 | `--api-url <url>` | Override API URL (or set `EASL_API_URL` env var) |
+| `--api-key <key>` | Account API key for this command (overrides `EASL_API_KEY` env and saved login) |
 
 ## JSON output
 

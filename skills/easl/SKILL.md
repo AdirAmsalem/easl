@@ -151,11 +151,12 @@ Reach for easl whenever generated content needs to be viewable in a browser or s
 
 ## Publishing via MCP server
 
-The `@easl/mcp` server provides five tools:
+The `@easl/mcp` server provides six tools:
 
 - **`publish_content`** — Publish inline text (text types only). Fastest path: pass `content` and `contentType`, get a URL back.
 - **`publish_file`** — Publish a single file from disk by path. Works with any file type including binary (PDF, images).
 - **`publish_site`** — Publish an entire directory as a multi-file site. Works with any file types.
+- **`create_share_link`** — Mint a signed, time-limited share URL for an account-private site (requires `EASL_API_KEY`). Pass `slug` and optional `expiresIn` seconds.
 - **`list_sites`** — List sites published in this session.
 - **`delete_site`** — Delete a site by slug (session sites only).
 

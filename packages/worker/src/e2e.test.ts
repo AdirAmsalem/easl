@@ -743,6 +743,21 @@ describe("account-private easls (Phase 2b: owner-bound publish + serve + share +
     const anonView = await SELF.fetch(`http://localhost/s/${slug}`, { redirect: "manual" });
     expect(anonView.status).toBe(302);
     expect(anonView.headers.get("Location")).toContain("/auth/login");
+
+    // GET /sites/:slug metadata must not leak for an account-private site:
+    // owner sees it; a non-owner and an anonymous caller get the same 404 as a missing site.
+    const ownerMeta = await SELF.fetch(`http://localhost/sites/${slug}`, {
+      headers: { authorization: `Bearer ${ownerKey}` },
+    });
+    expect(ownerMeta.status).toBe(200);
+    expect((await ownerMeta.json<Record<string, unknown>>()).visibility).toBe("private");
+
+    const otherMeta = await SELF.fetch(`http://localhost/sites/${slug}`, { headers: { cookie: other.cookie } });
+    expect(otherMeta.status).toBe(404);
+    expect(await otherMeta.text()).not.toContain("Owned secret");
+
+    const anonMeta = await SELF.fetch(`http://localhost/sites/${slug}`);
+    expect(anonMeta.status).toBe(404);
   });
 
   it("requires auth for private:true (anonymous publish → 401)", async () => {

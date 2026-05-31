@@ -76,6 +76,17 @@ app.get("/sites/:slug", async (c) => {
     return c.json({ error: "Site not found" }, 404);
   }
 
+  // Account-private sites must not leak metadata — or even existence — to non-owners.
+  // The serve path gates the content; this API has to gate too, or anyone with the
+  // slug could confirm a private site and read its title/size/versions. Only the
+  // owner (session/Bearer) sees it; everyone else gets the same 404 as a missing site.
+  if (site.visibility === "private" && site.owner_id) {
+    const user = await getOptionalUser(c);
+    if (!user || user.id !== site.owner_id) {
+      return c.json({ error: "Site not found" }, 404);
+    }
+  }
+
   const versions = await c.env.DB.prepare(
     "SELECT id, status, created_at FROM versions WHERE slug = ? ORDER BY created_at DESC LIMIT 10"
   ).bind(slug).all();
