@@ -425,7 +425,11 @@ describe("account-private easls (account gate)", () => {
     const { token } = await signShareToken(E2E_SESSION_SECRET, slug);
     const res = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`);
     expect(res.status).toBe(401);
-    expect(await res.text()).toContain("This easl is private");
+    const html = await res.text();
+    expect(html).toContain("This easl is private");
+    // The gate form must carry the share token so the recipient's unlock POST
+    // re-clears the account gate instead of dead-ending at /auth/login.
+    expect(html).toContain(`share=${encodeURIComponent(token)}`);
   });
 });
 
@@ -669,6 +673,115 @@ describe("account-private easls (Phase 2b: owner-bound publish + serve + share +
     });
     expect(view.status).toBe(200);
     expect(await view.text()).toContain("double secret");
+  });
+
+  it("share recipient can UNLOCK a stacked private+password site (share token carried through the unlock POST)", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const owner = await signIn(auth, "share-unlock-2b@example.com", sent);
+    const ownerKey = await mintApiKey(auth, owner.cookie);
+
+    // Stacked: account gate (private) + password gate.
+    const pub = await SELF.fetch("http://localhost/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", authorization: `Bearer ${ownerKey}` },
+      body: JSON.stringify({
+        content: "shared + locked secret",
+        contentType: "text/markdown",
+        private: true,
+        password: "recipient-pass",
+      }),
+    });
+    expect(pub.status).toBe(201);
+    const slug = (await pub.json<{ slug: string }>()).slug;
+
+    // Owner mints a share link (clears Gate 1 for the anonymous recipient).
+    const minted = await SELF.fetch(`http://localhost/sites/${slug}/share-links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: owner.cookie },
+      body: JSON.stringify({ expiresIn: 3600 }),
+    });
+    expect(minted.status).toBe(201);
+    const token = (await minted.json<{ token: string }>()).token;
+
+    // Anonymous recipient with the share token clears Gate 1 but still hits the
+    // password gate (Gate 2). The gate form must carry the share token forward.
+    const gate = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`);
+    expect(gate.status).toBe(401);
+    const gateHtml = await gate.text();
+    expect(gateHtml).toContain("This easl is private");
+    // The form action carries the share token so the unlock POST re-clears Gate 1.
+    expect(gateHtml).toContain(`share=${encodeURIComponent(token)}`);
+
+    // Recipient submits the password to the unlock endpoint WITH the share token in
+    // the query string (no session). This is the flow that previously dead-ended at
+    // a /auth/login redirect because the POST carried no share token.
+    const unlock = await SELF.fetch(
+      `http://localhost/s/${slug}/__unlock?share=${encodeURIComponent(token)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          password: "recipient-pass",
+          redirect: `/s/${slug}?share=${token}`,
+        }).toString(),
+        redirect: "manual",
+      },
+    );
+    expect(unlock.status).toBe(303);
+    const setCookie = unlock.headers.get("Set-Cookie")!;
+    expect(setCookie).toMatch(/easl_pk_/);
+    // The post-unlock redirect must keep the share token so the next GET clears Gate 1.
+    expect(unlock.headers.get("Location")).toContain("share=");
+    const unlockCookie = setCookie.split(";")[0];
+
+    // Final GET: share token (Gate 1) + unlock cookie (Gate 2) → content served.
+    const view = await SELF.fetch(`http://localhost/s/${slug}?share=${encodeURIComponent(token)}`, {
+      headers: { Cookie: unlockCookie },
+    });
+    expect(view.status).toBe(200);
+    expect(await view.text()).toContain("shared + locked secret");
+  });
+
+  it("wrong password on a stacked private+password share unlock re-renders the gate (still carries the share token, no login redirect)", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const owner = await signIn(auth, "share-wrongpass-2b@example.com", sent);
+    const ownerKey = await mintApiKey(auth, owner.cookie);
+
+    const pub = await SELF.fetch("http://localhost/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", authorization: `Bearer ${ownerKey}` },
+      body: JSON.stringify({
+        content: "x",
+        contentType: "text/markdown",
+        private: true,
+        password: "the-real-pass",
+      }),
+    });
+    const slug = (await pub.json<{ slug: string }>()).slug;
+    const minted = await SELF.fetch(`http://localhost/sites/${slug}/share-links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: owner.cookie },
+      body: JSON.stringify({ expiresIn: 3600 }),
+    });
+    const token = (await minted.json<{ token: string }>()).token;
+
+    // Wrong password + valid share token → 401 gate (not a 302 login redirect), and
+    // the re-rendered form still carries the share token for a retry.
+    const wrong = await SELF.fetch(
+      `http://localhost/s/${slug}/__unlock?share=${encodeURIComponent(token)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ password: "nope", redirect: `/s/${slug}?share=${token}` }).toString(),
+        redirect: "manual",
+      },
+    );
+    expect(wrong.status).toBe(401);
+    const wrongHtml = await wrong.text();
+    expect(wrongHtml).toContain("Incorrect password");
+    expect(wrongHtml).toContain(`share=${encodeURIComponent(token)}`);
   });
 
   it("claim adopts an anonymous site into an account, then the owner can view it privately", async () => {

@@ -45,22 +45,28 @@ export async function handleUnlock(
   meta: SiteMeta,
   basePath: string,
 ): Promise<Response> {
+  // For a stacked `private + password` site, the unlock POST cleared the account
+  // gate via this `?share=<token>` (carried onto the form action by renderGatePage).
+  // Keep it on any re-rendered gate page so a wrong-password retry can re-clear the
+  // account gate too; otherwise the recipient's next POST would 302 to login.
+  const shareToken = new URL(request.url).searchParams.get("share") ?? undefined;
+
   if (!meta.passwordHash) {
     // Visibility=private but no hash stored — treat as misconfigured, deny.
-    return renderGatePage(slug, basePath, { error: "Unable to unlock this site." }, 500);
+    return renderGatePage(slug, basePath, { error: "Unable to unlock this site.", shareToken }, 500);
   }
 
   let formData: FormData;
   try {
     formData = await request.formData();
   } catch {
-    return renderGatePage(slug, basePath, { error: "Invalid form submission." }, 400);
+    return renderGatePage(slug, basePath, { error: "Invalid form submission.", shareToken }, 400);
   }
 
   const password = formData.get("password");
   const redirect = formData.get("redirect");
   if (typeof password !== "string" || password.length === 0) {
-    return renderGatePage(slug, basePath, { error: "Password is required." }, 400);
+    return renderGatePage(slug, basePath, { error: "Password is required.", shareToken }, 400);
   }
 
   const ok = await verifyPassword(password, meta.passwordHash);
@@ -69,7 +75,7 @@ export async function handleUnlock(
     return renderGatePage(
       slug,
       basePath,
-      { error: "Incorrect password.", redirect: typeof redirect === "string" ? redirect : undefined },
+      { error: "Incorrect password.", redirect: typeof redirect === "string" ? redirect : undefined, shareToken },
       401,
     );
   }
@@ -93,10 +99,17 @@ export async function handleUnlock(
 export function renderGatePage(
   slug: string,
   basePath: string,
-  opts: { error?: string; redirect?: string } = {},
+  opts: { error?: string; redirect?: string; shareToken?: string } = {},
   status = 401,
 ): Response {
-  const action = `${basePath}${UNLOCK_PATH}`;
+  // A stacked `private + password` site reaches the password gate only after the
+  // account gate passed — for a share recipient, that pass came from `?share=<token>`
+  // in the request URL. The unlock POST must re-satisfy the account gate, so we carry
+  // the share token forward on the form `action` (the POST URL itself), not only in
+  // the hidden `redirect` field (which is just the post-unlock 303 destination).
+  const action = opts.shareToken
+    ? `${basePath}${UNLOCK_PATH}?share=${encodeURIComponent(opts.shareToken)}`
+    : `${basePath}${UNLOCK_PATH}`;
   const redirect = opts.redirect && opts.redirect.startsWith("/") && !opts.redirect.startsWith("//")
     ? opts.redirect
     : (basePath || "/");

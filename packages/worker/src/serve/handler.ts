@@ -99,9 +99,14 @@ async function serveSiteInner(
   // ── Gate 1: account ───────────────────────────────────────────────────────
   // Resolved FIRST. A non-owner is rejected (403) or sent to login (302) here,
   // before the password gate, so randoms can't learn that the slug exists.
+  // `shareToken` is set only when the gate was cleared by a valid share token;
+  // a stacked password gate carries it onto the unlock form so the recipient's
+  // POST re-clears the account gate.
+  let shareToken: string | undefined;
   if (accountRequired) {
     const accountResult = await resolveAccountGate(request, env, slug, meta, url, fullPath);
     if (accountResult.kind === "stop") return accountResult.response;
+    shareToken = accountResult.shareToken;
     // kind === "ok" → fall through to Gate 2.
   }
 
@@ -117,7 +122,7 @@ async function serveSiteInner(
     const unlocked = await isUnlocked(request, env, slug, meta.passwordHash);
     if (!unlocked) {
       console.log(JSON.stringify({ event: "private_gate_render", slug, path: path || "/" }));
-      return renderGatePage(slug, basePath, { redirect: fullPath });
+      return renderGatePage(slug, basePath, { redirect: fullPath, shareToken });
     }
   }
 
@@ -131,7 +136,10 @@ async function serveSiteInner(
   return addPrivateHeaders(inner);
 }
 
-type GateOutcome = { kind: "ok" } | { kind: "stop"; response: Response };
+// `shareToken` is set on the "ok" outcome only when the account gate was cleared
+// by a valid share token (not an owner session). A stacked password gate then
+// carries it onto the unlock form so the recipient's POST re-clears the account gate.
+type GateOutcome = { kind: "ok"; shareToken?: string } | { kind: "stop"; response: Response };
 
 /**
  * Resolve the ACCOUNT gate for a private site.
@@ -164,7 +172,8 @@ async function resolveAccountGate(
     const result = await verifyShareToken(env.SESSION_SECRET, slug, shareToken);
     if (result.valid) {
       console.log(JSON.stringify({ event: "account_gate_share", slug }));
-      return { kind: "ok" };
+      // Surface the token so a stacked password gate can carry it onto the unlock form.
+      return { kind: "ok", shareToken };
     }
     // An invalid/expired share token falls through to session resolution rather
     // than short-circuiting — the request may still carry a valid owner session.
