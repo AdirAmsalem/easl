@@ -6,6 +6,7 @@ dist/
 .context/
 .playwright-mcp/
 .env*
+.dev.vars
 .DS_Store
 .claude/
 .gstack/

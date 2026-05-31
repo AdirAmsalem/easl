@@ -21,7 +21,7 @@ npx vitest run packages/worker/src/lib/slug.test.ts
 
 # Worker-specific
 cd packages/worker
-pnpm db:migrate       # Apply D1 schema (wrangler d1 execute)
+pnpm db:migrate       # Apply D1 migrations locally (wrangler d1 migrations apply --local)
 pnpm deploy           # Deploy to Cloudflare
 ```
 
@@ -58,7 +58,7 @@ Published to npm. Single-file stdio MCP server (`src/index.ts`) with 5 tools: `p
 - `packages/worker/src/render/templates/base.ts` — HTML shell generation for viewers
 - `packages/worker/src/lib/mime.ts` — MIME detection and viewer type mapping
 - `packages/worker/src/types.ts` — Shared TypeScript types (Env bindings, API types, D1 row types)
-- `packages/worker/schema.sql` — D1 database schema (sites, versions, feedback tables)
+- `packages/worker/migrations/` — D1 migrations (base schema + incremental changes), applied via `wrangler d1 migrations apply`
 - `packages/cli/src/cli.ts` — CLI entry point, command registration
 - `packages/cli/src/commands/publish.ts` — Publish command (file, dir, stdin, inline)
 - `packages/cli/src/lib/client.ts` — API client wrapper

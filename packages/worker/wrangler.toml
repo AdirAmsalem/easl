@@ -33,11 +33,18 @@ bucket_name = "easl-content"
 binding = "DB"
 database_name = "easl-db"
 database_id = "8b7c3c46-7517-4459-a024-7d22ca39e28d"  # Self-hosters: replace with your own D1 database ID
+migrations_dir = "migrations"  # applied via `wrangler d1 migrations apply`
 
 [vars]
 DOMAIN = "easl.dev"
 API_HOST = "api.easl.dev"
 WORKERS_DEV_SUBDOMAIN = "adir"  # Cloudflare account subdomain for preview proxy
+# SESSION_SECRET signs unlock cookies for private easls. It is intentionally NOT defined
+# here — committing it to [vars] would deploy a publicly-known key, letting anyone forge
+# unlock cookies. Set it as a secret in production:
+#   wrangler secret put SESSION_SECRET   (use a strong random value, e.g. `openssl rand -base64 48`)
+# For local dev, put it in .dev.vars (gitignored; see .dev.vars.example).
+# If it is unset or left as the placeholder, the Worker fails closed on private sites.
 
 [observability]
 enabled = true

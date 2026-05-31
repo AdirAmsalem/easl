@@ -14,6 +14,8 @@ export interface TrackedSite {
   createdAt: string;
   title?: string;
   expiresAt?: string;
+  visibility?: 'public' | 'private';
+  password?: string;
 }
 
 interface ConfigFile {

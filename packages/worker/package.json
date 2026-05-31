@@ -13,7 +13,7 @@
     "build": "wrangler deploy --dry-run --outdir=dist",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "db:migrate": "wrangler d1 execute easl-db --file=./schema.sql"
+    "db:migrate": "wrangler d1 migrations apply easl-db --local"
   },
   "dependencies": {
     "@resvg/resvg-wasm": "^2.6.2",

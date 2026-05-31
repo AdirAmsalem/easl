@@ -57,6 +57,7 @@ easl publish report.md
 
 easl publish data.csv --title "Q4 Results" --open
 cat logs.json | easl publish --type json
+easl publish board-update.md --private   # password-protected; password printed once
 easl list
 ```
 
@@ -138,14 +139,28 @@ The MCP server gives AI agents first-class publishing capabilities through the [
 
 ---
 
+## Private easls
+
+Pages are public by default. Pass `private: true` (CLI: `--private`) to gate one behind a password — supply your own or let easl generate a strong one, returned once in the publish response:
+
+```bash
+easl publish board-update.md --private
+# => https://cool-maze.easl.dev   password: dust-arch-fern-dark-1181
+```
+
+Visitors hit a password gate, then stay unlocked for 30 days via a signed cookie. Private pages are never cached, never indexed, and skip OG-image generation. Toggle visibility or rotate the password later with `PATCH /sites/:slug/privacy`.
+
+---
+
 ## REST API
 
 Base URL: `https://api.easl.dev`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/publish` | Publish content — single-file shorthand or multi-file array |
+| `POST` | `/publish` | Publish content — single-file shorthand or multi-file array (`private` + `password` optional) |
 | `GET` | `/sites/:slug` | Get site metadata |
+| `PATCH` | `/sites/:slug/privacy` | Toggle visibility / rotate password (requires `X-Claim-Token` header) |
 | `DELETE` | `/sites/:slug` | Delete a site (requires `X-Claim-Token` header) |
 | `POST` | `/feedback` | Submit feedback programmatically |
 

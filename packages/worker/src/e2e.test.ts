@@ -4,9 +4,9 @@ import type { Env } from "./types";
 
 const db = (env as unknown as Env).DB;
 
-// Mirror of schema.sql — single-line for D1 exec compatibility
+// Mirror of migrations/ — single-line for D1 exec compatibility
 const SCHEMA = [
-  `CREATE TABLE IF NOT EXISTS sites (slug TEXT PRIMARY KEY, title TEXT, template TEXT, claim_token TEXT NOT NULL, is_anonymous INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), expires_at TEXT, file_count INTEGER NOT NULL DEFAULT 0, total_bytes INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS sites (slug TEXT PRIMARY KEY, title TEXT, template TEXT, claim_token TEXT NOT NULL, is_anonymous INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), expires_at TEXT, file_count INTEGER NOT NULL DEFAULT 0, total_bytes INTEGER NOT NULL DEFAULT 0, visibility TEXT NOT NULL DEFAULT 'public', password_hash TEXT, owner_id TEXT)`,
   `CREATE TABLE IF NOT EXISTS versions (id TEXT PRIMARY KEY, slug TEXT NOT NULL REFERENCES sites(slug) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'uploading', created_at TEXT NOT NULL DEFAULT (datetime('now')), files_json TEXT NOT NULL)`,
 ];
 
@@ -160,4 +160,186 @@ describe("delete auth", () => {
 
 it("404 for non-existent site", async () => {
   expect((await serve("/sites/does-not-exist")).status).toBe(404);
+});
+
+describe("private easls", () => {
+  it("publishes private and returns auto-generated password", async () => {
+    const { res, body } = await publish({
+      content: "# Secret",
+      contentType: "text/markdown",
+      private: true,
+    });
+    expect(res.status).toBe(201);
+    expect(body.visibility).toBe("private");
+    expect(typeof body.password).toBe("string");
+    expect((body.password as string).length).toBeGreaterThan(8);
+    // OG image / QR are not surfaced for private sites
+    expect(body.ogImage).toBeUndefined();
+    expect(body.qrCode).toBeUndefined();
+  });
+
+  it("publishes private with caller-supplied password", async () => {
+    const { res, body } = await publish({
+      content: "x",
+      contentType: "text/plain",
+      private: true,
+      password: "hunter22",
+    });
+    expect(res.status).toBe(201);
+    expect(body.password).toBe("hunter22");
+  });
+
+  it("rejects password without private:true", async () => {
+    const { res } = await publish({
+      content: "x",
+      contentType: "text/plain",
+      password: "hunter22",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("renders the gate (401) for an unauthenticated viewer", async () => {
+    const { body } = await publish({
+      content: "secret content",
+      contentType: "text/plain",
+      private: true,
+    });
+    const slug = body.slug as string;
+    const res = await serve(`/s/${slug}`);
+    expect(res.status).toBe(401);
+    const html = await res.text();
+    expect(html).toContain("This easl is private");
+    expect(html).not.toContain("secret content");
+    expect(res.headers.get("Cache-Control")).toContain("no-store");
+  });
+
+  it("rejects a wrong password and re-renders the gate", async () => {
+    const { body } = await publish({
+      content: "x",
+      contentType: "text/plain",
+      private: true,
+      password: "right-one",
+    });
+    const slug = body.slug as string;
+    const form = new URLSearchParams({ password: "wrong-one", redirect: `/s/${slug}` });
+    const res = await SELF.fetch(`http://localhost/s/${slug}/__unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.text()).toContain("Incorrect password");
+  });
+
+  it("unlocks with the right password, sets cookie, and serves content with it", async () => {
+    // Use markdown so the body is inlined into the rendered HTML (text/plain uses the
+    // download viewer, which embeds a file reference rather than the raw text).
+    const { body } = await publish({
+      content: "secret content",
+      contentType: "text/markdown",
+      private: true,
+      password: "open-sesame",
+    });
+    const slug = body.slug as string;
+    const redirect = `/s/${slug}`;
+    const form = new URLSearchParams({ password: "open-sesame", redirect });
+    const unlock = await SELF.fetch(`http://localhost/s/${slug}/__unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+      redirect: "manual",
+    });
+    expect(unlock.status).toBe(303);
+    const setCookie = unlock.headers.get("Set-Cookie");
+    expect(setCookie).toBeTruthy();
+    expect(setCookie).toMatch(/easl_pk_/);
+
+    // Extract cookie value to replay on the content request
+    const cookieValue = setCookie!.split(";")[0];
+
+    const view = await SELF.fetch(`http://localhost${redirect}`, {
+      headers: { Cookie: cookieValue },
+    });
+    expect(view.status).toBe(200);
+    const text = await view.text();
+    expect(text).toContain("secret content");
+    expect(view.headers.get("Cache-Control")).toContain("private");
+    // Sliding refresh: response should include a fresh Set-Cookie
+    expect(view.headers.get("Set-Cookie")).toMatch(/easl_pk_/);
+  });
+
+  it("lands on the full /s/:slug path after unlock (path-based routing)", async () => {
+    const { body } = await publish({
+      content: "deep content",
+      contentType: "text/plain",
+      private: true,
+      password: "deep-pass",
+    });
+    const slug = body.slug as string;
+    // Hit a sub-path so the gate captures a non-root redirect
+    const gate = await serve(`/s/${slug}/content.txt`);
+    expect(gate.status).toBe(401);
+    const gateHtml = await gate.text();
+    // The hidden redirect field must carry the /s/<slug> prefix, not a bare /content.txt
+    expect(gateHtml).toContain(`/s/${slug}/content.txt`);
+  });
+
+  it("invalidates existing unlock cookies after password rotation", async () => {
+    const { body } = await publish({
+      content: "rotate me",
+      contentType: "text/plain",
+      private: true,
+      password: "first-pass",
+    });
+    const slug = body.slug as string;
+    const claim = body.claimToken as string;
+
+    // Unlock with the original password
+    const unlock = await SELF.fetch(`http://localhost/s/${slug}/__unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ password: "first-pass", redirect: `/s/${slug}` }).toString(),
+      redirect: "manual",
+    });
+    const cookie = unlock.headers.get("Set-Cookie")!.split(";")[0];
+    expect((await SELF.fetch(`http://localhost/s/${slug}`, { headers: { Cookie: cookie } })).status).toBe(200);
+
+    // Rotate the password via the owner endpoint
+    const rotate = await SELF.fetch(`http://localhost/sites/${slug}/privacy`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "X-Claim-Token": claim },
+      body: JSON.stringify({ private: true, password: "second-pass" }),
+    });
+    expect(rotate.status).toBe(200);
+
+    // The old cookie must no longer unlock the site
+    const after = await SELF.fetch(`http://localhost/s/${slug}`, { headers: { Cookie: cookie } });
+    expect(after.status).toBe(401);
+  });
+
+  it("PATCH /sites/:slug/privacy requires claim token", async () => {
+    const { body } = await publish({ content: "x", contentType: "text/plain" });
+    const slug = body.slug as string;
+    const claim = body.claimToken as string;
+
+    const noToken = await SELF.fetch(`http://localhost/sites/${slug}/privacy`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ private: true }),
+    });
+    expect(noToken.status).toBe(401);
+
+    const ok = await SELF.fetch(`http://localhost/sites/${slug}/privacy`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "X-Claim-Token": claim },
+      body: JSON.stringify({ private: true }),
+    });
+    expect(ok.status).toBe(200);
+    const data = await ok.json<Record<string, unknown>>();
+    expect(data.visibility).toBe("private");
+    expect(typeof data.password).toBe("string");
+
+    // The site should now gate
+    expect((await serve(`/s/${slug}`)).status).toBe(401);
+  });
 });

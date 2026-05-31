@@ -19,6 +19,8 @@ function makeD1Row(meta: SiteMeta) {
     created_at: meta.createdAt,
     version_id: meta.currentVersionId,
     files_json: JSON.stringify(meta.files),
+    visibility: meta.visibility,
+    password_hash: meta.passwordHash,
   };
 }
 
@@ -42,6 +44,7 @@ function makeEnv(opts: { d1Row?: Record<string, unknown> | null } = {}): Env {
     DOMAIN: "easl.dev",
     API_HOST: "api.easl.dev",
     WORKERS_DEV_SUBDOMAIN: "easl",
+    SESSION_SECRET: "test-session-secret-not-for-prod",
   };
 }
 
@@ -74,6 +77,8 @@ describe("serveSite noindex", () => {
       template: null,
       expiresAt: null,
       createdAt: "2025-01-01T00:00:00Z",
+      visibility: "public",
+      passwordHash: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -109,6 +114,8 @@ describe("serveSite D1-based metadata", () => {
       template: null,
       expiresAt: null,
       createdAt: "2025-01-01T00:00:00Z",
+      visibility: "public",
+      passwordHash: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -150,6 +157,8 @@ describe("serveSite D1-based metadata", () => {
       template: null,
       expiresAt: "2020-01-01T00:00:00Z", // expired
       createdAt: "2019-12-01T00:00:00Z",
+      visibility: "public",
+      passwordHash: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -169,6 +178,8 @@ describe("serveSite D1-based metadata", () => {
       template: null,
       expiresAt: null,
       createdAt: "2025-01-01T00:00:00Z",
+      visibility: "public",
+      passwordHash: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -205,6 +216,8 @@ describe("serveSite Cache API L1", () => {
       template: null,
       expiresAt: null,
       createdAt: "2025-01-01T00:00:00Z",
+      visibility: "public",
+      passwordHash: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });
@@ -243,6 +256,8 @@ describe("serveSite Cache API L1", () => {
       template: null,
       expiresAt: null,
       createdAt: "2025-01-01T00:00:00Z",
+      visibility: "public",
+      passwordHash: null,
     };
 
     const env = makeEnv({ d1Row: makeD1Row(meta) });

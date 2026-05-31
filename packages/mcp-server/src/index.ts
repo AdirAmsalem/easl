@@ -21,11 +21,22 @@ const server = new Server(
   { capabilities: { tools: {} } },
 );
 
+const privacyProps = {
+  private: {
+    type: "boolean" as const,
+    description: "If true, gate the page with a password. Server returns a `password` in the response. Shown once — relay it to the user.",
+  },
+  password: {
+    type: "string" as const,
+    description: "Optional caller-supplied password (4-128 chars). Implies private. If omitted with private=true, the server generates one.",
+  },
+};
+
 const toolDefinitions = [
   {
     name: "publish_content",
     description:
-      "Publish raw content (Markdown, CSV, HTML, JSON, SVG, Mermaid) as a shareable page. The fastest way — content goes in, URL comes out. Max 256KB.",
+      "Publish raw content (Markdown, CSV, HTML, JSON, SVG, Mermaid) as a shareable page. The fastest way — content goes in, URL comes out. Max 256KB. Pass `private: true` for a password-protected page.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -36,6 +47,7 @@ const toolDefinitions = [
         },
         title: { type: "string", description: "Optional title for the page" },
         template: { type: "string", description: "Optional template: minimal, report, dashboard" },
+        ...privacyProps,
       },
       required: ["content", "contentType"],
     },
@@ -43,13 +55,14 @@ const toolDefinitions = [
   {
     name: "publish_file",
     description:
-      "Publish a single file from disk — returns a URL to a shareable page. easl auto-detects the file type and renders it with the best viewer.",
+      "Publish a single file from disk — returns a URL to a shareable page. easl auto-detects the file type and renders it with the best viewer. Pass `private: true` for a password-protected page.",
     inputSchema: {
       type: "object" as const,
       properties: {
         path: { type: "string", description: "Absolute path to the file" },
         title: { type: "string", description: "Optional title" },
         template: { type: "string", description: "Optional template: minimal, report, dashboard" },
+        ...privacyProps,
       },
       required: ["path"],
     },
@@ -57,13 +70,14 @@ const toolDefinitions = [
   {
     name: "publish_site",
     description:
-      "Publish a directory of files as a site. If the directory has an index.html, it's served as-is. Otherwise, easl auto-generates navigation.",
+      "Publish a directory of files as a site. If the directory has an index.html, it's served as-is. Otherwise, easl auto-generates navigation. Pass `private: true` for a password-protected page.",
     inputSchema: {
       type: "object" as const,
       properties: {
         path: { type: "string", description: "Absolute path to the directory" },
         title: { type: "string", description: "Optional title" },
         template: { type: "string", description: "Optional template" },
+        ...privacyProps,
       },
       required: ["path"],
     },
@@ -106,6 +120,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+function extractPrivacy(args: Json): { private?: true; password?: string } {
+  const out: { private?: true; password?: string } = {};
+  if (args.private === true) out.private = true;
+  if (typeof args.password === "string" && args.password.length > 0) {
+    out.private = true;
+    out.password = args.password;
+  }
+  return out;
+}
+
 async function publishContent(args: Json): Promise<Json> {
   const content = requireString(args.content, "content");
   const contentType = requireString(args.contentType, "contentType");
@@ -115,6 +139,7 @@ async function publishContent(args: Json): Promise<Json> {
     contentType,
     title: typeof args.title === "string" ? args.title : undefined,
     template: typeof args.template === "string" ? args.template : undefined,
+    ...extractPrivacy(args),
   });
 
   sessionSites.push({
@@ -142,6 +167,7 @@ async function publishFile(args: Json): Promise<Json> {
     }],
     title: typeof args.title === "string" ? args.title : undefined,
     template: typeof args.template === "string" ? args.template : undefined,
+    ...extractPrivacy(args),
   });
 
   sessionSites.push({
@@ -173,6 +199,7 @@ async function publishSite(args: Json): Promise<Json> {
     files: fileEntries,
     title: typeof args.title === "string" ? args.title : undefined,
     template: typeof args.template === "string" ? args.template : undefined,
+    ...extractPrivacy(args),
   });
 
   sessionSites.push({

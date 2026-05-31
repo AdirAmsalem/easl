@@ -4,6 +4,7 @@ import { generateSlug, generateVersionId, generateClaimToken, isValidCustomSlug 
 import { siteUrl as buildSiteUrl } from "../lib/url";
 import { generateOgImage } from "../og";
 import { generateQrSvg } from "../lib/qr";
+import { generatePassword, hashPassword } from "../lib/password";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -34,7 +35,12 @@ interface PublishRequest {
   template?: string;
   ttl?: number;
   slug?: string;
+  private?: boolean;
+  password?: string;
 }
+
+const PASSWORD_MIN_LEN = 4;
+const PASSWORD_MAX_LEN = 128;
 
 // File extension mapping for single-file shorthand
 const EXT_MAP: Record<string, string> = {
@@ -121,6 +127,26 @@ app.post("/publish", async (c) => {
     slug = await generateUniqueSlug(c.env.DB);
   }
 
+  // Resolve privacy: optional `private` flag + optional caller-supplied password.
+  const isPrivate = body.private === true;
+  let plaintextPassword: string | null = null;
+  let passwordHash: string | null = null;
+  if (isPrivate) {
+    if (body.password != null) {
+      if (typeof body.password !== "string"
+        || body.password.length < PASSWORD_MIN_LEN
+        || body.password.length > PASSWORD_MAX_LEN) {
+        return c.json({ error: `password must be ${PASSWORD_MIN_LEN}-${PASSWORD_MAX_LEN} chars` }, 400);
+      }
+      plaintextPassword = body.password;
+    } else {
+      plaintextPassword = generatePassword();
+    }
+    passwordHash = await hashPassword(plaintextPassword);
+  } else if (body.password != null) {
+    return c.json({ error: "password requires private: true" }, 400);
+  }
+
   const versionId = generateVersionId();
   const claimToken = generateClaimToken();
   const now = new Date().toISOString();
@@ -146,9 +172,20 @@ app.post("/publish", async (c) => {
   // Insert site
   try {
     await c.env.DB.prepare(
-      `INSERT OR FAIL INTO sites (slug, title, template, claim_token, is_anonymous, created_at, expires_at, file_count, total_bytes)
-       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)`
-    ).bind(slug, body.title ?? null, body.template ?? null, claimToken, now, expiresAt, files.length, totalSize).run();
+      `INSERT OR FAIL INTO sites (slug, title, template, claim_token, is_anonymous, created_at, expires_at, file_count, total_bytes, visibility, password_hash)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      slug,
+      body.title ?? null,
+      body.template ?? null,
+      claimToken,
+      now,
+      expiresAt,
+      files.length,
+      totalSize,
+      isPrivate ? "private" : "public",
+      passwordHash,
+    ).run();
   } catch (e) {
     if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
       return c.json({ error: "Slug already taken" }, 409);
@@ -164,24 +201,41 @@ app.post("/publish", async (c) => {
 
   const url = siteUrl(c, slug);
   const contentTypes = [...new Set(files.map((f) => f.contentType))];
-  console.log(JSON.stringify({ event: "publish", slug, files: files.length, totalBytes: totalSize, contentTypes }));
+  console.log(JSON.stringify({
+    event: "publish",
+    slug,
+    files: files.length,
+    totalBytes: totalSize,
+    contentTypes,
+    visibility: isPrivate ? "private" : "public",
+  }));
 
-  // Generate social assets in background
-  c.executionCtx.waitUntil(
-    generateSocialAssets(c.env, slug, body.title || files[0].path, files[0].contentType, url)
-  );
+  // Skip OG image generation for private sites so content doesn't leak via a publicly-cached image.
+  if (!isPrivate) {
+    c.executionCtx.waitUntil(
+      generateSocialAssets(c.env, slug, body.title || files[0].path, files[0].contentType, url)
+    );
+  }
 
-  return c.json({
+  const response: Record<string, unknown> = {
     url,
     slug,
     claimToken,
-    ogImage: `${url}${SOCIAL_ASSET_BASE_PATH}/og.png`,
-    qrCode: `${url}${SOCIAL_ASSET_BASE_PATH}/qr.svg`,
     embed: `<iframe src="${url}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
     shareText: `${body.title || files[0].path}: ${url}`,
     expiresAt,
     anonymous: true,
-  }, 201);
+    visibility: isPrivate ? "private" : "public",
+  };
+  if (!isPrivate) {
+    response.ogImage = `${url}${SOCIAL_ASSET_BASE_PATH}/og.png`;
+    response.qrCode = `${url}${SOCIAL_ASSET_BASE_PATH}/qr.svg`;
+  }
+  if (plaintextPassword != null) {
+    response.password = plaintextPassword;
+    response.passwordNotice = "This password is shown only once. Store it now — there's no recovery.";
+  }
+  return c.json(response, 201);
 });
 
 /** Generate OG image + QR code and upload to R2 (fire-and-forget via waitUntil) */

@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import type { Env, SiteRow } from "../types";
 import { siteUrl } from "../lib/url";
+import { constantTimeEqual } from "../lib/crypto";
+import { generatePassword, hashPassword } from "../lib/password";
+
+const PASSWORD_MIN_LEN = 4;
+const PASSWORD_MAX_LEN = 128;
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -27,8 +32,85 @@ app.get("/sites/:slug", async (c) => {
     totalBytes: site.total_bytes,
     expiresAt: site.expires_at,
     createdAt: site.created_at,
+    visibility: site.visibility ?? "public",
     versions: versions.results,
   });
+});
+
+// PATCH /sites/:slug/privacy — Toggle visibility / rotate password (requires claim token)
+//   Body: { private: boolean, password?: string }
+//   - `private: true` without `password` → server generates and returns a new one
+//   - `private: true` with `password` → uses caller-supplied password
+//   - `private: false` → clears visibility back to public and drops the password hash
+app.patch("/sites/:slug/privacy", async (c) => {
+  const slug = c.req.param("slug");
+  const claimToken = c.req.header("X-Claim-Token");
+
+  if (!claimToken) {
+    return c.json({ error: "X-Claim-Token header is required" }, 401);
+  }
+
+  let body: { private?: boolean; password?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  if (typeof body.private !== "boolean") {
+    return c.json({ error: "`private` (boolean) is required" }, 400);
+  }
+
+  const site = await c.env.DB.prepare("SELECT * FROM sites WHERE slug = ?")
+    .bind(slug).first<SiteRow>();
+
+  if (!site) {
+    return c.json({ error: "Site not found" }, 404);
+  }
+
+  if (!constantTimeEqual(site.claim_token, claimToken)) {
+    return c.json({ error: "Invalid claim token" }, 403);
+  }
+
+  let plaintextPassword: string | null = null;
+  let passwordHash: string | null = null;
+  if (body.private) {
+    if (body.password != null) {
+      if (typeof body.password !== "string"
+        || body.password.length < PASSWORD_MIN_LEN
+        || body.password.length > PASSWORD_MAX_LEN) {
+        return c.json({ error: `password must be ${PASSWORD_MIN_LEN}-${PASSWORD_MAX_LEN} chars` }, 400);
+      }
+      plaintextPassword = body.password;
+    } else {
+      plaintextPassword = generatePassword();
+    }
+    passwordHash = await hashPassword(plaintextPassword);
+  } else if (body.password != null) {
+    return c.json({ error: "password requires private: true" }, 400);
+  }
+
+  await c.env.DB.prepare(
+    "UPDATE sites SET visibility = ?, password_hash = ? WHERE slug = ?"
+  ).bind(body.private ? "private" : "public", passwordHash, slug).run();
+
+  console.log(JSON.stringify({
+    event: "site_privacy_changed",
+    slug,
+    visibility: body.private ? "private" : "public",
+    passwordRotated: passwordHash !== null,
+  }));
+
+  const response: Record<string, unknown> = {
+    success: true,
+    slug,
+    visibility: body.private ? "private" : "public",
+  };
+  if (plaintextPassword != null) {
+    response.password = plaintextPassword;
+    response.passwordNotice = "This password is shown only once. Store it now — there's no recovery.";
+  }
+  return c.json(response);
 });
 
 // DELETE /sites/:slug — Delete site (requires claim token)
@@ -68,19 +150,5 @@ app.delete("/sites/:slug", async (c) => {
 
   return c.json({ success: true, slug });
 });
-
-/** Constant-time string comparison to prevent timing attacks on tokens */
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  const encoder = new TextEncoder();
-  const bufA = encoder.encode(a);
-  const bufB = encoder.encode(b);
-  // crypto.subtle.timingSafeEqual is available in Cloudflare Workers
-  let result = 0;
-  for (let i = 0; i < bufA.length; i++) {
-    result |= bufA[i] ^ bufB[i];
-  }
-  return result === 0;
-}
 
 export default app;

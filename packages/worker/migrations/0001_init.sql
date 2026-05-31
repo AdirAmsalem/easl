@@ -1,7 +1,8 @@
--- easl D1 database schema
--- Run: wrangler d1 execute easl-db --file=./schema.sql
+-- 0001_init — base schema (sites, versions, feedback)
+-- Uses IF NOT EXISTS so applying to a pre-existing database is a safe no-op;
+-- on a fresh database it creates the base tables. Incremental changes go in
+-- later migrations (0002+), never by editing this file.
 
--- Sites (publishes)
 CREATE TABLE IF NOT EXISTS sites (
   slug         TEXT PRIMARY KEY,
   title        TEXT,
