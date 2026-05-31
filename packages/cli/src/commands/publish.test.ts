@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Command } from '@commander-js/extra-typings';
@@ -83,9 +83,9 @@ describe('publish --private auth gate', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  // Fix A — `--password` is an optional-value flag. Helper: stub the publish
-  // response and capture the JSON body the action sends, so we can assert the exact
-  // shape (`password` vs `generatePassword`) for each form of the flag.
+  // `--password` takes a required value; `--generate-password` is a boolean flag.
+  // Helper: stub the publish response and capture the JSON body the action sends,
+  // so we can assert the exact shape (`password` vs `generatePassword`) per flag.
   function stubPublishResponse(overrides: Record<string, unknown> = {}): void {
     fetchSpy.mockResolvedValue(
       new Response(
@@ -123,12 +123,12 @@ describe('publish --private auth gate', () => {
     expect(body.generatePassword).toBeUndefined();
   });
 
-  test('value-less --password sends { generatePassword: true } and no password', async () => {
+  test('--generate-password sends { generatePassword: true } and no password', async () => {
     // Server mints and returns the password once.
     stubPublishResponse({ password: 'gen-erated-pass-1234' });
     const program = rootWithPublish();
     await program.parseAsync(
-      ['publish', '--content', '# hi', '--type', 'markdown', '--password', '--json'],
+      ['publish', '--content', '# hi', '--type', 'markdown', '--generate-password', '--json'],
       { from: 'user' },
     );
     const body = sentBody();
@@ -136,7 +136,51 @@ describe('publish --private auth gate', () => {
     expect(body.password).toBeUndefined();
   });
 
-  test('no --password sends neither password nor generatePassword', async () => {
+  test('--generate-password preceding the path keeps the path positional', async () => {
+    // Regression: a boolean flag consumes no token, so the file path is not stolen.
+    const filePath = join(tmpDir, 'report.md');
+    writeFileSync(filePath, '# report');
+    stubPublishResponse({ password: 'gen-erated-pass-1234' });
+    const program = rootWithPublish();
+    await program.parseAsync(
+      ['publish', '--generate-password', filePath, '--json'],
+      { from: 'user' },
+    );
+    const body = sentBody();
+    expect(body.generatePassword).toBe(true);
+    expect(body.password).toBeUndefined();
+    // The file was read as the published content (path was NOT swallowed by the flag).
+    const files = body.files as Array<{ path: string }>;
+    expect(files).toHaveLength(1);
+    expect(files[0].path).toBe('report.md');
+  });
+
+  test('--password and --generate-password together error before any network call', async () => {
+    stubPublishResponse();
+    const program = rootWithPublish();
+    await expect(
+      program.parseAsync(
+        [
+          'publish',
+          '--content',
+          '# hi',
+          '--type',
+          'markdown',
+          '--password',
+          'hunter2',
+          '--generate-password',
+          '--json',
+        ],
+        { from: 'user' },
+      ),
+    ).rejects.toThrow('__exit__');
+    const printed = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(printed).toContain('publish_error');
+    expect(printed).toMatch(/mutually exclusive/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test('no password flags send neither password nor generatePassword', async () => {
     stubPublishResponse();
     const program = rootWithPublish();
     await program.parseAsync(

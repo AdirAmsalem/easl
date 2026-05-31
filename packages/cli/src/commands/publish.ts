@@ -59,8 +59,12 @@ export const publishCommand = new Command('publish')
   .option('--ttl <seconds>', 'Time to live in seconds')
   .option('--private', 'Account-private: only you (signed in) can view. Requires login.')
   .option(
-    '--password [password]',
-    'Password-protect the URL. Pass a value to set it, or use the flag alone to auto-generate one (shown once). Works with or without --private.',
+    '--password <password>',
+    'Password-protect the URL with a value you choose. Works with or without --private. Mutually exclusive with --generate-password.',
+  )
+  .option(
+    '--generate-password',
+    'Password-protect the URL with a strong password easl generates and shows once. Works with or without --private. Mutually exclusive with --password.',
   )
   .option('--open', 'Open in browser after publishing')
   .option('--copy', 'Copy URL to clipboard after publishing')
@@ -68,7 +72,7 @@ export const publishCommand = new Command('publish')
     'after',
     buildHelpText({
       context:
-        `Publishes content and returns a shareable URL.\nSupports file path, directory, --content flag, or piped stdin.\n\n${pc.gray('Privacy modes (composable):')}\n  ${pc.bold('public')}              default — anyone with the link can view\n  ${pc.bold('password-protected')}  --password X — gated by a password page\n  ${pc.bold('                  ')}  --password (no value) — easl generates one, shown once\n  ${pc.bold('account-private')}     --private — only you (signed in); share via ${pc.blue('easl share')}\n  ${pc.bold('both')}                --private --password X — sign-in AND password required\n\n--private requires authentication (run ${pc.blue('easl login')} or set EASL_API_KEY).`,
+        `Publishes content and returns a shareable URL.\nSupports file path, directory, --content flag, or piped stdin.\n\n${pc.gray('Privacy modes (composable):')}\n  ${pc.bold('public')}              default — anyone with the link can view\n  ${pc.bold('password-protected')}  --password X — gated by a password page\n  ${pc.bold('                  ')}  --generate-password — easl generates one, shown once\n  ${pc.bold('account-private')}     --private — only you (signed in); share via ${pc.blue('easl share')}\n  ${pc.bold('both')}                --private --password X — sign-in AND password required\n\n--password and --generate-password are mutually exclusive.\n--private requires authentication (run ${pc.blue('easl login')} or set EASL_API_KEY).`,
       output:
         '  {"url":"...","slug":"...","claimToken":"...","expiresAt":"...","visibility":"...","password":"..."}',
       errorCodes: ['publish_error', 'file_error', 'stdin_error', 'auth_error'],
@@ -77,7 +81,7 @@ export const publishCommand = new Command('publish')
         'easl publish ./my-site/',
         'cat data.csv | easl publish --type csv',
         'easl publish report.md --password hunter2',
-        'easl publish report.md --password   # auto-generate a password',
+        'easl publish report.md --generate-password   # auto-generate a password',
         'easl login && easl publish secret.md --private',
         'easl publish secret.md --private --password hunter2',
       ],
@@ -184,15 +188,27 @@ export const publishCommand = new Command('publish')
       );
     }
 
-    // `--password` is an optional-value flag (commander `[password]`):
-    //   - absent            → opts.password === undefined  (no password gate)
-    //   - `--password X`     → opts.password === "X"        (explicit password)
-    //   - `--password`       → opts.password === true       (server auto-generates)
-    // A supplied string is sent verbatim; the value-less flag sends the
-    // `generatePassword` signal so the server mints one and returns it once.
+    // Two ways to request the password gate, mutually exclusive:
+    //   - `--password X`        → opts.password === "X"   (explicit password, sent verbatim)
+    //   - `--generate-password` → opts.generatePassword   (server mints one, returns it once)
+    // `--password` takes a REQUIRED value so a value-less invocation can't swallow
+    // the positional path token (e.g. `easl publish --password report.md` would
+    // otherwise parse report.md as the password). `--generate-password` is a boolean
+    // flag that consumes no token, so `easl publish --generate-password report.md`
+    // keeps report.md as the path. Both compose with `--private`.
+    if (opts.password != null && opts.generatePassword) {
+      outputError(
+        {
+          message:
+            '--password and --generate-password are mutually exclusive. Pass a value with --password, or use --generate-password to have easl mint one.',
+          code: 'publish_error',
+        },
+        globalOpts,
+      );
+    }
     const explicitPassword =
       typeof opts.password === 'string' ? opts.password : undefined;
-    const generatePassword = opts.password === true;
+    const generatePassword = opts.generatePassword === true;
 
     const body: Record<string, unknown> = { files };
     if (opts.title) body.title = opts.title;
