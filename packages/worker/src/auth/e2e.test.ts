@@ -1,25 +1,19 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env, SELF } from "cloudflare:test";
+import { Hono } from "hono";
 import type { Env } from "../types";
 import { makeAuth, AuthSecretUnconfiguredError } from "./index";
+import type { EaslAuth } from "./index";
+import { getOptionalUser, requireUser } from "./middleware";
 import { PLACEHOLDER_BETTER_AUTH_SECRET } from "../lib/session";
 import type { EmailSender } from "./email";
+import { BETTER_AUTH_SCHEMA } from "./test-schema";
 
-// better-auth's tables live in the same D1 as sites/versions. The main e2e suite
-// (src/e2e.test.ts) bootstraps the full schema in its own beforeAll, but vitest
-// isolates storage per test file, so re-create the better-auth tables here.
-const SCHEMA = [
-  `CREATE TABLE IF NOT EXISTS "user" ("id" text NOT NULL PRIMARY KEY, "name" text NOT NULL, "email" text NOT NULL UNIQUE, "emailVerified" integer NOT NULL, "image" text, "createdAt" date NOT NULL, "updatedAt" date NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS "session" ("id" text NOT NULL PRIMARY KEY, "expiresAt" date NOT NULL, "token" text NOT NULL UNIQUE, "createdAt" date NOT NULL, "updatedAt" date NOT NULL, "ipAddress" text, "userAgent" text, "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE cascade)`,
-  `CREATE TABLE IF NOT EXISTS "account" ("id" text NOT NULL PRIMARY KEY, "accountId" text NOT NULL, "providerId" text NOT NULL, "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE cascade, "accessToken" text, "refreshToken" text, "idToken" text, "accessTokenExpiresAt" date, "refreshTokenExpiresAt" date, "scope" text, "password" text, "createdAt" date NOT NULL, "updatedAt" date NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS "verification" ("id" text NOT NULL PRIMARY KEY, "identifier" text NOT NULL, "value" text NOT NULL, "expiresAt" date NOT NULL, "createdAt" date NOT NULL, "updatedAt" date NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS "apikey" ("id" text NOT NULL PRIMARY KEY, "configId" text NOT NULL, "name" text, "start" text, "referenceId" text NOT NULL, "prefix" text, "key" text NOT NULL, "refillInterval" integer, "refillAmount" integer, "lastRefillAt" date, "enabled" integer, "rateLimitEnabled" integer, "rateLimitTimeWindow" integer, "rateLimitMax" integer, "requestCount" integer, "remaining" integer, "lastRequest" date, "expiresAt" date, "createdAt" date NOT NULL, "updatedAt" date NOT NULL, "permissions" text, "metadata" text)`,
-];
-
+const testEnv = env as unknown as Env;
 const db = (env as unknown as Env).DB;
 
 beforeAll(async () => {
-  for (const stmt of SCHEMA) await db.exec(stmt);
+  for (const stmt of BETTER_AUTH_SCHEMA) await db.exec(stmt);
 });
 
 describe("better-auth boots in the Workers runtime", () => {
@@ -99,5 +93,256 @@ describe("better-auth boots in the Workers runtime", () => {
     });
     expect(res.status).toBe(200);
     expect((await res.json<{ status?: boolean }>()).status).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth middleware + full magic-link sign-in + API-key lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Recording mock sender: captures magic-link emails, delivers nothing. */
+function recordingSender(): { sent: { to: string; text: string }[]; sender: EmailSender } {
+  const sent: { to: string; text: string }[] = [];
+  return {
+    sent,
+    sender: {
+      async send(message) {
+        sent.push({ to: message.to, text: message.text });
+      },
+    },
+  };
+}
+
+/** Pull the one-time `token` query param out of a captured magic-link URL. */
+function tokenFromEmailText(text: string): string {
+  const urlMatch = text.match(/https?:\/\/\S+/);
+  expect(urlMatch, "magic-link email should contain a URL").toBeTruthy();
+  const token = new URL(urlMatch![0]).searchParams.get("token");
+  expect(token, "verify URL should carry a token").toBeTruthy();
+  return token!;
+}
+
+/**
+ * Drive a complete magic-link sign-in against the real better-auth handler and
+ * return the session cookie as a replayable `Cookie` header. The entire flow runs
+ * through the injected mock sender — no CES, no real email delivery.
+ */
+async function signInAndGetCookie(
+  auth: EaslAuth,
+  email: string,
+  sent: { text: string }[],
+): Promise<string> {
+  const before = sent.length;
+  const signInRes = await auth.handler(
+    new Request("https://api.easl.dev/auth/sign-in/magic-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    }),
+  );
+  expect(signInRes.status).toBe(200);
+  expect(sent.length).toBe(before + 1);
+  const token = tokenFromEmailText(sent[sent.length - 1].text);
+
+  // Verify WITHOUT a callbackURL: better-auth then returns JSON (and still sets the
+  // session cookie) instead of throwing a redirect. The redirect path leaks an
+  // unhandled rejection through the Workers transaction wrapper, which vitest fails
+  // on; the JSON path exercises the same session creation without that noise.
+  const verifyRes = await auth.handler(
+    new Request(`https://api.easl.dev/auth/magic-link/verify?token=${encodeURIComponent(token)}`),
+  );
+  expect(verifyRes.status).toBe(200);
+  const setCookie = verifyRes.headers.get("set-cookie");
+  expect(setCookie, "verify should set a session cookie").toBeTruthy();
+  // Reduce Set-Cookie (possibly multiple, with attributes) to bare name=value pairs.
+  return setCookie!
+    .split(/,(?=[^ ;]+=)/)
+    .map((c) => c.split(";")[0].trim())
+    .join("; ");
+}
+
+/**
+ * A tiny probe app whose routes exercise the middleware exactly as the real
+ * publish/sites routes will in later phases. Driving it via
+ * `app.request(url, init, testEnv)` hands the middleware a real request-scoped D1.
+ */
+function probeApp(): Hono<{ Bindings: Env }> {
+  const app = new Hono<{ Bindings: Env }>();
+  app.get("/whoami", async (c) => c.json({ user: await getOptionalUser(c) }));
+  app.get("/protected", async (c) => {
+    const auth = await requireUser(c);
+    if (!auth.ok) return auth.response;
+    return c.json({ id: auth.user.id, email: auth.user.email });
+  });
+  return app;
+}
+
+describe("auth middleware: getOptionalUser / requireUser", () => {
+  it("returns null / 401 when no cookie and no API key are present", async () => {
+    const app = probeApp();
+
+    const anon = await app.request("http://localhost/whoami", {}, testEnv);
+    expect(anon.status).toBe(200);
+    expect(await anon.json()).toEqual({ user: null });
+
+    const blocked = await app.request("http://localhost/protected", {}, testEnv);
+    expect(blocked.status).toBe(401);
+  });
+
+  it("resolves the user from a session cookie (magic-link sign-in end to end)", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const email = "cookie-user@example.com";
+
+    const cookie = await signInAndGetCookie(auth, email, sent);
+
+    const app = probeApp();
+    const res = await app.request("http://localhost/protected", { headers: { cookie } }, testEnv);
+    expect(res.status).toBe(200);
+    const body = await res.json<{ id: string; email: string }>();
+    expect(body.email).toBe(email);
+    expect(body.id).toBeTruthy();
+  });
+
+  it("mints, lists, resolves-via-Bearer, and revokes an API key", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const email = "apikey-user@example.com";
+    const cookie = await signInAndGetCookie(auth, email, sent);
+
+    // Mint: the full key is returned exactly once, here. The Origin header must
+    // match a trusted origin or better-auth's CSRF guard rejects the POST (403).
+    const createRes = await auth.handler(
+      new Request("https://api.easl.dev/auth/api-key/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie, origin: "https://api.easl.dev" },
+        body: JSON.stringify({ name: "cli" }),
+      }),
+    );
+    expect(createRes.status).toBe(200);
+    const created = await createRes.json<{ id: string; key: string }>();
+    expect(created.id).toBeTruthy();
+    expect(created.key).toBeTruthy();
+    // Prefixed so it's recognisable as an easl key.
+    expect(created.key.startsWith("easl_")).toBe(true);
+
+    // List: returns key metadata (never the secret) for the signed-in user.
+    const listRes = await auth.handler(
+      new Request("https://api.easl.dev/auth/api-key/list", { headers: { cookie } }),
+    );
+    expect(listRes.status).toBe(200);
+    const listed = await listRes.json<{ apiKeys: Array<{ id: string }> }>();
+    expect(Array.isArray(listed.apiKeys)).toBe(true);
+    expect(listed.apiKeys.some((k) => k.id === created.id)).toBe(true);
+
+    // Resolve via Bearer: the probe route sees the key's owner through the
+    // middleware with NO cookie — auth comes purely from the Authorization header.
+    const app = probeApp();
+    const bearerRes = await app.request(
+      "http://localhost/protected",
+      { headers: { authorization: `Bearer ${created.key}` } },
+      testEnv,
+    );
+    expect(bearerRes.status).toBe(200);
+    expect((await bearerRes.json<{ email: string }>()).email).toBe(email);
+
+    // Revoke.
+    const deleteRes = await auth.handler(
+      new Request("https://api.easl.dev/auth/api-key/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie, origin: "https://api.easl.dev" },
+        body: JSON.stringify({ keyId: created.id }),
+      }),
+    );
+    expect(deleteRes.status).toBe(200);
+
+    // After revocation the Bearer key no longer resolves a user...
+    const afterRevoke = await app.request(
+      "http://localhost/whoami",
+      { headers: { authorization: `Bearer ${created.key}` } },
+      testEnv,
+    );
+    expect(afterRevoke.status).toBe(200);
+    expect(await afterRevoke.json()).toEqual({ user: null });
+
+    // ...and the list no longer contains it.
+    const listAfter = await auth.handler(
+      new Request("https://api.easl.dev/auth/api-key/list", { headers: { cookie } }),
+    );
+    const listedAfter = await listAfter.json<{ apiKeys: Array<{ id: string }> }>();
+    expect(listedAfter.apiKeys.some((k) => k.id === created.id)).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rate-limit protections (magic-link anti-abuse + api-key non-throttling)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("magic-link rate limiting", () => {
+  it("returns 429 once the per-IP magic-link limit (10/hour) is exceeded", async () => {
+    // The limiter keys on the client IP (resolved from cf-connecting-ip — the
+    // header makeAuth trusts) + path. A fixed, unique IP isolates this test's
+    // bucket from the other suites sharing the isolate's memory storage.
+    const { sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const ip = "203.0.113.42"; // TEST-NET-3, distinct from any other test's IP.
+
+    const fire = () =>
+      auth.handler(
+        new Request("https://api.easl.dev/auth/sign-in/magic-link", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "cf-connecting-ip": ip,
+          },
+          body: JSON.stringify({ email: "rate-limit@example.com" }),
+        }),
+      );
+
+    // The magic-link plugin rule allows max 10 in the window; the 11th is blocked.
+    const statuses: number[] = [];
+    for (let i = 0; i < 11; i++) statuses.push((await fire()).status);
+
+    expect(statuses.slice(0, 10).every((s) => s === 200)).toBe(true);
+    const blocked = await fire();
+    expect(blocked.status).toBe(429);
+    // sanity: the 11th request in the loop was already over the limit.
+    expect(statuses[10]).toBe(429);
+  });
+});
+
+describe("api-key requests are not per-key rate limited", () => {
+  it("resolves the same Bearer key well past the plugin's default 10/day cap", async () => {
+    // With the api-key plugin's per-key rateLimit disabled in makeAuth, a single
+    // key must keep resolving on every Bearer-authenticated request. Without the
+    // fix this would 401 (key stops resolving) once the default cap (10/day) is
+    // hit, since enableSessionForAPIKeys runs validateApiKey → isRateLimited on
+    // every getOptionalUser/requireUser call.
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const email = "heavy-key-user@example.com";
+    const cookie = await signInAndGetCookie(auth, email, sent);
+
+    const createRes = await auth.handler(
+      new Request("https://api.easl.dev/auth/api-key/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie, origin: "https://api.easl.dev" },
+        body: JSON.stringify({ name: "heavy" }),
+      }),
+    );
+    expect(createRes.status).toBe(200);
+    const { key } = await createRes.json<{ key: string }>();
+
+    const app = probeApp();
+    // 25 > the plugin's default maxRequests (10) — all must succeed as the owner.
+    for (let i = 0; i < 25; i++) {
+      const res = await app.request(
+        "http://localhost/protected",
+        { headers: { authorization: `Bearer ${key}` } },
+        testEnv,
+      );
+      expect(res.status, `request ${i + 1} should resolve the key`).toBe(200);
+      expect((await res.json<{ email: string }>()).email).toBe(email);
+    }
   });
 });

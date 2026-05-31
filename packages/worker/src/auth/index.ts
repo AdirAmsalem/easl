@@ -29,6 +29,36 @@ export const API_KEY_PREFIX = "easl_";
 /** Magic links expire after 15 minutes. */
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 
+/**
+ * Magic-link rate limit: at most 10 requests per hour (per IP + path), covering
+ * both `/sign-in/magic-link` and `/magic-link/verify`. See the open-items note in
+ * the v2 plan ("~10/hour/email"). better-auth's limiter is keyed by IP+path; we
+ * enable the global limiter (memory storage) below so this plugin rule applies —
+ * the global limiter is otherwise off outside production, which a Worker never is.
+ * The IP is resolved from Cloudflare's trusted `cf-connecting-ip` header (see the
+ * `advanced.ipAddress` config in makeAuth) so the bucket key can't be rotated with
+ * a spoofed X-Forwarded-For, and so getIp can resolve an IP at all in prod.
+ */
+const MAGIC_LINK_RATE_LIMIT = { window: 60 * 60, max: 10 } as const;
+
+/**
+ * Extract a Bearer API key from the `Authorization` header.
+ *
+ * The api-key plugin defaults to reading the `x-api-key` header; the easl CLI/MCP
+ * and the v2 spec use `Authorization: Bearer easl_<key>`. This getter returns the
+ * raw `easl_…` token (prefix included — the plugin hashes the whole value) when
+ * the scheme is Bearer and the value carries our prefix, else null so the plugin
+ * ignores non-easl bearer tokens (e.g. a stray better-auth session bearer).
+ */
+export function bearerApiKeyGetter(ctx: { headers?: Headers | null }): string | null {
+  const auth = ctx.headers?.get("authorization") ?? ctx.headers?.get("Authorization");
+  if (!auth) return null;
+  const match = /^Bearer\s+(.+)$/i.exec(auth.trim());
+  if (!match) return null;
+  const token = match[1].trim();
+  return token.startsWith(API_KEY_PREFIX) ? token : null;
+}
+
 export interface MakeAuthOptions {
   /** Override the email sender (tests inject a recording mock). */
   emailSender?: EmailSender;
@@ -98,9 +128,26 @@ export function makeAuth(env: Env, opts: MakeAuthOptions = {}): EaslAuth {
     ],
     // v2 uses magic-link only (no email/password); keep it explicitly disabled.
     emailAndPassword: { enabled: false },
+    // Resolve the client IP from Cloudflare's trusted header. better-auth's getIp
+    // defaults to ["x-forwarded-for"], which is (a) NOT populated with the client
+    // IP in the Workers runtime — so the limiter would silently disable itself in
+    // prod (getIp → null → resolveRateLimitConfig returns null) — and (b) spoofable
+    // anyway, since a client can send its own X-Forwarded-For and Cloudflare passes
+    // that through as the first comma-separated entry (which getIp picks). Keying on
+    // `cf-connecting-ip` (set by Cloudflare's edge, un-spoofable, single IP) makes
+    // the magic-link rate limit actually fire — and per real client IP — in prod.
+    advanced: { ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] } },
+    // Enable better-auth's rate limiter so the magic-link plugin's per-path rule
+    // actually fires. It defaults to ON only in production (NODE_ENV), which this
+    // Worker never sets, so without this every magic-link request would be
+    // unthrottled. Memory storage is per-isolate — adequate for v1; promote to a
+    // KV-backed secondary storage if cross-isolate limits become necessary.
+    rateLimit: { enabled: true, storage: "memory" },
     plugins: [
       magicLink({
         expiresIn: MAGIC_LINK_TTL_SECONDS,
+        // ~10/hour (per IP+path) on /sign-in/magic-link and /magic-link/verify.
+        rateLimit: MAGIC_LINK_RATE_LIMIT,
         sendMagicLink: async ({ email, url }) => {
           await emailSender.send({
             to: email,
@@ -111,7 +158,27 @@ export function makeAuth(env: Env, opts: MakeAuthOptions = {}): EaslAuth {
         },
       }),
       apiKey({
+        // Keys are `easl_<64 random chars>`; the prefix is shown so users can
+        // recognise an easl key, and the full value is what we hash + store.
         defaultPrefix: API_KEY_PREFIX,
+        // Resolve keys from `Authorization: Bearer easl_…` (not the default
+        // `x-api-key` header) so the CLI/MCP/API can authenticate.
+        customAPIKeyGetter: bearerApiKeyGetter,
+        // Let a valid Bearer key resolve a session: with this on, the plugin's
+        // `before` hook makes `auth.api.getSession({ headers })` return the
+        // key's owner, so the serve handler + publish API can treat cookie and
+        // Bearer auth uniformly. The full key is returned only once, on create.
+        enableSessionForAPIKeys: true,
+        // Disable the plugin's PER-KEY rate limit. Its defaults
+        // (enabled, maxRequests: 10, timeWindow: 24h) are enforced on EVERY
+        // Bearer-authenticated request — because enableSessionForAPIKeys runs
+        // validateApiKey → isRateLimited in the plugin's `before` hook — so an
+        // agent/CLI/MCP using one `easl_` key would be throttled after just 10
+        // requests/day, breaking the core publishing flow. easl already has a
+        // separate global IP+path limiter (above) for abuse control and does not
+        // want a per-key daily quota; raise maxRequests/timeWindow instead if a
+        // generous per-key throttle is ever desired.
+        rateLimit: { enabled: false },
       }),
     ],
   } satisfies BetterAuthOptions;
