@@ -47,8 +47,13 @@ Then ask your agent:
 | `publish_site` | Publish a directory as a multi-page site. |
 | `list_sites` | List sites published in the current session. |
 | `delete_site` | Delete a published site by slug. |
+| `create_share_link` | Mint a signed, expiring share link for an account-private easl (owner-only). |
 
-The three publish tools also accept `private` (boolean) and `password` (string) to password-protect the page. When `private` is set without a `password`, the server generates one and returns it in the response — shown only once.
+The three publish tools also accept `private` (boolean) and `password` (string). Two independent, stackable privacy gates:
+
+- **Password-protected** — pass a `password` (4-128 chars). Protects the page behind a password prompt. Works anonymously; no account needed and does **not** imply `private`.
+- **Account-private** — pass `private: true`. Viewable only by the owning account and its share links. Requires the server to be logged in (`EASL_API_KEY` set); otherwise the publish fails with `401`.
+- **Both** — pass `private: true` *and* a `password` (with `EASL_API_KEY` set) to require login **and** the password.
 
 ## Supported Formats
 
@@ -68,6 +73,7 @@ The three publish tools also accept `private` (boolean) and `password` (string) 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EASL_API_URL` | `https://api.easl.dev` | API base URL (override for self-hosted) |
+| `EASL_API_KEY` | _(none)_ | Account API key (`easl_…`). When set, sent as `Authorization: Bearer` on publish and site requests. Required for account-private publishing and `create_share_link`. Mint one with `easl auth …` / the API-key endpoints. |
 
 ## Links
 

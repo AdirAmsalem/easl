@@ -13,6 +13,14 @@ const version: string = typeof __PACKAGE_VERSION__ !== "undefined" ? __PACKAGE_V
 
 const API_URL = (process.env.EASL_API_URL ?? "https://api.easl.dev").replace(/\/$/, "");
 
+// API key resolved once at startup. When present, every /publish and /sites/*
+// request carries `Authorization: Bearer easl_<key>` so the worker's api-key
+// plugin binds the call to the owning account. Required for account-private
+// publishing (private:true without a password) and for share-link creation.
+// Password-protected publishing still works anonymously (no key needed).
+const API_KEY = process.env.EASL_API_KEY?.trim() || undefined;
+const USER_AGENT = `@easl/mcp/${version}`;
+
 // Session state: track published sites for list_sites
 const sessionSites: Array<{ slug: string; claimToken: string; url: string; createdAt: string }> = [];
 
@@ -24,11 +32,13 @@ const server = new Server(
 const privacyProps = {
   private: {
     type: "boolean" as const,
-    description: "If true, gate the page with a password. Server returns a `password` in the response. Shown once — relay it to the user.",
+    description:
+      "Account gate. If true, the page is account-private: viewable only by the owner account and its share links. REQUIRES the server to be logged in (EASL_API_KEY set in the environment); otherwise the publish fails with 401. Independent of `password` — combine the two to require BOTH login AND the password.",
   },
   password: {
     type: "string" as const,
-    description: "Optional caller-supplied password (4-128 chars). Implies private. If omitted with private=true, the server generates one.",
+    description:
+      "Password gate. Optional caller-supplied password (4-128 chars) that protects the page behind a password prompt. Works anonymously — no account needed and does NOT imply `private`. Combine with `private: true` (and EASL_API_KEY) to require BOTH login AND the password.",
   },
 };
 
@@ -36,7 +46,7 @@ const toolDefinitions = [
   {
     name: "publish_content",
     description:
-      "Publish raw content (Markdown, CSV, HTML, JSON, SVG, Mermaid) as a shareable page. The fastest way — content goes in, URL comes out. Max 256KB. Pass `private: true` for a password-protected page.",
+      "Publish raw content (Markdown, CSV, HTML, JSON, SVG, Mermaid) as a shareable page. The fastest way — content goes in, URL comes out. Max 256KB. Pass a `password` for a password-protected page (anonymous OK), `private: true` for an account-private page (requires the server to be logged in via EASL_API_KEY), or both to stack the two gates.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -55,7 +65,7 @@ const toolDefinitions = [
   {
     name: "publish_file",
     description:
-      "Publish a single file from disk — returns a URL to a shareable page. easl auto-detects the file type and renders it with the best viewer. Pass `private: true` for a password-protected page.",
+      "Publish a single file from disk — returns a URL to a shareable page. easl auto-detects the file type and renders it with the best viewer. Pass a `password` for a password-protected page (anonymous OK), `private: true` for an account-private page (requires the server to be logged in via EASL_API_KEY), or both to stack the two gates.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -70,7 +80,7 @@ const toolDefinitions = [
   {
     name: "publish_site",
     description:
-      "Publish a directory of files as a site. If the directory has an index.html, it's served as-is. Otherwise, easl auto-generates navigation. Pass `private: true` for a password-protected page.",
+      "Publish a directory of files as a site. If the directory has an index.html, it's served as-is. Otherwise, easl auto-generates navigation. Pass a `password` for a password-protected site (anonymous OK), `private: true` for an account-private site (requires the server to be logged in via EASL_API_KEY), or both to stack the two gates.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -98,6 +108,22 @@ const toolDefinitions = [
       required: ["slug"],
     },
   },
+  {
+    name: "create_share_link",
+    description:
+      "Create a signed, expiring share link for an account-private easl. Returns an unguessable URL that lets someone without an account view the page until it expires. Owner-only — REQUIRES the server to be logged in (EASL_API_KEY set) and to own the site. If the site is ALSO password-protected, the recipient still needs the password.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        slug: { type: "string", description: "Site slug to share" },
+        expiresIn: {
+          type: "number",
+          description: "Link lifetime in seconds (default 7 days, max 30 days)",
+        },
+      },
+      required: ["slug"],
+    },
+  },
 ] as const;
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...toolDefinitions] }));
@@ -113,6 +139,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "publish_site": return successResult(await publishSite(args));
       case "list_sites": return successResult({ sites: sessionSites });
       case "delete_site": return successResult(await deleteSite(args));
+      case "create_share_link": return successResult(await createShareLink(args));
       default: return errorResult(`Unknown tool: ${name}`);
     }
   } catch (error) {
@@ -120,13 +147,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+// Two independent, composable privacy gates (private easls v2), mirroring the
+// CLI and the worker (publish.ts): `private` is the ACCOUNT gate and is set ONLY
+// from the explicit flag (it always requires auth — anonymous `private: true`
+// → 401). `password` is the PASSWORD gate and is passed through independently —
+// password-only publishing works anonymously, with no account needed. Do NOT
+// derive `private` from `password`; that re-introduces the v1 coupling.
 function extractPrivacy(args: Json): { private?: true; password?: string } {
   const out: { private?: true; password?: string } = {};
   if (args.private === true) out.private = true;
-  if (typeof args.password === "string" && args.password.length > 0) {
-    out.private = true;
-    out.password = args.password;
-  }
+  if (typeof args.password === "string" && args.password.length > 0) out.password = args.password;
   return out;
 }
 
@@ -229,6 +259,26 @@ async function deleteSite(args: Json): Promise<Json> {
   return result;
 }
 
+async function createShareLink(args: Json): Promise<Json> {
+  const slug = requireString(args.slug, "slug");
+
+  if (!API_KEY) {
+    throw new Error(
+      "Share links require an account. Set EASL_API_KEY in the server environment to log in.",
+    );
+  }
+
+  const body: Json = {};
+  if (args.expiresIn != null) {
+    if (typeof args.expiresIn !== "number" || !Number.isFinite(args.expiresIn) || args.expiresIn <= 0) {
+      throw new Error("expiresIn must be a positive number of seconds");
+    }
+    body.expiresIn = args.expiresIn;
+  }
+
+  return apiRequest<Json>("POST", `/sites/${slug}/share-links`, body);
+}
+
 // ─── Helpers ───
 
 function walkDir(dirPath: string): Array<{ relativePath: string; absolutePath: string; size: number }> {
@@ -287,7 +337,14 @@ async function apiRequest<T>(
 ): Promise<T> {
   const url = path.startsWith("http") ? path : `${API_URL}${path}`;
   const headers = new Headers();
+  headers.set("User-Agent", USER_AGENT);
   if (body !== undefined) headers.set("Content-Type", "application/json");
+
+  // Attach the resolved API key as `Authorization: Bearer easl_<key>` so the
+  // worker's api-key plugin can bind /publish and /sites/* requests to the
+  // owning account. Set before extraHeaders so callers can still override it.
+  if (API_KEY) headers.set("Authorization", `Bearer ${API_KEY}`);
+
   if (extraHeaders) {
     for (const [k, v] of Object.entries(extraHeaders)) headers.set(k, v);
   }
