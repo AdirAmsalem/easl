@@ -20,17 +20,8 @@ type Ctx = Context<{ Bindings: Env }>;
  */
 const LOOPBACK_PATH = "/callback";
 
-/**
- * Lifetime of the minted CLI API key. Defense-in-depth: the handshake stops
- * minting NEVER-EXPIRING keys (the old behavior, which let a single CSRF mint an
- * unbounded permanent credential). 90 days balances "don't re-login constantly"
- * against bounding the blast radius of a leaked/over-minted key. Re-running
- * `easl login` mints a fresh key, so expiry is invisible in normal use.
- */
+/** Lifetime of the minted CLI API key: 90 days (bounds a leaked/over-minted key; re-login mints a fresh one). */
 const CLI_KEY_TTL_SECONDS = 90 * 24 * 60 * 60;
-
-/** KV key prefix for spent CLI-callback marker nonces (best-effort secondary cleanup). */
-const CLI_NONCE_KV_PREFIX = "cli-cb-nonce:";
 
 /**
  * Name of the SameSite=Strict double-submit CSRF cookie set when the consent page
@@ -47,29 +38,20 @@ const CSRF_TOKEN_TTL_MS = CLI_CALLBACK_MARKER_TTL_MS;
 const CLI_KEY_NAME = "easl-cli";
 
 /**
- * Max active CLI-handshake (`easl-cli`) keys to keep per account. After each
- * successful mint we revoke all but the newest, so the account never accumulates
- * more than this many CLI keys — the bound that turns "unbounded key sprawl" into
- * a fixed, self-rotating ceiling.
- *
- * Why 1: re-running `easl login` (the only legitimate way to reach this path)
- * always supersedes the prior CLI key, so a single newest key is all a user ever
- * needs.
+ * Max active `easl-cli` keys per account. After each mint we revoke all but the
+ * newest, bounding key sprawl into a self-rotating ceiling. 1 because re-running
+ * `easl login` always supersedes the prior CLI key.
  */
 const MAX_ACTIVE_CLI_KEYS = 1;
 
 type ApiKeyListEntry = { id?: unknown; name?: unknown; createdAt?: unknown };
 
 /**
- * Revoke the account's older CLI-handshake keys, keeping only the newest
- * `MAX_ACTIVE_CLI_KEYS`. Runs after a fresh mint (the new key is the newest), so
- * with the cap at 1 every prior `easl-cli` key is revoked.
- *
- * Replays the session cookie to better-auth's own `/api-key/list` + `/api-key/delete`
- * (the same server-side-handler pattern as the mint). `/api-key/delete` enforces
- * `referenceId === session.user.id`, so it can only ever touch THIS session owner's
- * own keys. Best-effort: a failure here never blocks handing the freshly-minted key
- * back to the CLI (the mint already succeeded); we only log.
+ * Revoke the account's older `easl-cli` keys, keeping only the newest
+ * `MAX_ACTIVE_CLI_KEYS` (runs after a fresh mint). Replays the session cookie to
+ * better-auth's `/api-key/list` + `/api-key/delete` (delete enforces
+ * referenceId === session.user.id, so it only touches this owner's keys).
+ * Best-effort: a failure never blocks handing the new key back — we only log.
  */
 async function pruneOldCliKeys(
   auth: EaslAuth,
@@ -131,41 +113,23 @@ function toMillis(value: unknown): number {
 }
 
 /**
- * Atomically claim a CLI-callback marker nonce for single use. Returns true if
- * THIS request is the first to redeem it, false if it was already spent (a replay).
- *
- * Atomicity (the open LOW being closed): the old check-then-put against KV had a
- * race — KV has no compare-and-set, so two concurrent redemptions of the same
- * marker could both read "absent" and both proceed. We now INSERT the nonce into
- * a D1 table whose PRIMARY KEY is the nonce; SQLite serializes the write and a
- * second INSERT of the same nonce fails the UNIQUE constraint. We treat any insert
- * failure as "already spent" (false) — the authority for single-use is the D1
- * uniqueness violation, not a prior read. KV TTL is kept only as best-effort
- * secondary cleanup (cheap negative cache), never as the gate.
+ * Atomically claim a CLI-callback marker nonce for single use. Returns true if THIS
+ * request is the first to redeem it, false if already spent (a replay). Authority is
+ * a D1 INSERT whose PRIMARY KEY is the nonce: SQLite serializes the write, so a second
+ * INSERT of the same nonce fails the UNIQUE constraint (treated as spent).
  */
 async function claimNonceAtomic(env: Env, nonce: string): Promise<boolean> {
   const now = Date.now();
-  const expiresAt = now + CLI_CALLBACK_MARKER_TTL_MS;
   try {
     await env.DB.prepare(
       `INSERT INTO "cli_handshake_nonce" ("nonce", "expires_at", "created_at") VALUES (?, ?, ?)`,
     )
-      .bind(nonce, expiresAt, now)
+      .bind(nonce, now + CLI_CALLBACK_MARKER_TTL_MS, now)
       .run();
   } catch (err) {
     // A UNIQUE/PK violation means the nonce was already redeemed → replay.
     console.log(JSON.stringify({ event: "cli_callback_nonce_claim_conflict", error: String(err) }));
     return false;
-  }
-  // Best-effort secondary cleanup: mark spent in KV too (TTL outlives the marker).
-  // KV's minimum expirationTtl is 60s; the marker TTL is well above. A KV failure
-  // is irrelevant — D1 already holds the authoritative single-use record.
-  try {
-    await env.SITES_KV.put(`${CLI_NONCE_KV_PREFIX}${nonce}`, "1", {
-      expirationTtl: Math.ceil(CLI_CALLBACK_MARKER_TTL_MS / 1000) + 60,
-    });
-  } catch {
-    /* ignore — D1 is the source of truth */
   }
   return true;
 }
@@ -205,16 +169,13 @@ async function consumeCsrfToken(env: Env, sessionId: string, token: string): Pro
 }
 
 /**
- * Validate the CLI loopback port and build the exact `http://127.0.0.1:<port>/callback`
- * target. Returns null for anything that isn't a plausible TCP port — the redirect
- * target is otherwise fully fixed (loopback host + path), so this is the ONLY
- * attacker-influenced input and it can only ever name a port on 127.0.0.1.
+ * Build the exact `http://127.0.0.1:<port>/callback` target, reusing `sanitizeCliPort`
+ * for validation. Returns null for a non-port. Host + path are fixed, so the port is
+ * the only attacker-influenced input and can only ever name 127.0.0.1.
  */
 export function loopbackCallbackUrl(port: string | null | undefined): string | null {
-  if (!port || !/^\d{1,5}$/.test(port)) return null;
-  const n = Number(port);
-  if (n < 1 || n > 65535) return null;
-  return `http://127.0.0.1:${n}${LOOPBACK_PATH}`;
+  const n = sanitizeCliPort(port);
+  return n ? `http://127.0.0.1:${n}${LOOPBACK_PATH}` : null;
 }
 
 /**
@@ -243,33 +204,18 @@ async function resolveSession(
 }
 
 /**
- * GET /auth/cli-callback — render the same-origin CONSENT page (no side effects).
+ * GET /auth/cli-callback — render the same-origin CONSENT page. ZERO side effects
+ * (mints no key, consumes no nonce); minting is deferred to the Authorize POST.
  *
- * The CLI opens `…/auth/login?cli_port=<port>&cli_state=<state>`; the login page
- * sends the magic-link with `callbackURL = /auth/cli-callback?port=<port>&cb=<marker>
- * &cli_state=<state>`. After the user clicks the emailed link, better-auth verifies
- * the token, sets the session cookie, and 302s the browser HERE with that cookie.
- *
- * Why a GET must NOT mint (the residual CSRF hole being closed): the better-auth
- * session cookie is `SameSite=Lax` with `Domain=.<DOMAIN>`, and Lax cookies ARE
- * sent on top-level cross-site GET navigations. The `cb` marker is the FIRST gate,
- * but it is mintable from the UNAUTHENTICATED login page, so an attacker can harvest
- * a valid 15-minute marker and lure a logged-in victim into a top-level cross-site
- * GET here, riding the victim's Lax cookie. A Sec-Fetch-Site/Origin check can't
- * distinguish that from the genuine magic-link verify redirect (also cross-site).
- *
- * So the GET has ZERO side effects: it mints no key and consumes no nonce. It only:
- *   1. validates the `cb` marker (signature + port + expiry) — a bogus request gets
- *      no consent page (403),
- *   2. requires a session — without one it bounces back to /auth/login preserving
- *      cli_port/cli_state (so a fresh magic link re-issues a new marker), and
- *   3. renders a consent page that requires an explicit, human Authorize click. The
- *      Authorize button submits a SAME-ORIGIN POST carrying a CSRF synchronizer
- *      token (also mirrored in a SameSite=Strict cookie). A cross-origin page can
- *      neither read the token (same-origin policy hides the page body) nor set the
- *      Strict cookie, so it cannot forge that POST — which is the ONLY thing that
- *      mints. The page is served X-Frame-Options: DENY + CSP frame-ancestors 'none'
- *      + Cache-Control: no-store so it cannot be framed/auto-clicked (clickjacking).
+ * Why the GET can't mint: the better-auth session cookie is SameSite=Lax, so it rides
+ * a top-level cross-site GET; the `cb` marker is harvestable from the unauthenticated
+ * login page; and a Sec-Fetch-Site check can't tell the attack from the genuine (also
+ * cross-site) magic-link verify redirect. So the GET only (1) validates the marker
+ * (signature+port+expiry; 403 if bad), (2) requires a session (else bounces to
+ * /auth/login keeping cli_port/cli_state), and (3) renders a consent page bearing a
+ * single-use CSRF synchronizer token (mirrored in a SameSite=Strict cookie) +
+ * anti-clickjack headers. A cross-origin page can neither read the token (SOP) nor set
+ * the Strict cookie, so only a genuine same-origin Authorize click reaches the mint.
  */
 export async function handleCliCallback(c: Ctx): Promise<Response> {
   const port = c.req.query("port");
@@ -278,9 +224,8 @@ export async function handleCliCallback(c: Ctx): Promise<Response> {
     console.log(JSON.stringify({ event: "cli_callback_bad_port", port }));
     return c.json({ error: "Invalid or missing CLI callback port." }, 400);
   }
-  // port is the validated numeric string the marker was bound to (loopbackCallbackUrl
-  // already enforced /^\d{1,5}$/ and 1..65535); use it verbatim for verification.
-  const normalizedPort = String(Number(port));
+  // The normalized numeric string the marker was bound to (loopback non-null ⇒ valid).
+  const normalizedPort = sanitizeCliPort(port)!;
   const cliState = sanitizeCliState(c.req.query("cli_state"));
 
   if (!isBetterAuthSecretConfigured(c.env.BETTER_AUTH_SECRET)) {
@@ -356,22 +301,14 @@ export async function handleCliCallback(c: Ctx): Promise<Response> {
 }
 
 /**
- * POST /auth/cli-callback — the ONLY place a key is minted. Reached exclusively by
- * the consent page's Authorize button (a same-origin form submit).
- *
- * Mints + 303-redirects to the loopback ONLY when ALL hold:
- *   - a valid session rides in (same cookie the GET saw), and
- *   - the CSRF synchronizer token (hidden field) is present, matches the
- *     SameSite=Strict double-submit cookie, and is consumed atomically from D1
- *     (single-use, session-bound), and
- *   - the `cb` marker re-verifies (signature + port + expiry) AND its nonce is
- *     claimed atomically (single-use) — so a captured callbackURL can't be replayed.
- * Any failure → 403 (or 400 for a bad port) and NOTHING is minted.
- *
- * A cross-site attacker cannot satisfy the CSRF check: the synchronizer token lives
- * in a same-origin page body the SOP hides from them, and they cannot set the
- * Strict cookie on our origin. So even though the Lax session cookie would ride a
- * top-level cross-site POST, the request is rejected before any mint.
+ * POST /auth/cli-callback — the ONLY place a key is minted, reached only by the
+ * consent page's same-origin Authorize submit. Mints + 303s to the loopback only when
+ * ALL hold: a valid session; the CSRF synchronizer token matches the Strict
+ * double-submit cookie AND is consumed atomically from D1 (single-use, session-bound);
+ * and the `cb` marker re-verifies AND its nonce is claimed atomically (single-use).
+ * Any failure → 403 (400 for a bad port), nothing minted. A cross-site attacker can't
+ * satisfy the CSRF check (can't read the token or set the Strict cookie), so the Lax
+ * session cookie riding a cross-site POST is not enough.
  */
 export async function handleCliAuthorize(c: Ctx): Promise<Response> {
   if (!isBetterAuthSecretConfigured(c.env.BETTER_AUTH_SECRET)) {
@@ -386,11 +323,7 @@ export async function handleCliAuthorize(c: Ctx): Promise<Response> {
     console.log(JSON.stringify({ event: "cli_authorize_bad_port", port }));
     return c.json({ error: "Invalid or missing CLI callback port." }, 400);
   }
-  const normalizedPort = sanitizeCliPort(port);
-  if (!normalizedPort) {
-    console.log(JSON.stringify({ event: "cli_authorize_bad_port", port }));
-    return c.json({ error: "Invalid or missing CLI callback port." }, 400);
-  }
+  const normalizedPort = sanitizeCliPort(port)!; // loopback non-null ⇒ valid
   const cliState = sanitizeCliState(typeof form.cli_state === "string" ? form.cli_state : undefined);
   const cb = typeof form.cb === "string" ? form.cb : undefined;
   const formCsrf = typeof form.csrf === "string" ? form.csrf : "";

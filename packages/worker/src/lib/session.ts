@@ -3,43 +3,31 @@ import { b64urlDecode, b64urlEncode, constantTimeEqual } from "./crypto";
 const COOKIE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /**
- * The committed development placeholder. If this ever reaches production as the
- * live SESSION_SECRET, unlock cookies would be forgeable by anyone with the
- * source. `isSessionSecretConfigured` rejects it so private sites fail closed.
+ * Committed dev placeholder. If it reached production as the live SESSION_SECRET,
+ * unlock cookies would be forgeable by anyone with the source, so
+ * `isSessionSecretConfigured` rejects it and private sites fail closed.
  */
 export const PLACEHOLDER_SESSION_SECRET = "dev-only-replace-via-wrangler-secret-put-in-prod";
 
-/**
- * True only when SESSION_SECRET is set to a real value (not unset, not the
- * committed placeholder, long enough to be a meaningful HMAC key). When false,
- * callers MUST fail closed rather than sign/verify with a weak/known key.
- */
+/** True only when SESSION_SECRET is a real key (set, >= 16 chars, not the placeholder). */
 export function isSessionSecretConfigured(secret: string | undefined | null): secret is string {
   return typeof secret === "string" && secret.length >= 16 && secret !== PLACEHOLDER_SESSION_SECRET;
 }
 
-/**
- * The committed development placeholder for BETTER_AUTH_SECRET (see
- * .dev.vars.example). If this reached production as the live secret, every
- * session, magic-link token, and API key would be forgeable by anyone with the
- * source. `isBetterAuthSecretConfigured` rejects it so auth fails closed.
- */
+/** Committed dev placeholder for BETTER_AUTH_SECRET (see .dev.vars.example); rejected so auth fails closed. */
 export const PLACEHOLDER_BETTER_AUTH_SECRET = "local-dev-better-auth-secret-change-me-please";
 
 /**
- * better-auth's own hardcoded fallback secret. When BETTER_AUTH_SECRET is unset,
- * better-auth silently signs with this globally-known constant (its only guard,
- * validateSecret, throws solely when process.env.NODE_ENV === "production",
- * which this Worker never sets). We must reject it explicitly so auth fails
- * closed instead of minting forgeable credentials.
+ * better-auth's hardcoded fallback secret. When BETTER_AUTH_SECRET is unset it
+ * silently signs with this globally-known constant (its validateSecret guard only
+ * throws when NODE_ENV === "production", which this Worker never sets), so we must
+ * reject it explicitly or every credential becomes forgeable.
  */
 export const BETTER_AUTH_DEFAULT_SECRET = "better-auth-secret-12345678901234567890";
 
 /**
- * True only when BETTER_AUTH_SECRET is set to a real value: not unset, long
- * enough to be a meaningful key (>= 32 chars), and neither the committed
- * placeholder nor better-auth's hardcoded default fallback. When false, callers
- * MUST fail closed rather than boot the auth handler with a weak/known key.
+ * True only when BETTER_AUTH_SECRET is a real key: set, >= 32 chars, and neither
+ * the committed placeholder nor better-auth's hardcoded default fallback.
  */
 export function isBetterAuthSecretConfigured(secret: string | undefined | null): secret is string {
   return (
@@ -56,32 +44,59 @@ export type CookieOptions = {
   maxAgeSeconds?: number;
 };
 
-/**
- * Derive a short, opaque fingerprint of the site's current password hash.
- * Binding this into the cookie means rotating the password (which changes the
- * stored hash) invalidates every previously-issued unlock cookie. The raw hash
- * is never placed in the cookie — only this HMAC-derived tag.
- */
-export async function passwordFingerprint(secret: string, passwordHash: string | null): Promise<string> {
-  const tag = await hmac(secret, `fp:${passwordHash ?? ""}`);
-  return b64urlEncode(tag).slice(0, 16);
-}
+// ── Signed-token codec ──────────────────────────────────────────────────────
+// Every token/cookie below shares one wire format: `<b64url(payload)>.<b64url(hmac)>`,
+// where payload is `|`-joined fields. signPayload/verifyPayload own that
+// construction + the constant-time HMAC check; each caller supplies/destructures
+// its own fields and does its own per-field checks (slug/port match, expiry,
+// fingerprint). Fields never contain "|" (slug is [a-z0-9-], port/exp are digits,
+// fingerprints/nonces are b64url).
 
-/**
- * Sign a cookie value tying it to a slug + password fingerprint for the given lifetime.
- * Format: `<b64url(slug|exp|fingerprint)>.<b64url(hmac)>`.
- */
-export async function signCookie(secret: string, slug: string, fingerprint: string, ttlMs = COOKIE_TTL_MS): Promise<string> {
-  const exp = Date.now() + ttlMs;
-  const payload = `${slug}|${exp}|${fingerprint}`;
+async function signPayload(secret: string, fields: (string | number)[]): Promise<string> {
+  const payload = fields.join("|");
   const sig = await hmac(secret, payload);
   return `${b64urlEncode(new TextEncoder().encode(payload))}.${b64urlEncode(sig)}`;
 }
 
+/** Parse + HMAC-verify a signed value. Returns the split fields on a valid signature, else null. */
+async function verifyPayload(secret: string, value: string, fieldCount: number): Promise<string[] | null> {
+  const dot = value.indexOf(".");
+  if (dot <= 0 || dot === value.length - 1) return null;
+  const payloadBytes = b64urlDecode(value.slice(0, dot));
+  const sigBytes = b64urlDecode(value.slice(dot + 1));
+  if (!payloadBytes || !sigBytes) return null;
+  const payload = new TextDecoder().decode(payloadBytes);
+  const expectedSig = await hmac(secret, payload);
+  if (!constantTimeEqual(b64urlEncode(sigBytes), b64urlEncode(expectedSig))) return null;
+  const parts = payload.split("|");
+  return parts.length === fieldCount ? parts : null;
+}
+
+/** A short, opaque HMAC tag over `domain:data`, used to bind a token to mutable state. */
+async function fingerprint(secret: string, domain: string, data: string): Promise<string> {
+  return b64urlEncode(await hmac(secret, `${domain}:${data}`)).slice(0, 16);
+}
+
 /**
- * Verify a cookie against the expected slug + current password fingerprint. Returns `{ valid, exp? }`.
- * Invalid signatures, expired cookies, slug mismatches, and fingerprint mismatches
- * (i.e. the password was rotated since the cookie was issued) all return `{ valid: false }`.
+ * Fingerprint of the site's current password hash. Binding it into the unlock
+ * cookie means rotating the password invalidates every previously-issued cookie.
+ * The raw hash never enters the cookie — only this tag.
+ */
+export function passwordFingerprint(secret: string, passwordHash: string | null): Promise<string> {
+  return fingerprint(secret, "fp", passwordHash ?? "");
+}
+
+/**
+ * Sign an unlock cookie tying `slug` + password `fingerprint` for `ttlMs`.
+ * Format: `<b64url(slug|exp|fingerprint)>.<b64url(hmac)>`.
+ */
+export async function signCookie(secret: string, slug: string, fingerprint: string, ttlMs = COOKIE_TTL_MS): Promise<string> {
+  return signPayload(secret, [slug, Date.now() + ttlMs, fingerprint]);
+}
+
+/**
+ * Verify an unlock cookie against the expected slug + current password fingerprint.
+ * Bad signature, expiry, slug mismatch, or fingerprint mismatch (password rotated) → `{ valid: false }`.
  */
 export async function verifyCookie(
   secret: string,
@@ -89,26 +104,26 @@ export async function verifyCookie(
   fingerprint: string,
   value: string,
 ): Promise<{ valid: boolean; exp?: number }> {
-  const dot = value.indexOf(".");
-  if (dot <= 0 || dot === value.length - 1) return { valid: false };
-  const payloadB64 = value.slice(0, dot);
-  const sigB64 = value.slice(dot + 1);
-  const payloadBytes = b64urlDecode(payloadB64);
-  const sigBytes = b64urlDecode(sigB64);
-  if (!payloadBytes || !sigBytes) return { valid: false };
-  const payload = new TextDecoder().decode(payloadBytes);
-  const expectedSig = await hmac(secret, payload);
-  if (!constantTimeEqual(b64urlEncode(sigBytes), b64urlEncode(expectedSig))) {
-    return { valid: false };
-  }
-  // Payload fields never contain "|": slug is [a-z0-9-], exp is digits, fingerprint is b64url.
-  const parts = payload.split("|");
-  if (parts.length !== 3) return { valid: false };
-  const [cookieSlug, expStr, cookieFp] = parts;
-  if (cookieSlug !== slug) return { valid: false };
+  return checkSlugToken(secret, slug, fingerprint, value);
+}
+
+/**
+ * Shared verify for the `slug|exp|fingerprint` tokens (unlock cookie, share token,
+ * share cookie): valid signature, slug match, unexpired, fingerprint match.
+ */
+async function checkSlugToken(
+  secret: string,
+  slug: string,
+  fingerprint: string,
+  value: string,
+): Promise<{ valid: boolean; exp?: number }> {
+  const parts = await verifyPayload(secret, value, 3);
+  if (!parts) return { valid: false };
+  const [tokenSlug, expStr, tokenFp] = parts;
+  if (tokenSlug !== slug) return { valid: false };
   const exp = Number(expStr);
   if (!Number.isInteger(exp) || exp <= Date.now()) return { valid: false };
-  if (!constantTimeEqual(cookieFp, fingerprint)) return { valid: false };
+  if (!constantTimeEqual(tokenFp, fingerprint)) return { valid: false };
   return { valid: true, exp };
 }
 
@@ -124,7 +139,7 @@ export function parseCookieHeader(header: string | null, name: string): string |
   return null;
 }
 
-/** Build a `Set-Cookie` header value with safe defaults for private-site unlock cookies. */
+/** Build a `Set-Cookie` header value with safe defaults for private-site cookies. */
 export function buildSetCookie(name: string, value: string, opts: CookieOptions = {}): string {
   const parts = [
     `${name}=${value}`,
@@ -145,50 +160,37 @@ export function buildClearCookie(name: string, opts: Pick<CookieOptions, "path" 
   return parts.join("; ");
 }
 
-export const SESSION_DEFAULT_TTL_MS = COOKIE_TTL_MS;
+// ── Share tokens & cookie (private easls v2) ────────────────────────────────
+// A share token grants a non-account-holder access through the ACCOUNT gate of a
+// private site (NOT a password gate — a `private + password` site still prompts
+// for the password). Stateless (no DB; revoke only by rotating SESSION_SECRET).
+// It is bound to a slug AND a site-instance fingerprint and carries its own
+// expiry, so a leaked token can't be replayed against another site, doesn't
+// survive a delete + re-publish that reuses the slug, and lapses on its own.
+// Once a valid `?share=` is presented, the served response sets a short-lived,
+// path-scoped share *cookie* (same value shape) so subresource/link requests that
+// drop the query param still clear the account gate.
 
-// ── Share tokens (private easls v2) ─────────────────────────────────────────
-// A share token lets an owner grant a non-account-holder access through the
-// ACCOUNT gate of a private site (it does NOT satisfy a password gate — a
-// `private + password` site still prompts the recipient for the password).
-//
-// Stateless, no DB: it reuses the same HMAC machinery as the unlock cookie, so
-// revocation is global only (rotate SESSION_SECRET). Format mirrors the unlock
-// cookie, slug + expiry + a site-instance fingerprint:
-//   `<b64url(slug|exp|fingerprint)>.<b64url(hmac)>`
-// A token is bound to a single slug AND a single site instance (via the
-// fingerprint) and carries its own expiry, so a leaked token can't be replayed
-// against another site, doesn't survive a delete + re-publish that reuses the
-// same custom slug (the fingerprint changes), and lapses on its own.
-
-/** Default share-token lifetime: 7 days (see the v2 plan's share-link defaults). */
+/** Default share-token lifetime: 7 days. */
 export const SHARE_TOKEN_DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Maximum share-token lifetime: 30 days. */
 export const SHARE_TOKEN_MAX_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Derive a short, opaque fingerprint of a site INSTANCE — the pairing of its
- * creation time and owner. Binding this into a share token / share cookie means a
- * site deleted and re-published under the same custom slug (new `created_at`, and
- * typically a new `owner_id`) gets a different fingerprint, so an old share URL
- * for the prior site no longer authorizes the new one. Mirrors
- * `passwordFingerprint`: never embeds the raw values, only an HMAC-derived tag.
+ * Fingerprint of a site INSTANCE (creation time + owner). A site deleted and
+ * re-published under the same custom slug gets a new fingerprint, so an old share
+ * URL for the prior site no longer authorizes the new one.
  */
-export async function shareFingerprint(
+export function shareFingerprint(
   secret: string,
   site: { createdAt: string; ownerId: string | null },
 ): Promise<string> {
-  const tag = await hmac(secret, `share-fp:${site.createdAt}|${site.ownerId ?? ""}`);
-  return b64urlEncode(tag).slice(0, 16);
+  return fingerprint(secret, "share-fp", `${site.createdAt}|${site.ownerId ?? ""}`);
 }
 
 /**
- * Sign a share token granting account-gate access to `slug` for `ttlMs`, bound to
- * the site-instance `fingerprint` (see `shareFingerprint`).
- * Format: `<b64url(slug|exp|fingerprint)>.<b64url(hmac)>` (same shape as the
- * unlock cookie, with a share fingerprint in place of the password one). Returns
- * `{ token, exp }` where `exp` is the absolute expiry in epoch milliseconds, for
- * the API to surface as `expiresAt`.
+ * Sign a share token for `slug` bound to the site-instance `fingerprint`. Returns
+ * `{ token, exp }` (exp in epoch ms, for the API to surface as `expiresAt`).
  */
 export async function signShareToken(
   secret: string,
@@ -197,130 +199,57 @@ export async function signShareToken(
   ttlMs = SHARE_TOKEN_DEFAULT_TTL_MS,
 ): Promise<{ token: string; exp: number }> {
   const exp = Date.now() + ttlMs;
-  const payload = `${slug}|${exp}|${fingerprint}`;
-  const sig = await hmac(secret, payload);
-  const token = `${b64urlEncode(new TextEncoder().encode(payload))}.${b64urlEncode(sig)}`;
-  return { token, exp };
+  return { token: await signPayload(secret, [slug, exp, fingerprint]), exp };
 }
 
-/**
- * Verify a share token against the expected slug + current site-instance
- * fingerprint. Returns `{ valid, exp? }`. Invalid signatures, expired tokens,
- * slug mismatches, and fingerprint mismatches (i.e. the slug was deleted and
- * re-published under a new instance since the token was issued) all return
- * `{ valid: false }`. Mirrors `verifyCookie` but with the share fingerprint.
- */
-export async function verifyShareToken(
+/** Verify a share token against the expected slug + current site-instance fingerprint. */
+export function verifyShareToken(
   secret: string,
   slug: string,
   fingerprint: string,
   value: string,
 ): Promise<{ valid: boolean; exp?: number }> {
-  const dot = value.indexOf(".");
-  if (dot <= 0 || dot === value.length - 1) return { valid: false };
-  const payloadB64 = value.slice(0, dot);
-  const sigB64 = value.slice(dot + 1);
-  const payloadBytes = b64urlDecode(payloadB64);
-  const sigBytes = b64urlDecode(sigB64);
-  if (!payloadBytes || !sigBytes) return { valid: false };
-  const payload = new TextDecoder().decode(payloadBytes);
-  const expectedSig = await hmac(secret, payload);
-  if (!constantTimeEqual(b64urlEncode(sigBytes), b64urlEncode(expectedSig))) {
-    return { valid: false };
-  }
-  // Payload fields never contain "|": slug is [a-z0-9-], exp is digits, fingerprint is b64url.
-  const parts = payload.split("|");
-  if (parts.length !== 3) return { valid: false };
-  const [tokenSlug, expStr, tokenFp] = parts;
-  if (tokenSlug !== slug) return { valid: false };
-  const exp = Number(expStr);
-  if (!Number.isInteger(exp) || exp <= Date.now()) return { valid: false };
-  if (!constantTimeEqual(tokenFp, fingerprint)) return { valid: false };
-  return { valid: true, exp };
+  return checkSlugToken(secret, slug, fingerprint, value);
 }
 
-// ── Share cookie (private easls v2, Fix 2) ──────────────────────────────────
-// Once a recipient presents a valid `?share=<token>`, the served response sets a
-// short-lived, path-scoped share cookie so the page's relative subresources (CSS,
-// JS, images), download links, nav links, and generated viewer URLs — which the
-// browser fetches WITHOUT the `?share=` query param — still clear the ACCOUNT
-// gate. The cookie satisfies the account gate ONLY; a stacked password gate still
-// applies (the recipient must still unlock with the password).
-//
-// It reuses the same HMAC machinery and the Fix-1 share fingerprint, so a
-// slug-reuse / owner change invalidates a stale cookie exactly as it does a stale
-// token. Format mirrors the unlock cookie: `<b64url(slug|exp|fingerprint)>.<b64url(hmac)>`.
-
-/** Cookie name for the share grant of a given slug (distinct from the password unlock cookie). */
+/** Cookie name for the share grant of a slug (distinct from the password unlock cookie). */
 export function shareCookieName(slug: string): string {
   return `easl_sh_${slug}`;
 }
 
-/**
- * Sign a share-grant cookie value tying account-gate access to `slug` + the
- * site-instance `fingerprint` for the given lifetime. Identical shape to the
- * unlock cookie; verified by `verifyShareCookie`.
- */
-export async function signShareCookie(
-  secret: string,
-  slug: string,
-  fingerprint: string,
-  ttlMs: number,
-): Promise<string> {
-  const exp = Date.now() + ttlMs;
-  const payload = `${slug}|${exp}|${fingerprint}`;
-  const sig = await hmac(secret, payload);
-  return `${b64urlEncode(new TextEncoder().encode(payload))}.${b64urlEncode(sig)}`;
+/** Sign a share-grant cookie (same value shape as the share token). */
+export async function signShareCookie(secret: string, slug: string, fingerprint: string, ttlMs: number): Promise<string> {
+  return signPayload(secret, [slug, Date.now() + ttlMs, fingerprint]);
 }
 
-/**
- * Verify a share-grant cookie against the expected slug + current site-instance
- * fingerprint. Returns `{ valid, exp? }`. Identical verification to
- * `verifyShareToken` — kept as a separate name for call-site clarity (token vs
- * cookie) even though the payload shape is the same.
- */
-export async function verifyShareCookie(
+/** Verify a share-grant cookie (identical to share-token verification). */
+export function verifyShareCookie(
   secret: string,
   slug: string,
   fingerprint: string,
   value: string,
 ): Promise<{ valid: boolean; exp?: number }> {
-  return verifyShareToken(secret, slug, fingerprint, value);
+  return checkSlugToken(secret, slug, fingerprint, value);
 }
 
-// ── CLI login-handshake state marker (private easls v2, Fix B) ──────────────
+// ── CLI login-handshake marker (private easls v2) ───────────────────────────
 // A short-lived, worker-SIGNED marker that gates API-key minting at
-// GET /auth/cli-callback. The login page (which the worker controls) mints it
-// when it builds the magic-link `callbackURL`; the post-verify redirect carries
-// it back to cli-callback, which verifies it BEFORE minting a key.
-//
-// Why this exists: the better-auth session cookie is `SameSite=Lax`, so a
-// logged-in user lured to `api.<DOMAIN>/auth/cli-callback?port=N` via a
-// top-level cross-site GET would otherwise mint an API key on the strength of
-// that cookie alone (CSRF → key sprawl). A caller-supplied value is not enough —
-// the marker is an HMAC the worker computes itself, so a cross-site navigation
-// that simply names the URL carries no valid marker and is rejected.
-//
-// The marker is the FIRST gate, not the whole defense: it is minted by the
-// unauthenticated login page, so an attacker can still harvest a fresh valid
-// marker per attempt. The "unbounded key sprawl" harm is closed downstream by
-// rate-limiting marker minting per IP (login.ts) and capping + rotating the
-// account's CLI keys on each mint (cli-callback.ts) — see those files.
-//
-// The marker is bound to the loopback `port` (so it can't be replayed against a
-// different CLI handshake) and carries its own expiry. Single-use is enforced
-// separately by consuming the embedded `nonce` in KV (see cli-callback.ts) — the
-// nonce is returned by both sign + verify for that purpose.
+// GET /auth/cli-callback. The login page mints it into the magic-link callbackURL;
+// the post-verify redirect carries it back to cli-callback, which verifies it
+// before minting. It exists because the better-auth session cookie is SameSite=Lax:
+// a logged-in user lured to cli-callback via a cross-site GET would otherwise mint
+// a key on that cookie alone — but a cross-site nav carries no valid (worker-HMAC'd)
+// marker. The marker is bound to the loopback `port` and carries its own expiry;
+// single-use is enforced separately by consuming the embedded `nonce` (cli-callback.ts).
 // Format: `<b64url(cli|port|exp|nonce)>.<b64url(hmac)>`.
 
 /** CLI-callback marker lifetime: 15 minutes — matches the magic-link TTL it rides. */
 export const CLI_CALLBACK_MARKER_TTL_MS = 15 * 60 * 1000;
 
 /**
- * Sign a single-use marker authorizing one `/auth/cli-callback?port=<port>` key
- * mint. Returns `{ marker, nonce, exp }`: `marker` goes into the magic-link
- * callbackURL, `nonce` is the single-use token to record in KV, `exp` is the
- * absolute expiry (epoch ms). `port` MUST be the normalized numeric string.
+ * Sign a single-use marker authorizing one cli-callback key mint. Returns
+ * `{ marker, nonce, exp }`: `marker` rides the callbackURL, `nonce` is recorded for
+ * single-use, `exp` is epoch ms. `port` MUST be the normalized numeric string.
  */
 export async function signCliCallbackMarker(
   secret: string,
@@ -329,43 +258,22 @@ export async function signCliCallbackMarker(
 ): Promise<{ marker: string; nonce: string; exp: number }> {
   const exp = Date.now() + ttlMs;
   const nonce = b64urlEncode(crypto.getRandomValues(new Uint8Array(18)));
-  const payload = `cli|${port}|${exp}|${nonce}`;
-  const sig = await hmac(secret, payload);
-  const marker = `${b64urlEncode(new TextEncoder().encode(payload))}.${b64urlEncode(sig)}`;
-  return { marker, nonce, exp };
+  return { marker: await signPayload(secret, ["cli", port, exp, nonce]), nonce, exp };
 }
 
 /**
- * Verify a CLI-callback marker against the expected `port`. Returns
- * `{ valid, nonce?, exp? }`. Invalid signatures, expired markers, and port
- * mismatches all return `{ valid: false }`. The caller is still responsible for
- * enforcing single-use by consuming `nonce` (a valid signature only proves the
- * worker issued the marker, not that it hasn't already been redeemed).
+ * Verify a CLI-callback marker against the expected `port`. A valid signature only
+ * proves the worker issued it — the caller still enforces single-use via `nonce`.
  */
 export async function verifyCliCallbackMarker(
   secret: string,
   port: string,
   value: string,
 ): Promise<{ valid: boolean; nonce?: string; exp?: number }> {
-  const dot = value.indexOf(".");
-  if (dot <= 0 || dot === value.length - 1) return { valid: false };
-  const payloadB64 = value.slice(0, dot);
-  const sigB64 = value.slice(dot + 1);
-  const payloadBytes = b64urlDecode(payloadB64);
-  const sigBytes = b64urlDecode(sigB64);
-  if (!payloadBytes || !sigBytes) return { valid: false };
-  const payload = new TextDecoder().decode(payloadBytes);
-  const expectedSig = await hmac(secret, payload);
-  if (!constantTimeEqual(b64urlEncode(sigBytes), b64urlEncode(expectedSig))) {
-    return { valid: false };
-  }
-  // Payload fields never contain "|": the literal "cli", a numeric port, a
-  // numeric exp, and a b64url nonce.
-  const parts = payload.split("|");
-  if (parts.length !== 4) return { valid: false };
+  const parts = await verifyPayload(secret, value, 4);
+  if (!parts) return { valid: false };
   const [tag, markerPort, expStr, nonce] = parts;
-  if (tag !== "cli") return { valid: false };
-  if (markerPort !== port) return { valid: false };
+  if (tag !== "cli" || markerPort !== port) return { valid: false };
   const exp = Number(expStr);
   if (!Number.isInteger(exp) || exp <= Date.now()) return { valid: false };
   if (!nonce) return { valid: false };

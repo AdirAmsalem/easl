@@ -31,15 +31,8 @@ export const API_KEY_PREFIX = "easl_";
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 
 /**
- * Magic-link rate limit: at most 10 requests per hour (per IP + path), covering
- * both `/sign-in/magic-link` and `/magic-link/verify`. See the open-items note in
- * the v2 plan ("~10/hour/email"). better-auth's limiter is keyed by IP+path; we
- * enable the global limiter (KV-backed, shared across isolates) below so this
- * plugin rule applies — the global limiter is otherwise off outside production,
- * which a Worker never is.
- * The IP is resolved from Cloudflare's trusted `cf-connecting-ip` header (see the
- * `advanced.ipAddress` config in makeAuth) so the bucket key can't be rotated with
- * a spoofed X-Forwarded-For, and so getIp can resolve an IP at all in prod.
+ * Magic-link rate limit: 10 requests/hour per IP+path, covering /sign-in/magic-link
+ * and /magic-link/verify (the IP is the trusted cf-connecting-ip — see advanced.ipAddress).
  */
 const MAGIC_LINK_RATE_LIMIT = { window: 60 * 60, max: 10 } as const;
 
@@ -150,17 +143,10 @@ export function makeAuth(env: Env, opts: MakeAuthOptions = {}): EaslAuth {
       // (e2e uses same-origin localhost path routing, so it didn't surface this.)
       crossSubDomainCookies: { enabled: true, domain: env.DOMAIN },
     },
-    // Enable better-auth's rate limiter so the magic-link plugin's per-path rule
-    // actually fires. It defaults to ON only in production (NODE_ENV), which this
-    // Worker never sets, so without this every magic-link request would be
-    // unthrottled. `customStorage` backs the limiter with KV (env.SITES_KV) so the
-    // ~10/hour/IP cap is GLOBAL across isolates: better-auth's default "memory"
-    // storage is per-isolate, and Cloudflare runs many isolates per colo, so a
-    // memory cap is effectively multiplied by the live-isolate count (email-bombing
-    // risk). When customStorage is set, better-auth ignores `storage` and routes
-    // every rate-limit read/write through it. This affects only the global IP+path
-    // limiter; the api-key plugin's per-key limiter is disabled below, so
-    // agent/CLI/MCP Bearer publishing remains unthrottled.
+    // Enable the limiter so the magic-link rule fires: better-auth turns it on only
+    // when NODE_ENV === "production", which a Worker never sets. customStorage backs it
+    // with KV so the cap is global across isolates (see makeKvRateLimitStorage). The
+    // api-key plugin's per-key limiter is disabled below, so Bearer publishing is unthrottled.
     rateLimit: { enabled: true, customStorage: makeKvRateLimitStorage(env) },
     plugins: [
       magicLink({
@@ -188,15 +174,11 @@ export function makeAuth(env: Env, opts: MakeAuthOptions = {}): EaslAuth {
         // key's owner, so the serve handler + publish API can treat cookie and
         // Bearer auth uniformly. The full key is returned only once, on create.
         enableSessionForAPIKeys: true,
-        // Disable the plugin's PER-KEY rate limit. Its defaults
-        // (enabled, maxRequests: 10, timeWindow: 24h) are enforced on EVERY
-        // Bearer-authenticated request — because enableSessionForAPIKeys runs
-        // validateApiKey → isRateLimited in the plugin's `before` hook — so an
-        // agent/CLI/MCP using one `easl_` key would be throttled after just 10
-        // requests/day, breaking the core publishing flow. easl already has a
-        // separate global IP+path limiter (above) for abuse control and does not
-        // want a per-key daily quota; raise maxRequests/timeWindow instead if a
-        // generous per-key throttle is ever desired.
+        // Disable the plugin's per-key rate limit: its defaults (10 req / 24h) fire on
+        // EVERY Bearer request (enableSessionForAPIKeys runs isRateLimited in the
+        // `before` hook), which would throttle an agent/CLI after 10 publishes/day. The
+        // global IP+path limiter above is our abuse control; raise these if a per-key
+        // quota is ever wanted.
         rateLimit: { enabled: false },
       }),
     ],
