@@ -52,14 +52,24 @@ echo '{"status":"ok"}' | easl publish --type json
 easl publish --content "# Hello World" --type markdown
 ```
 
-### Publish a private (password-protected) page
+### Publish a password-protected page
 
 ```bash
-easl publish board-update.md --private              # password generated & printed once
-easl publish board-update.md --private --password "spring-harbor-77"
+easl publish board-update.md --generate-password            # password generated & printed once
+easl publish board-update.md --password "spring-harbor-77"  # choose your own
 ```
 
 Visitors enter the password once, then stay unlocked for 30 days. The password is also saved to your local config and shown again by `easl open <slug>`.
+
+### Publish an account-private page
+
+```bash
+easl login                                                  # one-time browser sign-in
+easl publish board-update.md --private                      # only you (signed in) can view
+easl publish board-update.md --private --password "pw"      # require BOTH login AND a password
+```
+
+`--private` requires authentication and binds the site to your account. Share with non-account viewers via `easl share <slug>`.
 
 ### Manage sites
 
@@ -79,6 +89,11 @@ easl open <slug>       # Open site in browser
 | `get <slug>` | Get site metadata from the API |
 | `delete <slug>` / `rm` | Delete a published site (`--yes` to skip confirmation) |
 | `open [slug]` | Open a site or easl.dev in your browser |
+| `login` | Sign in (magic link) and save an API key for this machine |
+| `logout` | Remove the saved API key |
+| `auth list-keys` / `auth revoke <id>` | List or revoke your account's API keys |
+| `share <slug>` | Mint a signed share link for an account-private site (`--expires-in 7d`) |
+| `claim <slug>` | Adopt an anonymous site into your account |
 | `doctor` | Check CLI version, API connectivity, and local config |
 | `completion [shell]` | Generate shell completions (bash, zsh, fish) |
 
@@ -92,8 +107,9 @@ easl open <slug>       # Open site in browser
 | `--template <tpl>` | `minimal`, `report`, or `dashboard` |
 | `--slug <slug>` | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
 | `--ttl <seconds>` | Time to live in seconds (default: 7 days) |
-| `--private` | Password-protect the page (auto-generates a password if `--password` is omitted) |
-| `--password <pw>` | Password for a private page (implies `--private`) |
+| `--private` | Account-private — only you (signed in) can view. Requires `easl login` |
+| `--password <pw>` | Password-protect the page with a value you choose. Works with or without `--private`. Mutually exclusive with `--generate-password` |
+| `--generate-password` | Password-protect the page with a strong password easl generates and shows once. Works with or without `--private`. Mutually exclusive with `--password` |
 | `--open` | Open in browser after publishing |
 | `--copy` | Copy URL to clipboard |
 
@@ -104,6 +120,7 @@ easl open <slug>       # Open site in browser
 | `--json` | Force JSON output (auto-enabled when stdout is piped) |
 | `-q, --quiet` | Suppress spinners and status output (implies `--json`) |
 | `--api-url <url>` | Override API URL (or set `EASL_API_URL` env var) |
+| `--api-key <key>` | Account API key for this command (overrides `EASL_API_KEY` env and saved login) |
 
 ## JSON output
 
@@ -137,7 +154,7 @@ easl completion fish > ~/.config/fish/completions/easl.fish
 
 ## Local config
 
-Published sites and their claim tokens are tracked in `~/.config/easl/sites.json`. This enables `easl list` and `easl delete` to work without re-entering tokens. Only sites published from the current machine are tracked. For private sites, the password is stored here too so `easl open <slug>` can surface it.
+Published sites and their claim tokens are tracked in `~/.config/easl/sites.json`. This enables `easl list` and `easl delete` to work without re-entering tokens. Only sites published from the current machine are tracked. For password-protected sites, the password is stored here too so `easl open <slug>` can surface it. Account credentials (your API key) live separately in `~/.config/easl/credentials.json`.
 
 ## Agent usage
 

@@ -3,7 +3,12 @@ import { cors } from "hono/cors";
 import type { Env } from "./types";
 import publishApi from "./api/publish";
 import sitesApi from "./api/sites";
+import shareLinksApi from "./api/share-links";
+import claimApi from "./api/claim";
 import feedbackApi from "./api/feedback";
+import { mountAuth } from "./auth/handler";
+import { handleLoginPage } from "./auth/login";
+import { handleCliCallback, handleCliAuthorize } from "./auth/cli-callback";
 import { serveSite } from "./serve/handler";
 import { docsPageHtml } from "./docs";
 
@@ -30,7 +35,35 @@ api.get("/", (c) => c.json({
 
 api.get("/health", (c) => c.json({ ok: true }));
 
+// GET /auth/login — the magic-link sign-in PAGE. better-auth is headless (no HTML
+// login route), but the serve handler's account gate 302s anonymous visitors here,
+// so this must return 200 (not the better-auth /auth/* 404). Registered BEFORE
+// mountAuth so it claims /auth/login ahead of better-auth's wildcard handler.
+api.get("/auth/login", (c) => handleLoginPage(c));
+
+// /auth/cli-callback — the `easl login` browser handshake, split so a GET has NO
+// side effects and minting requires an unforgeable same-origin POST:
+//   GET  — after magic-link verify, renders a same-origin CONSENT page (mints
+//          nothing); without a session it bounces back to /auth/login. This closes
+//          the residual CSRF hole where a harvested marker + the SameSite=Lax
+//          session cookie could mint a key on a logged-in victim via a cross-site GET.
+//   POST — the consent page's Authorize button submits here (same-origin) with a
+//          CSRF synchronizer token + Strict double-submit cookie; ONLY this mints
+//          the API key and 303s to the CLI's loopback http://127.0.0.1:<port>/callback.
+// Both registered BEFORE mountAuth so they claim this path ahead of better-auth's wildcard.
+api.get("/auth/cli-callback", (c) => handleCliCallback(c));
+api.post("/auth/cli-callback", (c) => handleCliAuthorize(c));
+
+// better-auth owns the rest of /auth/* (magic-link, sessions, api-keys). Mount
+// before the catch-all 404 and before the other sub-routers so it claims its prefix.
+mountAuth(api);
+
 api.route("/", publishApi);
+// The more-specific /sites/:slug/share-links and /sites/:slug/claim routers are
+// mounted before sitesApi so they claim those sub-paths ahead of the generic
+// /sites/:slug GET/PATCH/DELETE handlers.
+api.route("/", shareLinksApi);
+api.route("/", claimApi);
 api.route("/", sitesApi);
 api.route("/", feedbackApi);
 
@@ -96,7 +129,7 @@ async function pathBasedRouting(
 ): Promise<Response> {
   const path = url.pathname;
 
-  const apiPrefixes = ["/publish", "/sites", "/health", "/feedback"];
+  const apiPrefixes = ["/publish", "/sites", "/health", "/feedback", "/auth"];
   if (apiPrefixes.some((p) => path === p || path.startsWith(p + "/"))) {
     return api.fetch(request, env, ctx);
   }
@@ -121,7 +154,12 @@ async function pathBasedRouting(
   if (siteMatch) {
     const slug = siteMatch[1];
     const subPath = siteMatch[2] ?? "/";
-    const rewritten = new Request(new URL(subPath, request.url), request);
+    // Preserve the original query string when stripping the /s/:slug prefix — the
+    // serve handler reads it (e.g. ?share=<token> for the private account gate,
+    // ?render=true for raw files). new URL(subPath, base) alone would drop it.
+    const rewrittenUrl = new URL(subPath, request.url);
+    rewrittenUrl.search = url.search;
+    const rewritten = new Request(rewrittenUrl, request);
     return serveSite(rewritten, env, slug, ctx, `/s/${slug}`);
   }
 
@@ -139,7 +177,7 @@ function classifyRequest(hostname: string, path: string, workerEnv: Env): { rout
   const siteMatch = path.match(/^\/s\/([a-z0-9][a-z0-9-]+[a-z0-9])/);
   if (siteMatch) return { route: "site", slug: siteMatch[1] };
 
-  if (path.startsWith("/publish") || path.startsWith("/sites") || path.startsWith("/feedback")) return { route: "api" };
+  if (path.startsWith("/publish") || path.startsWith("/sites") || path.startsWith("/feedback") || path.startsWith("/auth")) return { route: "api" };
   if (path === "/docs" || path === "/docs/") return { route: "docs" };
   if (path === "/install.sh") return { route: "install" };
 

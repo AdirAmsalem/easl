@@ -1,6 +1,7 @@
 import { Command } from '@commander-js/extra-typings';
 import pc from 'picocolors';
 import { type GlobalOpts, apiRequest } from '../lib/client';
+import { getSite as getLocalSite } from '../lib/config';
 import { formatBytes } from '../lib/files';
 import { buildHelpText } from '../lib/help-text';
 import { outputResult } from '../lib/output';
@@ -63,7 +64,13 @@ export const getCommand = new Command('get')
       console.log(`  ${pc.gray('Expires:')}   ${new Date(site.expiresAt).toLocaleString()}`);
     }
     if (site.visibility === 'private') {
-      console.log(`  ${pc.gray('Privacy:')}   private (password-protected)`);
+      console.log(`  ${pc.gray('Privacy:')}   account-private (sign-in required)`);
+    }
+    // The server never returns the password or its hash, but a site published from
+    // this machine has the password stored in local config — surface it if so.
+    const tracked = getLocalSite(site.slug);
+    if (tracked?.password) {
+      console.log(`  ${pc.gray('Password:')}  ${pc.yellow(pc.bold(tracked.password))} ${pc.dim('(local only)')}`);
     }
     if (site.versions.length > 0) {
       console.log(`  ${pc.gray('Versions:')}  ${site.versions.length}`);

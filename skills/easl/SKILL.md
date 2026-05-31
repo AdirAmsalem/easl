@@ -6,8 +6,9 @@ description: >-
   each rendered with an interactive viewer. Use when the user wants to share,
   publish, or host generated content as a web page, create a shareable URL for
   data analysis results, reports, dashboards, tables, charts, or diagrams,
-  or when the user mentions easl. Pages are public by default; mark them
-  private to gate access behind a password. Available as CLI (`easl`),
+  or when the user mentions easl. Pages are public by default; gate them
+  behind a password (anonymous-publishable) and/or make them account-private
+  (requires sign-in). Available as CLI (`easl`),
   MCP server (`@easl/mcp`), or HTTP API.
 metadata:
   author: easl
@@ -89,8 +90,9 @@ The CLI auto-detects non-TTY environments and outputs JSON — no `--json` flag 
 | `--template <tpl>` | `minimal`, `report`, or `dashboard` |
 | `--slug <slug>` | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
 | `--ttl <seconds>` | Time to live in seconds |
-| `--private` | Password-protect the page. Server generates a password if `--password` is omitted |
-| `--password <pw>` | Password for a private page (implies `--private`) |
+| `--private` | Account-private — only you (signed in) can view. Requires `easl login`. Combine with a password flag to require both gates |
+| `--password <pw>` | Password-protect the page with a value you choose. Works with or without `--private`. Mutually exclusive with `--generate-password` |
+| `--generate-password` | Password-protect the page with a strong password easl generates and shows once. Works with or without `--private`. Mutually exclusive with `--password` |
 | `--open` | Open in browser after publishing |
 | `--copy` | Copy URL to clipboard |
 
@@ -122,11 +124,14 @@ easl publish ./my-site/
 # Custom slug
 easl publish chart.svg --slug my-chart
 
-# Private (password-protected) — password auto-generated and printed once
-easl publish board-update.md --private
+# Password-protected — easl generates & prints the password once
+easl publish board-update.md --generate-password
 
-# Private with a chosen password
-easl publish board-update.md --private --password "spring-harbor-77"
+# Password-protected with a chosen password
+easl publish board-update.md --password "spring-harbor-77"
+
+# Account-private (requires `easl login`); add --password to require both gates
+easl publish board-update.md --private
 
 # Delete a site (non-interactive)
 easl delete my-chart --yes
@@ -146,15 +151,16 @@ Reach for easl whenever generated content needs to be viewable in a browser or s
 
 ## Publishing via MCP server
 
-The `@easl/mcp` server provides five tools:
+The `@easl/mcp` server provides six tools:
 
 - **`publish_content`** — Publish inline text (text types only). Fastest path: pass `content` and `contentType`, get a URL back.
 - **`publish_file`** — Publish a single file from disk by path. Works with any file type including binary (PDF, images).
 - **`publish_site`** — Publish an entire directory as a multi-file site. Works with any file types.
+- **`create_share_link`** — Mint a signed, time-limited share URL for an account-private site (requires `EASL_API_KEY`). Pass `slug` and optional `expiresIn` seconds.
 - **`list_sites`** — List sites published in this session.
 - **`delete_site`** — Delete a site by slug (session sites only).
 
-All publish tools accept optional `title` and `template` parameters, plus `private` (boolean) and `password` (string) to password-protect the page. When `private` is set and no `password` is given, the server generates one and returns it in the response — surface it to the user, it is shown only once.
+All publish tools accept optional `title` and `template` parameters, plus two independent privacy gates: `password` (string) password-protects the page (works anonymously), and `private` (boolean) makes it account-private (requires `EASL_API_KEY` in the server env). To have the server pick a password, omit `password` and set `generatePassword: true` — the generated password comes back in the response under `password`; surface it to the user, it is shown only once.
 
 ## Publishing via HTTP API
 
@@ -202,8 +208,9 @@ All publish tools accept optional `title` and `template` parameters, plus `priva
 | `title` | No | Page title |
 | `template` | No | `minimal`, `report`, or `dashboard` |
 | `slug` | No | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
-| `private` | No | `true` to password-protect the page |
-| `password` | No | Password for a private page (4–128 chars). Implies `private`; if omitted with `private: true`, the server generates one and returns it |
+| `private` | No | `true` for an account-private page (requires auth). Independent of `password` |
+| `password` | No | Password gate (4–128 chars). Works alone or stacked with `private` |
+| `generatePassword` | No | `true` (with no `password`) to have the server mint a password, returned once |
 
 *Provide either `{content, contentType}` or `{files}`.
 
@@ -228,21 +235,23 @@ The `claimToken` is needed to delete the site later. The `embed` snippet provide
 
 ```
 DELETE https://api.easl.dev/sites/{slug}
-Header: X-Claim-Token: {claimToken}
+Header: X-Claim-Token: {claimToken}   // or Authorization: Bearer <owner API key>
 ```
+
+Mutating endpoints (`DELETE`, `PATCH .../privacy`) authorize via the owner's session/`Authorization: Bearer` key OR the `X-Claim-Token` header. The claim token works only while the site is still unowned — once it's claimed into an account, only the owner's session/key can mutate it.
 
 ## Private easls
 
-Any easl can be password-protected. Pass `private: true` (and optionally `password`) at publish time:
+Two independent, composable gates protect an easl: a **password gate** (`password`, anonymous-publishable) and an **account gate** (`private: true`, requires auth). Set either, both, or neither. For the password gate, supply your own `password`, or set `generatePassword: true` to have the server mint one:
 
 ```json
-{ "content": "# Confidential", "contentType": "text/markdown", "private": true }
+{ "content": "# Confidential", "contentType": "text/markdown", "generatePassword": true }
 ```
 
-The publish response then includes the password (generated if you didn't supply one):
+The publish response then includes the password (the one you supplied, or the generated one):
 
 ```json
-{ "url": "https://cool-maze.easl.dev", "slug": "cool-maze", "visibility": "private", "password": "dust-arch-fern-dark-1181", ... }
+{ "url": "https://cool-maze.easl.dev", "slug": "cool-maze", "visibility": "public", "password": "dust-arch-fern-dark-1181", ... }
 ```
 
 How it behaves:
@@ -255,11 +264,11 @@ How it behaves:
 
 ```
 PATCH https://api.easl.dev/sites/{slug}/privacy
-Header: X-Claim-Token: {claimToken}
-Body: { "private": true, "password": "new-pass" }   // omit password to auto-generate; { "private": false } makes it public
+Header: X-Claim-Token: {claimToken}   // or Authorization: Bearer <owner API key>
+Body: { "private": true, "password": "new-pass" }   // { "private": false } makes it public + drops the password
 ```
 
-Rotating the password immediately invalidates everyone's existing unlock sessions.
+`private: true` sets the account gate; an authenticated caller also becomes/stays the owner, while a claim-token-only caller gets a pure password gate. `password` may only be sent with `private: true` — omitting it on the claim-token path mints one (returned once), and on the owner path leaves the password gate off. Rotating the password immediately invalidates everyone's existing unlock sessions.
 
 ## Limits
 

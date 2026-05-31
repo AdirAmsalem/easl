@@ -11,7 +11,28 @@ import {
   isUnlocked,
   renderGatePage,
 } from "./gate";
-import { isSessionSecretConfigured } from "../lib/session";
+import {
+  buildSetCookie,
+  isSessionSecretConfigured,
+  parseCookieHeader,
+  shareCookieName,
+  shareFingerprint,
+  signShareCookie,
+  verifyShareCookie,
+  verifyShareToken,
+} from "../lib/session";
+import { makeAuth, AuthSecretUnconfiguredError } from "../auth/index";
+
+/** Query param that carries a signed share token granting account-gate access. */
+const SHARE_PARAM = "share";
+
+/**
+ * Cap for the path-scoped share cookie set after a valid `?share=<token>` request,
+ * so the page's subresources (which the browser fetches without the query param)
+ * keep clearing the account gate. Capped to the token's remaining lifetime at the
+ * call site so the cookie can never outlive the share link it rode in on.
+ */
+const SHARE_COOKIE_MAX_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export async function serveSite(
   request: Request,
@@ -55,23 +76,66 @@ async function serveSiteInner(
     return htmlResponse(pendingHtml(slug), 202);
   }
 
-  // Private-site gate.
-  if (meta.visibility === "private") {
-    const url = new URL(request.url);
-    const path = url.pathname.slice(1);
+  // ── Two-gate decision tree (private easls v2) ────────────────────────────
+  // Two independent, stackable gates resolved in order so a non-owner never even
+  // sees the password prompt (which would confirm the site/slug exists):
+  //   Gate 1 (account): visibility === "private" AND owner_id set → owner session OR share token
+  //   Gate 2 (password): passwordHash != null                     → reuse v1 unlock cookie / gate.ts
+  // Public + password-less sites take the unchanged cacheable path below.
+  //
+  // The account gate only applies when an owning account actually exists
+  // (`owner_id != null`). A `visibility: "private"` site with no owner has no
+  // account to gate against — matching `session.user.id === owner_id` against a
+  // null owner can never succeed, so requiring a login would lock the site out
+  // permanently. This also preserves v1's "password-only private" sites (published
+  // anonymously with `private: true` + a password, owner_id null): they keep
+  // behaving as pure password gates until the publish API is migrated in a later
+  // phase to mint password-only sites as `visibility: "public"`.
+  const accountRequired = meta.visibility === "private" && meta.ownerId != null;
+  const passwordRequired = meta.passwordHash != null;
 
-    // Fail closed: without a real signing secret, unlock cookies would be forgeable,
-    // so we must never serve private content or accept an unlock attempt.
-    if (!isSessionSecretConfigured(env.SESSION_SECRET)) {
-      console.error(JSON.stringify({ event: "private_secret_unconfigured", slug }));
-      return htmlResponse(secretUnconfiguredHtml(), 503);
-    }
+  if (!accountRequired && !passwordRequired) {
+    return serveAuthenticatedSite(request, env, slug, ctx, basePath, meta, { cacheable: true });
+  }
 
-    // In path-based routing (/s/:slug/...), the request is rewritten so url.pathname
-    // has the basePath stripped; re-prefix it so the post-unlock redirect lands on the
-    // real URL instead of the bare root.
-    const fullPath = basePath + url.pathname + url.search;
+  const url = new URL(request.url);
+  const path = url.pathname.slice(1);
 
+  // Fail closed: without a real signing secret, unlock cookies AND share tokens
+  // would be forgeable, so we must never serve gated content or accept an unlock.
+  if (!isSessionSecretConfigured(env.SESSION_SECRET)) {
+    console.error(JSON.stringify({ event: "private_secret_unconfigured", slug }));
+    return noStore(htmlResponse(secretUnconfiguredHtml(), 503));
+  }
+
+  // In path-based routing (/s/:slug/...), the request is rewritten so url.pathname
+  // has the basePath stripped; re-prefix it so the post-unlock redirect and the
+  // login `next` land on the real URL instead of the bare root.
+  const fullPath = basePath + url.pathname + url.search;
+
+  // ── Gate 1: account ───────────────────────────────────────────────────────
+  // Resolved FIRST. A non-owner is rejected (403) or sent to login (302) here,
+  // before the password gate, so randoms can't learn that the slug exists.
+  // `shareToken` is set only when the gate was cleared by a valid share token;
+  // a stacked password gate carries it onto the unlock form so the recipient's
+  // POST re-clears the account gate. `setShareCookie` is set only when a fresh
+  // `?share=<token>` cleared the gate this request — it is appended to the served
+  // response so the page's subresource requests (sent without the query param)
+  // keep clearing the account gate via the cookie.
+  let shareToken: string | undefined;
+  let setShareCookie: string | undefined;
+  if (accountRequired) {
+    const accountResult = await resolveAccountGate(request, env, slug, meta, url, fullPath, basePath);
+    if (accountResult.kind === "stop") return accountResult.response;
+    shareToken = accountResult.shareToken;
+    setShareCookie = accountResult.setShareCookie;
+    // kind === "ok" → fall through to Gate 2.
+  }
+
+  // ── Gate 2: password ──────────────────────────────────────────────────────
+  // Reached only once the account gate (if any) is satisfied. Reuses the v1
+  // unlock-cookie machinery / gate.ts verbatim.
+  if (passwordRequired) {
     // Unlock endpoint (POST handles the form; GET falls through to the gate page).
     if (request.method === "POST" && `/${path}` === UNLOCK_PATH) {
       return handleUnlock(request, env, slug, meta, basePath);
@@ -80,14 +144,183 @@ async function serveSiteInner(
     const unlocked = await isUnlocked(request, env, slug, meta.passwordHash);
     if (!unlocked) {
       console.log(JSON.stringify({ event: "private_gate_render", slug, path: path || "/" }));
-      return renderGatePage(slug, basePath, { redirect: fullPath });
+      const gate = renderGatePage(slug, basePath, { redirect: fullPath, shareToken });
+      // A `?share=<token>` this request cleared Gate 1 but stops at Gate 2 — still
+      // persist the share cookie so the recipient's unlock POST + any retries keep
+      // clearing the account gate. The share cookie satisfies the account gate ONLY:
+      // the password gate is still in force here (we're rendering it).
+      return setShareCookie ? addPrivateHeaders(gate, setShareCookie) : gate;
     }
-
-    const inner = await serveAuthenticatedSite(request, env, slug, ctx, basePath, meta, { cacheable: false });
-    return addPrivateHeaders(inner, await freshUnlockCookie(env, slug, basePath, meta.passwordHash));
   }
 
-  return serveAuthenticatedSite(request, env, slug, ctx, basePath, meta, { cacheable: true });
+  // Both applicable gates satisfied — serve as non-cacheable private content.
+  const inner = await serveAuthenticatedSite(request, env, slug, ctx, basePath, meta, { cacheable: false });
+  // Collect any Set-Cookie headers this gated response must carry: the sliding
+  // unlock cookie (only when a password gate is in play — it's all the cookie
+  // unlocks) and the freshly-minted share cookie (only when this request cleared
+  // Gate 1 with a `?share=<token>`).
+  const setCookies: string[] = [];
+  if (passwordRequired) {
+    setCookies.push(await freshUnlockCookie(env, slug, basePath, meta.passwordHash));
+  }
+  if (setShareCookie) setCookies.push(setShareCookie);
+  return addPrivateHeaders(inner, setCookies);
+}
+
+// `shareToken` is set on the "ok" outcome only when the account gate was cleared
+// by a valid share token (not an owner session). A stacked password gate then
+// carries it onto the unlock form so the recipient's POST re-clears the account gate.
+// `setShareCookie` is a `Set-Cookie` value the caller appends to the served
+// response — set only when a fresh `?share=<token>` cleared the gate this request.
+type GateOutcome =
+  | { kind: "ok"; shareToken?: string; setShareCookie?: string }
+  | { kind: "stop"; response: Response };
+
+/**
+ * Resolve the ACCOUNT gate for a private site.
+ *
+ * Order:
+ *   1. A valid `?share=<token>` (HMAC valid, not expired, slug + site-instance
+ *      fingerprint match) → ok, and SET a short-lived path-scoped share cookie on
+ *      the served response so the page's subresources (CSS/JS/images, download
+ *      links, generated viewer URLs) — fetched WITHOUT the `?share=` param — keep
+ *      clearing this gate.
+ *   2. Otherwise a valid share COOKIE (set by a prior step-1 request) → ok.
+ *      Share tokens/cookies satisfy the account gate ONLY; a stacked password gate
+ *      still applies afterwards.
+ *   3. Otherwise resolve the better-auth session (cookie or `Authorization: Bearer`):
+ *        - session.user.id === owner_id → ok
+ *        - session present but not the owner → 403 (STOP)
+ *        - no session → 302 to /auth/login?next=<orig-url> (STOP)
+ *
+ * Never leaks whether the slug exists to non-owners: both the 403 and the 302 are
+ * indistinguishable from those a wrong-but-existent owner / anonymous visitor would
+ * get for any private slug.
+ */
+async function resolveAccountGate(
+  request: Request,
+  env: Env,
+  slug: string,
+  meta: SiteMeta,
+  url: URL,
+  fullPath: string,
+  basePath: string,
+): Promise<GateOutcome> {
+  // Current site-instance fingerprint (created_at + owner_id). A token/cookie minted
+  // for a prior site that reused this slug carries a different fingerprint and is
+  // rejected — see lib/session.ts shareFingerprint.
+  const fingerprint = await shareFingerprint(env.SESSION_SECRET, {
+    createdAt: meta.createdAt,
+    ownerId: meta.ownerId,
+  });
+
+  // 1. Share token (stateless HMAC, signed with SESSION_SECRET — already verified
+  //    configured by the caller).
+  const shareToken = url.searchParams.get(SHARE_PARAM);
+  if (shareToken) {
+    const result = await verifyShareToken(env.SESSION_SECRET, slug, fingerprint, shareToken);
+    if (result.valid) {
+      console.log(JSON.stringify({ event: "account_gate_share", slug }));
+      // Mint a path-scoped share cookie so subresource requests (which carry no
+      // `?share=`) keep clearing this gate. Cap the cookie to the token's remaining
+      // lifetime so it can never outlive the link it rode in on.
+      const remainingMs = (result.exp ?? Date.now()) - Date.now();
+      const ttlMs = Math.min(SHARE_COOKIE_MAX_TTL_MS, Math.max(0, remainingMs));
+      let setShareCookie: string | undefined;
+      if (ttlMs > 0) {
+        const cookieValue = await signShareCookie(env.SESSION_SECRET, slug, fingerprint, ttlMs);
+        setShareCookie = buildSetCookie(shareCookieName(slug), cookieValue, {
+          path: basePath || "/",
+          maxAgeSeconds: Math.floor(ttlMs / 1000),
+        });
+      }
+      // Surface the token so a stacked password gate can carry it onto the unlock form.
+      return { kind: "ok", shareToken, setShareCookie };
+    }
+    // An invalid/expired share token falls through to the share cookie / session
+    // resolution rather than short-circuiting — the request may still carry a valid
+    // owner session.
+    console.log(JSON.stringify({ event: "account_gate_share_invalid", slug }));
+  }
+
+  // 2. Share cookie (set by a prior valid `?share=` request, so the page's
+  //    subresources keep clearing this gate). Account gate ONLY — a stacked password
+  //    gate still applies, so this never bypasses the password page.
+  const shareCookie = parseCookieHeader(request.headers.get("Cookie"), shareCookieName(slug));
+  if (shareCookie) {
+    const result = await verifyShareCookie(env.SESSION_SECRET, slug, fingerprint, shareCookie);
+    if (result.valid) {
+      console.log(JSON.stringify({ event: "account_gate_share_cookie", slug }));
+      return { kind: "ok" };
+    }
+    console.log(JSON.stringify({ event: "account_gate_share_cookie_invalid", slug }));
+  }
+
+  // 2. Better-auth session or Bearer API key.
+  let auth;
+  try {
+    auth = makeAuth(env);
+  } catch (err) {
+    if (err instanceof AuthSecretUnconfiguredError) {
+      // Fail closed: can't trust sessions when the auth secret is unconfigured.
+      console.error(JSON.stringify({ event: "account_gate_secret_unconfigured", slug }));
+      return { kind: "stop", response: noStore(htmlResponse(secretUnconfiguredHtml(), 503)) };
+    }
+    throw err;
+  }
+
+  let session: { user?: { id?: unknown } | null } | null;
+  try {
+    session = await auth.api.getSession({ headers: request.headers });
+  } catch (err) {
+    // Bad/expired cookie or rejected API key — treat as unauthenticated.
+    console.log(JSON.stringify({ event: "account_gate_resolve_failed", slug, error: String(err) }));
+    session = null;
+  }
+
+  const userId = session?.user?.id;
+  if (typeof userId === "string" && userId.length > 0) {
+    if (userId === meta.ownerId) {
+      console.log(JSON.stringify({ event: "account_gate_owner", slug }));
+      return { kind: "ok" };
+    }
+    // Authenticated, but not the owner — refuse without confirming the site exists
+    // beyond "not yours". Never cacheable (gated content).
+    console.log(JSON.stringify({ event: "account_gate_forbidden", slug }));
+    return { kind: "stop", response: noStore(htmlResponse(notYourEaslHtml(env.DOMAIN), 403)) };
+  }
+
+  // Unauthenticated — send to login, preserving the original URL as `next`.
+  const login = buildLoginRedirect(env, url, fullPath);
+  console.log(JSON.stringify({ event: "account_gate_login_redirect", slug }));
+  return {
+    kind: "stop",
+    response: new Response(null, {
+      status: 302,
+      headers: { Location: login, "Cache-Control": "private, no-store" },
+    }),
+  };
+}
+
+/**
+ * Build the login redirect target, preserving the original URL as `next`.
+ *
+ * Subdomain routing (no basePath): the original URL is the request URL as-is, and
+ * login lives on the root domain (`https://<DOMAIN>/auth/login`).
+ * Path-based routing (/s/:slug/...): the original URL is reconstructed by
+ * re-prefixing the stripped basePath, and login stays on the same origin so local
+ * dev / workers.dev previews resolve.
+ *
+ * `next` is built from this site's own origin + path, so it is same-origin by
+ * construction — it can only ever point back at the site the visitor was denied.
+ * (The login handler that consumes `next` still applies its own open-redirect
+ * validation before bouncing the post-login visitor onward.)
+ */
+function buildLoginRedirect(env: Env, url: URL, fullPath: string): string {
+  const pathBased = fullPath !== url.pathname + url.search;
+  const next = `${url.origin}${fullPath}`;
+  const base = pathBased ? `${url.origin}/auth/login` : `https://${env.DOMAIN}/auth/login`;
+  return `${base}?next=${encodeURIComponent(next)}`;
 }
 
 /** The original render flow, parameterized by whether it may cache responses. */
@@ -175,14 +408,28 @@ async function serveAuthenticatedSite(
 }
 
 /**
- * For private-site responses: force `Cache-Control: private, no-store` and append the
- * sliding-refresh unlock cookie. We rebuild the response so we can mutate immutable
- * (e.g. Cache-API-backed) headers.
+ * For gated (account/password) responses: force `Cache-Control: private, no-store`,
+ * suppress the Referer (`Referrer-Policy: no-referrer`) so a `?share=` token in the
+ * URL can't leak to third parties via outbound requests/links, and append any gate
+ * cookies (the sliding-refresh unlock cookie and/or the share-grant cookie). We
+ * rebuild the response so we can mutate immutable (e.g. Cache-API-backed) headers.
  */
-function addPrivateHeaders(response: Response, setCookie: string): Response {
+function addPrivateHeaders(response: Response, setCookies: string | string[] = []): Response {
   const out = new Response(response.body, response);
   out.headers.set("Cache-Control", "private, no-store");
-  out.headers.append("Set-Cookie", setCookie);
+  out.headers.set("Referrer-Policy", "no-referrer");
+  const cookies = Array.isArray(setCookies) ? setCookies : [setCookies];
+  for (const cookie of cookies) {
+    if (cookie) out.headers.append("Set-Cookie", cookie);
+  }
+  return out;
+}
+
+/** Force `Cache-Control: private, no-store` + `Referrer-Policy: no-referrer` on a gated denial/error response. */
+function noStore(response: Response): Response {
+  const out = new Response(response.body, response);
+  out.headers.set("Cache-Control", "private, no-store");
+  out.headers.set("Referrer-Policy", "no-referrer");
   return out;
 }
 
@@ -332,7 +579,7 @@ async function loadMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> 
   let row;
   try {
     row = await env.DB.prepare(
-      `SELECT s.title, s.template, s.expires_at, s.created_at, s.visibility, s.password_hash,
+      `SELECT s.title, s.template, s.expires_at, s.created_at, s.visibility, s.password_hash, s.owner_id,
               v.id AS version_id, v.files_json
        FROM sites s
        JOIN versions v ON v.slug = s.slug AND v.status = 'active'
@@ -365,6 +612,7 @@ async function loadMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> 
     createdAt: row.created_at as string,
     visibility: ((row.visibility as string | null) ?? "public") as "public" | "private",
     passwordHash: row.password_hash as string | null,
+    ownerId: (row.owner_id as string | null | undefined) ?? null,
   };
 }
 
@@ -495,6 +743,13 @@ function secretUnconfiguredHtml(): string {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unavailable</title>
 <style>body{font-family:-apple-system,sans-serif;background:#fafafa;color:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.c{text-align:center}h1{font-size:4rem;font-weight:200}p{color:#737373;margin-top:1rem}</style>
 </head><body><div class="c"><h1>503</h1><p>Private sites are temporarily unavailable.</p></div></body></html>`;
+}
+
+function notYourEaslHtml(domain: string): string {
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not yours</title>
+<style>body{font-family:-apple-system,sans-serif;background:#fafafa;color:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.c{text-align:center}h1{font-size:4rem;font-weight:200}p{color:#737373;margin-top:1rem}a{color:#4f46e5;text-decoration:none}</style>
+</head><body><div class="c"><h1>403</h1><p>This easl isn't yours to view.</p><p><a href="https://${domain}">Create with easl →</a></p></div></body></html>`;
 }
 
 function pendingHtml(slug: string): string {

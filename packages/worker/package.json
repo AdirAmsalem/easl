@@ -16,7 +16,9 @@
     "db:migrate": "wrangler d1 migrations apply easl-db --local"
   },
   "dependencies": {
+    "@better-auth/api-key": "^1.6.13",
     "@resvg/resvg-wasm": "^2.6.2",
+    "better-auth": "^1.6.13",
     "fflate": "^0.8.2",
     "hono": "^4.7.0",
     "satori": "^0.26.0",

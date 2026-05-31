@@ -35,6 +35,12 @@ database_name = "easl-db"
 database_id = "8b7c3c46-7517-4459-a024-7d22ca39e28d"  # Self-hosters: replace with your own D1 database ID
 migrations_dir = "migrations"  # applied via `wrangler d1 migrations apply`
 
+# Cloudflare Email Service binding — delivers magic-link emails for account-bound
+# private easls (better-auth). Requires the Workers Paid plan. The default sender
+# falls back to a console logger when this binding is absent (local dev / tests).
+[[send_email]]
+name = "EMAIL"
+
 [vars]
 DOMAIN = "easl.dev"
 API_HOST = "api.easl.dev"
@@ -45,6 +51,11 @@ WORKERS_DEV_SUBDOMAIN = "adir"  # Cloudflare account subdomain for preview proxy
 #   wrangler secret put SESSION_SECRET   (use a strong random value, e.g. `openssl rand -base64 48`)
 # For local dev, put it in .dev.vars (gitignored; see .dev.vars.example).
 # If it is unset or left as the placeholder, the Worker fails closed on private sites.
+#
+# BETTER_AUTH_SECRET signs better-auth sessions, magic-link tokens, and API keys.
+# Like SESSION_SECRET it is intentionally NOT committed here — set it as a secret in prod:
+#   wrangler secret put BETTER_AUTH_SECRET   (e.g. `openssl rand -base64 48`)
+# For local dev, put it in .dev.vars (gitignored; see .dev.vars.example).
 
 [observability]
 enabled = true

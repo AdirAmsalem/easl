@@ -15,7 +15,19 @@ export interface TrackedSite {
   title?: string;
   expiresAt?: string;
   visibility?: 'public' | 'private';
+  /**
+   * Per-site password for password-protected (v1) sites. Stored locally only —
+   * the server keeps a hash and can never recover it. Independent of `owner`:
+   * a site can be account-private, password-protected, or both.
+   */
   password?: string;
+  /**
+   * Marker that this site is owned by the logged-in account (set when published
+   * while authenticated, or after `easl claim`). `"me"` = owned by the local
+   * account; absent = anonymous. Account-owned sites are managed via the API key,
+   * not the (now-rotated) claim token.
+   */
+  owner?: 'me';
 }
 
 interface ConfigFile {

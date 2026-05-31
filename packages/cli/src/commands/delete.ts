@@ -2,6 +2,7 @@ import * as p from '@clack/prompts';
 import { Command } from '@commander-js/extra-typings';
 import { type GlobalOpts, apiRequest } from '../lib/client';
 import { getSite, removeSite } from '../lib/config';
+import { isAuthenticated } from '../lib/credentials';
 import { buildHelpText } from '../lib/help-text';
 import { outputError, outputResult } from '../lib/output';
 import { withSpinner } from '../lib/spinner';
@@ -30,10 +31,15 @@ export const deleteCommand = new Command('delete')
     const globalOpts = cmd.optsWithGlobals() as GlobalOpts;
 
     const site = getSite(slug);
-    if (!site) {
+    // The worker accepts EITHER a claim token (anonymous sites) OR the owner's
+    // API key (account-owned sites). So we can delete when the site is tracked
+    // locally (claim token) OR when we're authenticated (Bearer is auto-attached
+    // by apiRequest). Only block when we have neither.
+    const authed = isAuthenticated(globalOpts.apiKey);
+    if (!site && !authed) {
       outputError(
         {
-          message: `Site "${slug}" not found in local config. Can only delete sites published from this machine.`,
+          message: `Site "${slug}" not found in local config. Publish it from this machine, or sign in with \`easl login\` to delete a site you own.`,
           code: 'not_found',
         },
         globalOpts,
@@ -42,13 +48,19 @@ export const deleteCommand = new Command('delete')
 
     if (!opts.yes && isInteractive()) {
       const confirm = await p.confirm({
-        message: `Delete site "${slug}" (${site.url})?`,
+        message: `Delete site "${slug}"${site ? ` (${site.url})` : ''}?`,
       });
       if (p.isCancel(confirm) || !confirm) {
         console.log('Cancelled.');
         process.exit(0);
       }
     }
+
+    // Only send the claim token when we actually have a real one. After `easl
+    // claim` it's cleared (rotated server-side), and account-owned sites authorize
+    // via the Bearer key instead.
+    const extraHeaders =
+      site?.claimToken ? { 'X-Claim-Token': site.claimToken } : undefined;
 
     await withSpinner(
       'Deleting...',
@@ -58,7 +70,7 @@ export const deleteCommand = new Command('delete')
           `/sites/${slug}`,
           globalOpts,
           undefined,
-          { 'X-Claim-Token': site.claimToken },
+          extraHeaders,
         ),
       'delete_error',
       globalOpts,

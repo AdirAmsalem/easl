@@ -4,6 +4,7 @@ import { Command } from '@commander-js/extra-typings';
 import pc from 'picocolors';
 import { type GlobalOpts, apiRequest } from '../lib/client';
 import { addSite } from '../lib/config';
+import { isAuthenticated } from '../lib/credentials';
 import {
   formatBytes,
   inferContentType,
@@ -56,25 +57,33 @@ export const publishCommand = new Command('publish')
   )
   .option('--slug <slug>', 'Custom slug (lowercase alphanumeric + hyphens, 3-48 chars)')
   .option('--ttl <seconds>', 'Time to live in seconds')
-  .option('--private', 'Make the site password-protected (gates the URL with a password page)')
-  .option('--password <password>', 'Password for private site (implies --private; if omitted, server generates one)')
+  .option('--private', 'Account-private: only you (signed in) can view. Requires login.')
+  .option(
+    '--password <password>',
+    'Password-protect the URL with a value you choose. Works with or without --private. Mutually exclusive with --generate-password.',
+  )
+  .option(
+    '--generate-password',
+    'Password-protect the URL with a strong password easl generates and shows once. Works with or without --private. Mutually exclusive with --password.',
+  )
   .option('--open', 'Open in browser after publishing')
   .option('--copy', 'Copy URL to clipboard after publishing')
   .addHelpText(
     'after',
     buildHelpText({
       context:
-        'Publishes content and returns a shareable URL.\nSupports file path, directory, --content flag, or piped stdin.',
+        `Publishes content and returns a shareable URL.\nSupports file path, directory, --content flag, or piped stdin.\n\n${pc.gray('Privacy modes (composable):')}\n  ${pc.bold('public')}              default — anyone with the link can view\n  ${pc.bold('password-protected')}  --password X — gated by a password page\n  ${pc.bold('                  ')}  --generate-password — easl generates one, shown once\n  ${pc.bold('account-private')}     --private — only you (signed in); share via ${pc.blue('easl share')}\n  ${pc.bold('both')}                --private --password X — sign-in AND password required\n\n--password and --generate-password are mutually exclusive.\n--private requires authentication (run ${pc.blue('easl login')} or set EASL_API_KEY).`,
       output:
-        '  {"url":"...","slug":"...","claimToken":"...","expiresAt":"..."}',
-      errorCodes: ['publish_error', 'file_error', 'stdin_error'],
+        '  {"url":"...","slug":"...","claimToken":"...","expiresAt":"...","visibility":"...","password":"..."}',
+      errorCodes: ['publish_error', 'file_error', 'stdin_error', 'auth_error'],
       examples: [
         'easl publish report.md',
         'easl publish ./my-site/',
-        'easl publish --content "# Hello World" --type markdown',
         'cat data.csv | easl publish --type csv',
-        'easl publish report.md --title "Q4 Report" --open',
-        'easl publish chart.svg --slug my-chart --copy',
+        'easl publish report.md --password hunter2',
+        'easl publish report.md --generate-password   # auto-generate a password',
+        'easl login && easl publish secret.md --private',
+        'easl publish secret.md --private --password hunter2',
       ],
     }),
   )
@@ -163,14 +172,52 @@ export const publishCommand = new Command('publish')
       );
     }
 
+    // Account gate (`--private`) and password gate (`--password`) are INDEPENDENT
+    // and composable (private easls v2): public / password-protected /
+    // account-private / both. `--private` binds the site to your account and
+    // therefore requires authentication; `--password` is anonymous-publishable and
+    // does NOT imply `--private` (unlike v1, where --password meant a gated URL).
+    if (opts.private && !isAuthenticated(globalOpts.apiKey)) {
+      outputError(
+        {
+          message:
+            '--private requires authentication. Run `easl login` or set EASL_API_KEY (or pass --api-key).',
+          code: 'auth_error',
+        },
+        globalOpts,
+      );
+    }
+
+    // Two ways to request the password gate, mutually exclusive:
+    //   - `--password X`        → opts.password === "X"   (explicit password, sent verbatim)
+    //   - `--generate-password` → opts.generatePassword   (server mints one, returns it once)
+    // `--password` takes a REQUIRED value so a value-less invocation can't swallow
+    // the positional path token (e.g. `easl publish --password report.md` would
+    // otherwise parse report.md as the password). `--generate-password` is a boolean
+    // flag that consumes no token, so `easl publish --generate-password report.md`
+    // keeps report.md as the path. Both compose with `--private`.
+    if (opts.password != null && opts.generatePassword) {
+      outputError(
+        {
+          message:
+            '--password and --generate-password are mutually exclusive. Pass a value with --password, or use --generate-password to have easl mint one.',
+          code: 'publish_error',
+        },
+        globalOpts,
+      );
+    }
+    const explicitPassword =
+      typeof opts.password === 'string' ? opts.password : undefined;
+    const generatePassword = opts.generatePassword === true;
+
     const body: Record<string, unknown> = { files };
     if (opts.title) body.title = opts.title;
     if (opts.template) body.template = opts.template;
     if (opts.slug) body.slug = opts.slug;
     if (opts.ttl) body.ttl = Number(opts.ttl);
-    const wantsPrivate = opts.private === true || opts.password != null;
-    if (wantsPrivate) body.private = true;
-    if (opts.password) body.password = opts.password;
+    if (opts.private) body.private = true;
+    if (explicitPassword != null) body.password = explicitPassword;
+    else if (generatePassword) body.generatePassword = true;
 
     const result = await withSpinner(
       'Publishing...',
@@ -180,7 +227,10 @@ export const publishCommand = new Command('publish')
       globalOpts,
     );
 
-    // Save to local config for later list/delete
+    // Save to local config for later list/delete. `owner: 'me'` when the server
+    // bound the site to our account (authenticated publish → anonymous === false),
+    // so `open`/`get` can label it account-private and `delete` knows to use the
+    // API key rather than the claim token.
     addSite({
       slug: result.slug,
       claimToken: result.claimToken,
@@ -189,7 +239,10 @@ export const publishCommand = new Command('publish')
       title: opts.title,
       expiresAt: result.expiresAt,
       visibility: result.visibility,
-      password: result.password,
+      // The plaintext password to persist locally: the explicit value if the
+      // caller supplied one, otherwise the server-generated one returned once.
+      password: explicitPassword ?? result.password,
+      owner: result.anonymous === false ? 'me' : undefined,
     });
 
     if (globalOpts.json || !isInteractive()) {
@@ -213,13 +266,25 @@ export const publishCommand = new Command('publish')
       console.log(
         `  ${pc.gray('Expires:')}  ${result.expiresAt ? new Date(result.expiresAt).toLocaleDateString() : 'never'}`,
       );
-      if (result.visibility === 'private') {
-        console.log(
-          `  ${pc.gray('Private:')}  yes (password-protected)`,
-        );
-        if (result.password) {
+      // Privacy summary across the two composable gates. The plaintext password to
+      // surface is the explicit value, else whatever the server generated and
+      // returned once (when `--generate-password` was used).
+      const password = explicitPassword ?? result.password;
+      const accountPrivate = result.visibility === 'private';
+      const passwordProtected = Boolean(password);
+      if (accountPrivate || passwordProtected) {
+        const modes: string[] = [];
+        if (accountPrivate) modes.push('account-private (sign-in required)');
+        if (passwordProtected) modes.push('password-protected');
+        console.log(`  ${pc.gray('Privacy:')}  ${modes.join(' + ')}`);
+        if (accountPrivate) {
           console.log(
-            `  ${pc.gray('Password:')} ${pc.yellow(pc.bold(result.password))}`,
+            `  ${pc.gray('        ')}  ${pc.dim(`Share with non-account viewers via: easl share ${result.slug}`)}`,
+          );
+        }
+        if (password) {
+          console.log(
+            `  ${pc.gray('Password:')} ${pc.yellow(pc.bold(password))}`,
           );
           console.log(
             `  ${pc.gray('         ')} ${pc.dim('Saved to ~/.config/easl/sites.json. Stored only here — no server recovery.')}`,

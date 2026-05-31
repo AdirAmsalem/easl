@@ -3,3 +3,12 @@
 # locally (>= 16 chars). Generate one with: openssl rand -base64 48
 # Private sites fail closed if this is unset or left as the literal placeholder below.
 SESSION_SECRET="local-dev-session-secret-change-me-please"
+
+# BETTER_AUTH_SECRET signs better-auth sessions, magic-link tokens, and API keys
+# (account-bound private easls, v2). Use any long random string locally (>= 32 chars).
+# Generate one with: openssl rand -base64 48
+BETTER_AUTH_SECRET="local-dev-better-auth-secret-change-me-please"
+
+# Optional: override the auth base URL. Defaults to https://api.<DOMAIN>.
+# For local dev with wrangler dev (path-based routing on localhost:8787):
+# BETTER_AUTH_URL="http://localhost:8787"

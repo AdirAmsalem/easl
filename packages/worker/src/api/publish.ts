@@ -5,6 +5,7 @@ import { siteUrl as buildSiteUrl } from "../lib/url";
 import { generateOgImage } from "../og";
 import { generateQrSvg } from "../lib/qr";
 import { generatePassword, hashPassword } from "../lib/password";
+import { getOptionalUser } from "../auth/middleware";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -37,6 +38,11 @@ interface PublishRequest {
   slug?: string;
   private?: boolean;
   password?: string;
+  // Password gate, server-picks-the-secret variant. When `true` AND no explicit
+  // `password` is supplied, the server mints a strong 4-word+4-digit password,
+  // hashes it, and returns the plaintext ONCE in the response (v1 ergonomics).
+  // Ignored when `password` is an explicit string (that takes precedence).
+  generatePassword?: boolean;
 }
 
 const PASSWORD_MIN_LEN = 4;
@@ -127,24 +133,46 @@ app.post("/publish", async (c) => {
     slug = await generateUniqueSlug(c.env.DB);
   }
 
-  // Resolve privacy: optional `private` flag + optional caller-supplied password.
+  // Resolve OPTIONAL auth (session cookie OR Bearer API key). An authenticated
+  // publish binds the site to the caller's account via `owner_id`; anonymous
+  // publishing stays the zero-friction default for public + password-only sites.
+  const user = await getOptionalUser(c);
+
+  // ── Two independent, composable privacy gates (private easls v2) ───────────
+  //  - ACCOUNT gate  (`private: true`): requires authentication. Binds owner_id
+  //    and marks the site visibility=private. The serve handler then requires the
+  //    owner's session (or a signed share link). Anonymous `private: true` → 401.
+  //  - PASSWORD gate (`password` | `generatePassword`): a per-site password.
+  //    Anonymous-publishable — this is v1's password-only mode, now decoupled from
+  //    the `private` flag. Supply `password: "value"` to choose it, or
+  //    `generatePassword: true` to have the server mint one and return it once.
+  //  Both, either, or neither may be set; `private: true` + a password stacks them.
   const isPrivate = body.private === true;
+  if (isPrivate && !user) {
+    return c.json({ error: "private: true requires authentication. Sign in or pass a valid API key." }, 401);
+  }
+
+  // Password gate. Independent of the account gate, so a password works with or
+  // without `private` and with or without authentication. Two ways to opt in:
+  //   - explicit `password: "value"` → use it verbatim (validated for length).
+  //   - `generatePassword: true` (and no explicit `password`) → the server mints
+  //     a strong 4-word+4-digit password (v1 ergonomics, restored). The plaintext
+  //     is returned ONCE below and never recoverable afterwards.
+  // An explicit `password` always wins over `generatePassword` to avoid surprises.
   let plaintextPassword: string | null = null;
   let passwordHash: string | null = null;
-  if (isPrivate) {
-    if (body.password != null) {
-      if (typeof body.password !== "string"
-        || body.password.length < PASSWORD_MIN_LEN
-        || body.password.length > PASSWORD_MAX_LEN) {
-        return c.json({ error: `password must be ${PASSWORD_MIN_LEN}-${PASSWORD_MAX_LEN} chars` }, 400);
-      }
-      plaintextPassword = body.password;
-    } else {
-      plaintextPassword = generatePassword();
+  if (body.password != null) {
+    if (typeof body.password !== "string"
+      || body.password.length < PASSWORD_MIN_LEN
+      || body.password.length > PASSWORD_MAX_LEN) {
+      return c.json({ error: `password must be ${PASSWORD_MIN_LEN}-${PASSWORD_MAX_LEN} chars` }, 400);
     }
+    plaintextPassword = body.password;
+  } else if (body.generatePassword === true) {
+    plaintextPassword = generatePassword();
+  }
+  if (plaintextPassword != null) {
     passwordHash = await hashPassword(plaintextPassword);
-  } else if (body.password != null) {
-    return c.json({ error: "password requires private: true" }, 400);
   }
 
   const versionId = generateVersionId();
@@ -169,22 +197,27 @@ app.post("/publish", async (c) => {
     )
   );
 
-  // Insert site
+  // Insert site. An authenticated publish sets owner_id and flips is_anonymous off
+  // so the site is owned by the caller's account from the start; anonymous publishes
+  // keep owner_id null + is_anonymous 1 (claimable later via POST /sites/:slug/claim).
+  const ownerId = user?.id ?? null;
   try {
     await c.env.DB.prepare(
-      `INSERT OR FAIL INTO sites (slug, title, template, claim_token, is_anonymous, created_at, expires_at, file_count, total_bytes, visibility, password_hash)
-       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
+      `INSERT OR FAIL INTO sites (slug, title, template, claim_token, is_anonymous, created_at, expires_at, file_count, total_bytes, visibility, password_hash, owner_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       slug,
       body.title ?? null,
       body.template ?? null,
       claimToken,
+      ownerId ? 0 : 1,
       now,
       expiresAt,
       files.length,
       totalSize,
       isPrivate ? "private" : "public",
       passwordHash,
+      ownerId,
     ).run();
   } catch (e) {
     if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
@@ -208,10 +241,13 @@ app.post("/publish", async (c) => {
     totalBytes: totalSize,
     contentTypes,
     visibility: isPrivate ? "private" : "public",
+    owned: ownerId != null,
   }));
 
-  // Skip OG image generation for private sites so content doesn't leak via a publicly-cached image.
-  if (!isPrivate) {
+  // Skip OG/QR generation for any GATED site (account-private OR password-protected)
+  // so content doesn't leak via a publicly-cached social image.
+  const gated = isPrivate || passwordHash != null;
+  if (!gated) {
     c.executionCtx.waitUntil(
       generateSocialAssets(c.env, slug, body.title || files[0].path, files[0].contentType, url)
     );
@@ -224,10 +260,10 @@ app.post("/publish", async (c) => {
     embed: `<iframe src="${url}?embed=1" width="100%" height="500" frameborder="0"></iframe>`,
     shareText: `${body.title || files[0].path}: ${url}`,
     expiresAt,
-    anonymous: true,
+    anonymous: ownerId == null,
     visibility: isPrivate ? "private" : "public",
   };
-  if (!isPrivate) {
+  if (!gated) {
     response.ogImage = `${url}${SOCIAL_ASSET_BASE_PATH}/og.png`;
     response.qrCode = `${url}${SOCIAL_ASSET_BASE_PATH}/qr.svg`;
   }
