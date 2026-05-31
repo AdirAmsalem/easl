@@ -268,7 +268,7 @@ export const publishCommand = new Command('publish')
       );
       // Privacy summary across the two composable gates. The plaintext password to
       // surface is the explicit value, else whatever the server generated and
-      // returned once (when `--password` was used value-less).
+      // returned once (when `--generate-password` was used).
       const password = explicitPassword ?? result.password;
       const accountPrivate = result.visibility === 'private';
       const passwordProtected = Boolean(password);

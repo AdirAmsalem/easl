@@ -408,14 +408,16 @@ async function serveAuthenticatedSite(
 }
 
 /**
- * For gated (account/password) responses: force `Cache-Control: private, no-store`
- * and append any gate cookies (the sliding-refresh unlock cookie and/or the
- * share-grant cookie). We rebuild the response so we can mutate immutable (e.g.
- * Cache-API-backed) headers.
+ * For gated (account/password) responses: force `Cache-Control: private, no-store`,
+ * suppress the Referer (`Referrer-Policy: no-referrer`) so a `?share=` token in the
+ * URL can't leak to third parties via outbound requests/links, and append any gate
+ * cookies (the sliding-refresh unlock cookie and/or the share-grant cookie). We
+ * rebuild the response so we can mutate immutable (e.g. Cache-API-backed) headers.
  */
 function addPrivateHeaders(response: Response, setCookies: string | string[] = []): Response {
   const out = new Response(response.body, response);
   out.headers.set("Cache-Control", "private, no-store");
+  out.headers.set("Referrer-Policy", "no-referrer");
   const cookies = Array.isArray(setCookies) ? setCookies : [setCookies];
   for (const cookie of cookies) {
     if (cookie) out.headers.append("Set-Cookie", cookie);
@@ -423,10 +425,11 @@ function addPrivateHeaders(response: Response, setCookies: string | string[] = [
   return out;
 }
 
-/** Force `Cache-Control: private, no-store` on a gated denial/error response. */
+/** Force `Cache-Control: private, no-store` + `Referrer-Policy: no-referrer` on a gated denial/error response. */
 function noStore(response: Response): Response {
   const out = new Response(response.body, response);
   out.headers.set("Cache-Control", "private, no-store");
+  out.headers.set("Referrer-Policy", "no-referrer");
   return out;
 }
 

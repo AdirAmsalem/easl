@@ -596,6 +596,8 @@ describe("account-private easls (account gate)", () => {
     expect(await sub.text()).toBe("body{color:green}");
     // Gated content is never cached.
     expect(sub.headers.get("Cache-Control")).toContain("no-store");
+    // ...and suppresses the Referer so a ?share= token can't leak to third parties.
+    expect(sub.headers.get("Referrer-Policy")).toBe("no-referrer");
 
     // Sanity: the SAME subresource WITHOUT the cookie still bounces to login.
     const noCookie = await SELF.fetch(`http://localhost/s/${slug}/style.css`, { redirect: "manual" });
