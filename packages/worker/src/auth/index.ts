@@ -3,6 +3,7 @@ import { magicLink } from "better-auth/plugins";
 import { apiKey } from "@better-auth/api-key";
 import type { Env } from "../types";
 import { makeEmailSender, type EmailSender } from "./email";
+import { makeKvRateLimitStorage } from "./rate-limit-store";
 import { isBetterAuthSecretConfigured } from "../lib/session";
 
 /**
@@ -33,8 +34,9 @@ const MAGIC_LINK_TTL_SECONDS = 15 * 60;
  * Magic-link rate limit: at most 10 requests per hour (per IP + path), covering
  * both `/sign-in/magic-link` and `/magic-link/verify`. See the open-items note in
  * the v2 plan ("~10/hour/email"). better-auth's limiter is keyed by IP+path; we
- * enable the global limiter (memory storage) below so this plugin rule applies —
- * the global limiter is otherwise off outside production, which a Worker never is.
+ * enable the global limiter (KV-backed, shared across isolates) below so this
+ * plugin rule applies — the global limiter is otherwise off outside production,
+ * which a Worker never is.
  * The IP is resolved from Cloudflare's trusted `cf-connecting-ip` header (see the
  * `advanced.ipAddress` config in makeAuth) so the bucket key can't be rotated with
  * a spoofed X-Forwarded-For, and so getIp can resolve an IP at all in prod.
@@ -151,9 +153,15 @@ export function makeAuth(env: Env, opts: MakeAuthOptions = {}): EaslAuth {
     // Enable better-auth's rate limiter so the magic-link plugin's per-path rule
     // actually fires. It defaults to ON only in production (NODE_ENV), which this
     // Worker never sets, so without this every magic-link request would be
-    // unthrottled. Memory storage is per-isolate — adequate for v1; promote to a
-    // KV-backed secondary storage if cross-isolate limits become necessary.
-    rateLimit: { enabled: true, storage: "memory" },
+    // unthrottled. `customStorage` backs the limiter with KV (env.SITES_KV) so the
+    // ~10/hour/IP cap is GLOBAL across isolates: better-auth's default "memory"
+    // storage is per-isolate, and Cloudflare runs many isolates per colo, so a
+    // memory cap is effectively multiplied by the live-isolate count (email-bombing
+    // risk). When customStorage is set, better-auth ignores `storage` and routes
+    // every rate-limit read/write through it. This affects only the global IP+path
+    // limiter; the api-key plugin's per-key limiter is disabled below, so
+    // agent/CLI/MCP Bearer publishing remains unthrottled.
+    rateLimit: { enabled: true, customStorage: makeKvRateLimitStorage(env) },
     plugins: [
       magicLink({
         expiresIn: MAGIC_LINK_TTL_SECONDS,

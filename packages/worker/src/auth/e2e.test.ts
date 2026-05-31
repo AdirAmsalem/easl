@@ -282,7 +282,8 @@ describe("magic-link rate limiting", () => {
   it("returns 429 once the per-IP magic-link limit (10/hour) is exceeded", async () => {
     // The limiter keys on the client IP (resolved from cf-connecting-ip — the
     // header makeAuth trusts) + path. A fixed, unique IP isolates this test's
-    // bucket from the other suites sharing the isolate's memory storage.
+    // bucket from the other suites. The bucket is held in the KV-backed
+    // customStorage (shared across isolates), not per-isolate memory.
     const { sender } = recordingSender();
     const auth = makeAuth(testEnv, { emailSender: sender });
     const ip = "203.0.113.42"; // TEST-NET-3, distinct from any other test's IP.
@@ -308,6 +309,40 @@ describe("magic-link rate limiting", () => {
     expect(blocked.status).toBe(429);
     // sanity: the 11th request in the loop was already over the limit.
     expect(statuses[10]).toBe(429);
+
+    // The shared store is doing the counting: the bucket lives in KV under the
+    // `rl:` namespace, keyed by `<ip>|<path>` (better-auth's createRateLimitKey
+    // separator), and has crossed the cap. Proves the limit is enforced via the
+    // cross-isolate KV customStorage, not memory.
+    const bucket = await testEnv.SITES_KV.get(`rl:${ip}|/sign-in/magic-link`);
+    expect(bucket, "limiter bucket should be persisted in KV").toBeTruthy();
+    expect(JSON.parse(bucket!).count).toBeGreaterThanOrEqual(10);
+  });
+
+  it("counts magic-link requests in KV so the cap holds across isolates (not per-isolate memory)", async () => {
+    // Directly exercise the wiring: a fresh auth instance built on the same env
+    // reads the bucket the FIRST instance wrote — which a per-isolate memory Map
+    // (better-auth's default `storage: "memory"`) could not guarantee across
+    // separate makeAuth calls sharing nothing but env.SITES_KV.
+    const { sender } = recordingSender();
+    const ip = "198.51.100.77"; // TEST-NET-2, unique to this test.
+    const fire = (auth: EaslAuth) =>
+      auth.handler(
+        new Request("https://api.easl.dev/auth/sign-in/magic-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "cf-connecting-ip": ip },
+          body: JSON.stringify({ email: "cross-isolate@example.com" }),
+        }),
+      );
+
+    // Exhaust the cap on one instance.
+    const first = makeAuth(testEnv, { emailSender: sender });
+    for (let i = 0; i < 10; i++) expect((await fire(first)).status).toBe(200);
+
+    // A brand-new instance (no shared in-memory state) still sees the full count
+    // because the bucket is in KV — so it blocks immediately.
+    const second = makeAuth(testEnv, { emailSender: sender });
+    expect((await fire(second)).status).toBe(429);
   });
 });
 
