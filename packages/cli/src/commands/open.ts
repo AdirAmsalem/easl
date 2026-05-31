@@ -1,7 +1,8 @@
 import { Command } from '@commander-js/extra-typings';
+import pc from 'picocolors';
 import type { GlobalOpts } from '../lib/client';
 import { openInBrowser } from '../lib/browser';
-import { getSite } from '../lib/config';
+import { getSite, type TrackedSite } from '../lib/config';
 import { buildHelpText } from '../lib/help-text';
 import { outputError, outputResult } from '../lib/output';
 import { isInteractive } from '../lib/tty';
@@ -20,8 +21,9 @@ export const openCommand = new Command('open')
     const globalOpts = cmd.optsWithGlobals() as GlobalOpts;
 
     let url: string;
+    let site: TrackedSite | undefined;
     if (slug) {
-      const site = getSite(slug);
+      site = getSite(slug);
       if (site) {
         url = site.url;
       } else {
@@ -34,9 +36,13 @@ export const openCommand = new Command('open')
     const opened = await openInBrowser(url);
 
     if (globalOpts.json || !isInteractive()) {
-      outputResult({ url, opened }, globalOpts);
+      outputResult({ url, opened, visibility: site?.visibility }, globalOpts);
     } else if (opened) {
-      console.log(`\n  Opened ${url}\n`);
+      console.log(`\n  Opened ${url}`);
+      if (site?.visibility === 'private' && site.password) {
+        console.log(`  ${pc.gray('Password:')} ${pc.yellow(pc.bold(site.password))}`);
+      }
+      console.log('');
     } else {
       outputError(
         { message: `Could not open browser. Visit ${url} manually.`, code: 'browser_error' },

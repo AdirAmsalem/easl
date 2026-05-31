@@ -6,7 +6,10 @@ export interface Env {
   DOMAIN: string;
   API_HOST: string;
   WORKERS_DEV_SUBDOMAIN: string;
+  SESSION_SECRET: string;
 }
+
+export type Visibility = "public" | "private";
 
 export interface FileEntry {
   path: string;
@@ -23,6 +26,8 @@ export interface SiteMeta {
   template: string | null;
   expiresAt: string | null;
   createdAt: string;
+  visibility: Visibility;
+  passwordHash: string | null;
 }
 
 // D1 row types
@@ -36,6 +41,9 @@ export interface SiteRow {
   expires_at: string | null;
   file_count: number;
   total_bytes: number;
+  visibility: Visibility;
+  password_hash: string | null;
+  owner_id: string | null;
 }
 
 export interface VersionRow {

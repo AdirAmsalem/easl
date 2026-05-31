@@ -4,6 +4,14 @@ import { detectViewerType, type ViewerType } from "../lib/mime";
 import { decideRenderMode } from "../render/detect";
 import { generateHtmlShell } from "../render/templates/base";
 import { zipSync } from "fflate";
+import {
+  UNLOCK_PATH,
+  freshUnlockCookie,
+  handleUnlock,
+  isUnlocked,
+  renderGatePage,
+} from "./gate";
+import { isSessionSecretConfigured } from "../lib/session";
 
 export async function serveSite(
   request: Request,
@@ -47,10 +55,56 @@ async function serveSiteInner(
     return htmlResponse(pendingHtml(slug), 202);
   }
 
+  // Private-site gate.
+  if (meta.visibility === "private") {
+    const url = new URL(request.url);
+    const path = url.pathname.slice(1);
+
+    // Fail closed: without a real signing secret, unlock cookies would be forgeable,
+    // so we must never serve private content or accept an unlock attempt.
+    if (!isSessionSecretConfigured(env.SESSION_SECRET)) {
+      console.error(JSON.stringify({ event: "private_secret_unconfigured", slug }));
+      return htmlResponse(secretUnconfiguredHtml(), 503);
+    }
+
+    // In path-based routing (/s/:slug/...), the request is rewritten so url.pathname
+    // has the basePath stripped; re-prefix it so the post-unlock redirect lands on the
+    // real URL instead of the bare root.
+    const fullPath = basePath + url.pathname + url.search;
+
+    // Unlock endpoint (POST handles the form; GET falls through to the gate page).
+    if (request.method === "POST" && `/${path}` === UNLOCK_PATH) {
+      return handleUnlock(request, env, slug, meta, basePath);
+    }
+
+    const unlocked = await isUnlocked(request, env, slug, meta.passwordHash);
+    if (!unlocked) {
+      console.log(JSON.stringify({ event: "private_gate_render", slug, path: path || "/" }));
+      return renderGatePage(slug, basePath, { redirect: fullPath });
+    }
+
+    const inner = await serveAuthenticatedSite(request, env, slug, ctx, basePath, meta, { cacheable: false });
+    return addPrivateHeaders(inner, await freshUnlockCookie(env, slug, basePath, meta.passwordHash));
+  }
+
+  return serveAuthenticatedSite(request, env, slug, ctx, basePath, meta, { cacheable: true });
+}
+
+/** The original render flow, parameterized by whether it may cache responses. */
+async function serveAuthenticatedSite(
+  request: Request,
+  env: Env,
+  slug: string,
+  ctx: ExecutionContext,
+  basePath: string,
+  meta: SiteMeta,
+  opts: { cacheable: boolean },
+): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.slice(1);
 
-  // Social assets — served from R2 at deterministic keys
+  // Social assets — served from R2 at deterministic keys. Private sites skip OG generation
+  // (no asset will exist), so these endpoints are effectively public-only.
   if (path === "_easl/og.png") {
     const obj = await env.CONTENT.get(`og/${slug}.png`);
     if (!obj) return new Response("Not found", { status: 404 });
@@ -78,17 +132,19 @@ async function serveSiteInner(
   const logServe = (extra?: { cache?: "l1" | "l2" | "miss" }) =>
     console.log(JSON.stringify({ event: "serve", slug, path: path || "/", mode: decision.mode, viewerType: decision.viewerType, files: meta.files.length, ...extra }));
 
+  const fileOpts = opts.cacheable ? undefined : { cacheControl: "private, no-store" };
+
   // Root request — smart render
   if (!path || path === "") {
     // Passthrough mode (HTML site) → serve index.html directly
     if (decision.mode === "passthrough" && decision.primaryFile) {
       logServe();
-      return serveR2File(env, slug, meta.currentVersionId, decision.primaryFile.path, request);
+      return serveR2File(env, slug, meta.currentVersionId, decision.primaryFile.path, request, fileOpts);
     }
 
     // Single file → smart render with beautiful viewer
     if (decision.mode === "single-file" && decision.primaryFile) {
-      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request, ctx, basePath, logServe);
+      return smartRender(env, slug, meta, decision.primaryFile, decision.viewerType, request, ctx, basePath, logServe, opts);
     }
 
     // Multi-file without index → auto-generated nav
@@ -102,20 +158,32 @@ async function serveSiteInner(
     // If requesting a raw file, check for ?render=true to smart-render it
     if (url.searchParams.has("render")) {
       const viewerType = detectViewerType(file.contentType, file.path);
-      return smartRender(env, slug, meta, file, viewerType, request, ctx, basePath, logServe);
+      return smartRender(env, slug, meta, file, viewerType, request, ctx, basePath, logServe, opts);
     }
     logServe();
-    return serveR2File(env, slug, meta.currentVersionId, file.path, request);
+    return serveR2File(env, slug, meta.currentVersionId, file.path, request, fileOpts);
   }
 
   // Try .html extension (clean URLs)
   const htmlFile = meta.files.find((f) => f.path === path + ".html");
   if (htmlFile) {
     logServe();
-    return serveR2File(env, slug, meta.currentVersionId, htmlFile.path, request);
+    return serveR2File(env, slug, meta.currentVersionId, htmlFile.path, request, fileOpts);
   }
 
   return htmlResponse(fileNotFoundHtml(path, slug, env.DOMAIN), 404);
+}
+
+/**
+ * For private-site responses: force `Cache-Control: private, no-store` and append the
+ * sliding-refresh unlock cookie. We rebuild the response so we can mutate immutable
+ * (e.g. Cache-API-backed) headers.
+ */
+function addPrivateHeaders(response: Response, setCookie: string): Response {
+  const out = new Response(response.body, response);
+  out.headers.set("Cache-Control", "private, no-store");
+  out.headers.append("Set-Cookie", setCookie);
+  return out;
 }
 
 const RENDER_SIZE_LIMIT = 5 * 1024 * 1024; // 5 MB — files larger than this skip smart render
@@ -130,11 +198,15 @@ async function smartRender(
   ctx: ExecutionContext,
   basePath = "",
   logServe: (extra?: { cache?: "l1" | "l2" | "miss" }) => void = () => {},
+  opts: { cacheable?: boolean } = {},
 ): Promise<Response> {
+  const cacheable = opts.cacheable !== false;
+  const cacheControl = cacheable ? "public, max-age=14400" : "private, no-store";
+
   // Files >5MB skip smart render — serve as download instead of reading into memory
   if (file.size > RENDER_SIZE_LIMIT) {
     logServe();
-    return serveR2File(env, slug, meta.currentVersionId, file.path, request);
+    return serveR2File(env, slug, meta.currentVersionId, file.path, request, { cacheControl });
   }
 
   // Check caches for rendered HTML (include basePath to avoid cache poisoning between routing modes)
@@ -142,26 +214,28 @@ async function smartRender(
   const cacheUrl = `https://cache.internal/${cacheKey}`;
   const cache = caches.default;
 
-  // L1: Cache API (per-colo, ~1ms)
-  const cacheMatch = await cache.match(cacheUrl);
-  if (cacheMatch) {
-    logServe({ cache: "l1" });
-    return cacheMatch;
-  }
+  if (cacheable) {
+    // L1: Cache API (per-colo, ~1ms)
+    const cacheMatch = await cache.match(cacheUrl);
+    if (cacheMatch) {
+      logServe({ cache: "l1" });
+      return cacheMatch;
+    }
 
-  // L2: KV
-  const cached = await env.SITES_KV.get(cacheKey);
-  if (cached) {
-    logServe({ cache: "l2" });
-    const response = new Response(cached, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "public, max-age=14400",
-        "X-Robots-Tag": "noindex, nofollow",
-      },
-    });
-    ctx.waitUntil(cache.put(cacheUrl, response.clone()));
-    return response;
+    // L2: KV
+    const cached = await env.SITES_KV.get(cacheKey);
+    if (cached) {
+      logServe({ cache: "l2" });
+      const response = new Response(cached, {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": cacheControl,
+          "X-Robots-Tag": "noindex, nofollow",
+        },
+      });
+      ctx.waitUntil(cache.put(cacheUrl, response.clone()));
+      return response;
+    }
   }
 
   logServe({ cache: "miss" });
@@ -209,12 +283,14 @@ async function smartRender(
   const response = new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "public, max-age=14400",
+      "Cache-Control": cacheControl,
       "X-Robots-Tag": "noindex, nofollow",
     },
   });
-  ctx.waitUntil(env.SITES_KV.put(cacheKey, html, { expirationTtl: 14400 }));
-  ctx.waitUntil(cache.put(cacheUrl, response.clone()));
+  if (cacheable) {
+    ctx.waitUntil(env.SITES_KV.put(cacheKey, html, { expirationTtl: 14400 }));
+    ctx.waitUntil(cache.put(cacheUrl, response.clone()));
+  }
 
   return response;
 }
@@ -225,6 +301,7 @@ async function serveR2File(
   versionId: string,
   path: string,
   request: Request,
+  opts: { cacheControl?: string } = {},
 ): Promise<Response> {
   const r2Key = `${slug}/${versionId}/${path}`;
   const object = await env.CONTENT.get(r2Key);
@@ -234,10 +311,13 @@ async function serveR2File(
   }
 
   const contentType = getContentType(path);
+  const baseCache = opts.cacheControl
+    ? { "Cache-Control": opts.cacheControl }
+    : getCacheHeaders(contentType);
   const headers: Record<string, string> = {
     "Content-Type": contentType,
     "ETag": object.etag,
-    ...getCacheHeaders(contentType),
+    ...baseCache,
   };
 
   const ifNoneMatch = request.headers.get("If-None-Match");
@@ -252,7 +332,7 @@ async function loadMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> 
   let row;
   try {
     row = await env.DB.prepare(
-      `SELECT s.title, s.template, s.expires_at, s.created_at,
+      `SELECT s.title, s.template, s.expires_at, s.created_at, s.visibility, s.password_hash,
               v.id AS version_id, v.files_json
        FROM sites s
        JOIN versions v ON v.slug = s.slug AND v.status = 'active'
@@ -283,6 +363,8 @@ async function loadMetaFromD1(env: Env, slug: string): Promise<SiteMeta | null> 
     template: row.template as string | null,
     expiresAt: row.expires_at as string | null,
     createdAt: row.created_at as string,
+    visibility: ((row.visibility as string | null) ?? "public") as "public" | "private",
+    passwordHash: row.password_hash as string | null,
   };
 }
 
@@ -406,6 +488,13 @@ function expiredHtml(slug: string, domain: string): string {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Expired</title>
 <style>body{font-family:-apple-system,sans-serif;background:#fafafa;color:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.c{text-align:center}h1{font-size:4rem;font-weight:200}p{color:#737373;margin-top:1rem}a{color:#4f46e5;text-decoration:none}</style>
 </head><body><div class="c"><h1>410</h1><p><strong>${escapeHtml(slug)}</strong> has expired.</p><p>Anonymous sites expire after 7 days.</p><p><a href="https://${domain}">Create with easl →</a></p></div></body></html>`;
+}
+
+function secretUnconfiguredHtml(): string {
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unavailable</title>
+<style>body{font-family:-apple-system,sans-serif;background:#fafafa;color:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.c{text-align:center}h1{font-size:4rem;font-weight:200}p{color:#737373;margin-top:1rem}</style>
+</head><body><div class="c"><h1>503</h1><p>Private sites are temporarily unavailable.</p></div></body></html>`;
 }
 
 function pendingHtml(slug: string): string {

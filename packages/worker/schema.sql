@@ -3,18 +3,22 @@
 
 -- Sites (publishes)
 CREATE TABLE IF NOT EXISTS sites (
-  slug         TEXT PRIMARY KEY,
-  title        TEXT,
-  template     TEXT,                -- null = auto-detect
-  claim_token  TEXT NOT NULL,       -- random 128-bit hex, plaintext for MVP
-  is_anonymous INTEGER NOT NULL DEFAULT 1,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  expires_at   TEXT,                -- null = permanent (post-MVP authenticated)
-  file_count   INTEGER NOT NULL DEFAULT 0,
-  total_bytes  INTEGER NOT NULL DEFAULT 0
+  slug          TEXT PRIMARY KEY,
+  title         TEXT,
+  template      TEXT,                -- null = auto-detect
+  claim_token   TEXT NOT NULL,       -- random 128-bit hex, plaintext for MVP
+  is_anonymous  INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at    TEXT,                -- null = permanent (post-MVP authenticated)
+  file_count    INTEGER NOT NULL DEFAULT 0,
+  total_bytes   INTEGER NOT NULL DEFAULT 0,
+  visibility    TEXT NOT NULL DEFAULT 'public',  -- 'public' | 'private'
+  password_hash TEXT,                -- PBKDF2 hash for private sites; null for public
+  owner_id      TEXT                 -- reserved for future account-bound ownership; null = anonymous
 );
 
 CREATE INDEX IF NOT EXISTS idx_sites_expires ON sites(expires_at);
+CREATE INDEX IF NOT EXISTS idx_sites_visibility ON sites(visibility);
 
 -- Versions (deploy history)
 CREATE TABLE IF NOT EXISTS versions (

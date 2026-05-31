@@ -16,6 +16,7 @@ interface SiteResponse {
   totalBytes: number;
   expiresAt: string | null;
   createdAt: string;
+  visibility?: 'public' | 'private';
   versions: Array<{ id: string; status: string; created_at: string }>;
 }
 
@@ -60,6 +61,9 @@ export const getCommand = new Command('get')
     console.log(`  ${pc.gray('Created:')}   ${new Date(site.createdAt).toLocaleString()}`);
     if (site.expiresAt) {
       console.log(`  ${pc.gray('Expires:')}   ${new Date(site.expiresAt).toLocaleString()}`);
+    }
+    if (site.visibility === 'private') {
+      console.log(`  ${pc.gray('Privacy:')}   private (password-protected)`);
     }
     if (site.versions.length > 0) {
       console.log(`  ${pc.gray('Versions:')}  ${site.versions.length}`);

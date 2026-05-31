@@ -30,12 +30,15 @@ interface PublishResponse {
   url: string;
   slug: string;
   claimToken: string;
-  ogImage: string;
-  qrCode: string;
+  ogImage?: string;
+  qrCode?: string;
   embed: string;
   shareText: string;
   expiresAt: string;
   anonymous: boolean;
+  visibility?: 'public' | 'private';
+  password?: string;
+  passwordNotice?: string;
 }
 
 export const publishCommand = new Command('publish')
@@ -53,6 +56,8 @@ export const publishCommand = new Command('publish')
   )
   .option('--slug <slug>', 'Custom slug (lowercase alphanumeric + hyphens, 3-48 chars)')
   .option('--ttl <seconds>', 'Time to live in seconds')
+  .option('--private', 'Make the site password-protected (gates the URL with a password page)')
+  .option('--password <password>', 'Password for private site (implies --private; if omitted, server generates one)')
   .option('--open', 'Open in browser after publishing')
   .option('--copy', 'Copy URL to clipboard after publishing')
   .addHelpText(
@@ -163,6 +168,9 @@ export const publishCommand = new Command('publish')
     if (opts.template) body.template = opts.template;
     if (opts.slug) body.slug = opts.slug;
     if (opts.ttl) body.ttl = Number(opts.ttl);
+    const wantsPrivate = opts.private === true || opts.password != null;
+    if (wantsPrivate) body.private = true;
+    if (opts.password) body.password = opts.password;
 
     const result = await withSpinner(
       'Publishing...',
@@ -180,6 +188,8 @@ export const publishCommand = new Command('publish')
       createdAt: new Date().toISOString(),
       title: opts.title,
       expiresAt: result.expiresAt,
+      visibility: result.visibility,
+      password: result.password,
     });
 
     if (globalOpts.json || !isInteractive()) {
@@ -203,6 +213,19 @@ export const publishCommand = new Command('publish')
       console.log(
         `  ${pc.gray('Expires:')}  ${result.expiresAt ? new Date(result.expiresAt).toLocaleDateString() : 'never'}`,
       );
+      if (result.visibility === 'private') {
+        console.log(
+          `  ${pc.gray('Private:')}  yes (password-protected)`,
+        );
+        if (result.password) {
+          console.log(
+            `  ${pc.gray('Password:')} ${pc.yellow(pc.bold(result.password))}`,
+          );
+          console.log(
+            `  ${pc.gray('         ')} ${pc.dim('Saved to ~/.config/easl/sites.json. Stored only here — no server recovery.')}`,
+          );
+        }
+      }
       console.log('');
     }
 
