@@ -100,6 +100,53 @@ export function sanitizeNext(env: Env, requestUrl: string, next: string | null |
 }
 
 /**
+ * Describe the easl a (sanitized) `next` points at, for the contextual sign-in
+ * copy. The account gate always builds `next` from the denied site's own URL (see
+ * serve/handler.ts buildLoginRedirect), so when a visitor is bounced here from a
+ * private easl, `next` identifies which one. Returns a display label:
+ *   - subdomain routing: the full host (e.g. `bright-hill-436f.easl.dev`) — exactly
+ *     what the visitor typed.
+ *   - path routing / local dev / previews: the slug from `/s/<slug>`.
+ * Returns null when `next` is absent or points at the apex, `www`, or the API host
+ * (a direct /auth/login visit or the CLI handshake) — those keep the generic copy.
+ *
+ * Defensive: `next` is expected post-sanitizeNext (an apex/subdomain absolute URL
+ * or a root-relative path), but we parse with a base and return null on anything
+ * odd so a malformed value just falls back to the generic page.
+ */
+export function describeEaslTarget(env: Env, next: string | null | undefined): string | null {
+  if (!next) return null;
+  let target: URL;
+  try {
+    target = new URL(next, `https://${env.DOMAIN}`);
+  } catch {
+    return null;
+  }
+
+  // Subdomain routing: a direct, non-reserved subdomain of DOMAIN IS the easl, so
+  // show the host (the slug lives in the hostname, not the path). Checked before the
+  // `/s/<slug>` path so a private subdomain easl with a `/s/...` subpath still
+  // reports its host rather than mistaking the subpath for a slug.
+  const host = target.hostname;
+  const apiHost = env.API_HOST || `api.${env.DOMAIN}`;
+  const reserved = new Set([env.DOMAIN, `www.${env.DOMAIN}`, apiHost]);
+  if (host.endsWith(`.${env.DOMAIN}`) && !reserved.has(host)) return host;
+
+  // Path-based routing (/s/<slug>/...) on the apex, localhost, or workers.dev
+  // previews — the slug is the distinctive part.
+  const pathMatch = target.pathname.match(/^\/s\/([^/]+)/);
+  if (pathMatch) {
+    try {
+      return decodeURIComponent(pathMatch[1]) || null;
+    } catch {
+      return pathMatch[1] || null;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Validate the `cli_port` the `easl login` handshake passes (GET
  * /auth/login?cli_port=<port>). Returns the numeric port string when it's a
  * plausible TCP port, else null. Used to derive the magic-link callbackURL that
@@ -172,6 +219,7 @@ export async function handleLoginPage(c: Ctx): Promise<Response> {
   const cliState = sanitizeCliState(c.req.query("cli_state"));
 
   let callbackURL: string;
+  let easlLabel: string | null = null;
   if (cliPort && isBetterAuthSecretConfigured(c.env.BETTER_AUTH_SECRET)) {
     // Throttle marker minting per IP: this endpoint is unauthenticated, so without
     // a cap an attacker could harvest unlimited fresh markers to fuel CSRF attempts
@@ -187,21 +235,32 @@ export async function handleLoginPage(c: Ctx): Promise<Response> {
     callbackURL = `${AUTH_BASE_PATH}/cli-callback?${params.toString()}`;
   } else {
     callbackURL = sanitizeNext(c.env, c.req.url, c.req.query("next"));
+    // Contextual copy when the visitor was bounced here from a private easl gate
+    // (callbackURL === the sanitized `next`). The CLI branch above stays generic.
+    easlLabel = describeEaslTarget(c.env, callbackURL);
   }
 
   console.log(JSON.stringify({ event: "auth_login_page", cli: Boolean(cliPort) }));
-  return c.html(loginPageHtml(callbackURL));
+  return c.html(loginPageHtml(callbackURL, easlLabel));
 }
 
 function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function loginPageHtml(callbackURL: string): string {
+function loginPageHtml(callbackURL: string, easlLabel?: string | null): string {
   // `callbackURL` is validated (sanitizeNext / sanitizeCliPort) and HTML-escaped
   // here; the JS reads it from a data attribute and sends it as the magic-link
   // callbackURL (the post-verify redirect target).
   const signInPath = `${AUTH_BASE_PATH}/sign-in/magic-link`;
+  // `easlLabel`, when set, means the visitor was redirected here from a private
+  // easl's account gate — name it and nudge them toward the email they published
+  // from (a fresh email signs in fine but then hits the 403 "not yours" page).
+  // It's sanitizeNext-derived (apex/subdomain host or `/s/<slug>` slug) and escaped.
+  const heading = easlLabel ? "This easl is private" : "Sign in to easl";
+  const sub = easlLabel
+    ? `Sign in to view <strong>${escapeHtml(easlLabel)}</strong>. Use the email you published it from and we'll send you a sign-in link.`
+    : "Enter your email and we'll send you a sign-in link.";
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign in · easl</title>
@@ -226,8 +285,8 @@ function loginPageHtml(callbackURL: string): string {
 <body>
   <form class="card" id="login-form" autocomplete="off" data-next="${escapeHtml(callbackURL)}" data-signin="${escapeHtml(signInPath)}">
     <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-    <h1>Sign in to easl</h1>
-    <p class="sub">Enter your email and we'll send you a sign-in link.</p>
+    <h1>${heading}</h1>
+    <p class="sub">${sub}</p>
     <label for="email">Email</label>
     <input id="email" name="email" type="email" autocomplete="email" autofocus required>
     <button type="submit" id="submit">Send sign-in link</button>

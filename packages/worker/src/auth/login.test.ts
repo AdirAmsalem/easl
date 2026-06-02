@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { Env } from "../types";
-import { sanitizeNext, sanitizeCliPort, sanitizeCliState } from "./login";
+import { sanitizeNext, sanitizeCliPort, sanitizeCliState, describeEaslTarget } from "./login";
 
 // Only DOMAIN is read by sanitizeNext; cast a minimal stub through Env.
 const env = { DOMAIN: "easl.dev" } as unknown as Env;
+// describeEaslTarget also reads API_HOST.
+const gateEnv = { DOMAIN: "easl.dev", API_HOST: "api.easl.dev" } as unknown as Env;
 const apiUrl = "https://api.easl.dev/auth/login";
 const fallback = "https://easl.dev/";
 
@@ -49,6 +51,38 @@ describe("sanitizeNext (open-redirect protection for the login page)", () => {
     expect(sanitizeNext(env, localUrl, "http://localhost:8787/s/x")).toBe("http://localhost:8787/s/x");
     // A different localhost port is a different origin and not under DOMAIN → fallback.
     expect(sanitizeNext(env, localUrl, "http://localhost:9999/s/x")).toBe(fallback);
+  });
+});
+
+describe("describeEaslTarget (contextual sign-in copy from the gate `next`)", () => {
+  it("returns the host for a private-easl subdomain (subdomain routing)", () => {
+    expect(describeEaslTarget(gateEnv, "https://bright-hill-436f.easl.dev/")).toBe(
+      "bright-hill-436f.easl.dev",
+    );
+    // A subpath on the subdomain still reports the host, not the subpath.
+    expect(describeEaslTarget(gateEnv, "https://my-slug.easl.dev/s/page")).toBe("my-slug.easl.dev");
+  });
+
+  it("returns the slug for path-based routing (apex, local dev, previews)", () => {
+    expect(describeEaslTarget(gateEnv, "https://easl.dev/s/my-slug")).toBe("my-slug");
+    expect(describeEaslTarget(gateEnv, "/s/my-slug")).toBe("my-slug");
+    expect(describeEaslTarget(gateEnv, "/s/my-slug?render=true")).toBe("my-slug");
+    expect(describeEaslTarget(gateEnv, "http://localhost:8787/s/my-slug")).toBe("my-slug");
+    // Percent-encoded slug is decoded for display.
+    expect(describeEaslTarget(gateEnv, "/s/a%20b")).toBe("a b");
+  });
+
+  it("returns null for reserved hosts and non-easl targets (generic copy)", () => {
+    expect(describeEaslTarget(gateEnv, "https://easl.dev/")).toBeNull();
+    expect(describeEaslTarget(gateEnv, "https://www.easl.dev/")).toBeNull();
+    expect(describeEaslTarget(gateEnv, "https://api.easl.dev/auth/login")).toBeNull();
+    expect(describeEaslTarget(gateEnv, "http://localhost:8787/auth/login")).toBeNull();
+  });
+
+  it("returns null when next is absent", () => {
+    expect(describeEaslTarget(gateEnv, null)).toBeNull();
+    expect(describeEaslTarget(gateEnv, undefined)).toBeNull();
+    expect(describeEaslTarget(gateEnv, "")).toBeNull();
   });
 });
 

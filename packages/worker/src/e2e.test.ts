@@ -1145,7 +1145,9 @@ describe("GET /auth/login (the account-gate redirect target must exist)", () => 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("text/html");
     const html = await res.text();
-    expect(html).toContain("Sign in to easl");
+    // Stable across the generic and private-easl-contextual copy variants (this
+    // `next` is a private easl, so the page renders the contextual heading).
+    expect(html).toContain("send you a sign-in link");
     // The validated same-origin `next` is embedded so the page can pass it as the
     // magic-link callbackURL.
     expect(html).toContain(next);
@@ -1177,7 +1179,11 @@ describe("GET /auth/login (the account-gate redirect target must exist)", () => 
 
     const loginPage = await SELF.fetch(new URL(location, "http://localhost").toString());
     expect(loginPage.status).toBe(200);
-    expect(await loginPage.text()).toContain("Sign in to easl");
+    // Stable across both copy variants; the gate `next` points at this private easl,
+    // so the page also renders the contextual "This easl is private" heading.
+    const loginHtml = await loginPage.text();
+    expect(loginHtml).toContain("send you a sign-in link");
+    expect(loginHtml).toContain("This easl is private");
   });
 });
 

@@ -927,7 +927,8 @@ describe("device authorization flow (easl login --device)", () => {
     const { device_code, user_code, verification_uri } = await requestDeviceCode();
     expect(device_code).toBeTruthy();
     expect(user_code).toBeTruthy();
-    expect(verification_uri).toBe("https://api.easl.dev/device");
+    // Host depends on BETTER_AUTH_URL/API_HOST (differs local vs prod) — assert the path.
+    expect(new URL(verification_uri).pathname).toBe("/device");
 
     // 2. Human opens the verification page (signed in) → claims the code + consent UI.
     const page = await SELF.fetch(
@@ -999,5 +1000,42 @@ describe("device authorization flow (easl login --device)", () => {
       body: new URLSearchParams({ userCode: user_code }).toString(),
     });
     expect(res.status).toBe(401);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The login page is contextual: when a visitor is bounced here from a private
+// easl's account gate (GET /auth/login?next=<easl-url>), it names the easl and
+// nudges them toward the email they published from. Direct visits stay generic.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("login page contextual copy for a private-easl gate redirect", () => {
+  it("names the easl (subdomain routing) and keeps the post-login redirect target", async () => {
+    const next = "https://my-slug.easl.dev/";
+    const res = await SELF.fetch(`http://localhost/auth/login?next=${encodeURIComponent(next)}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("This easl is private");
+    expect(html).toContain("my-slug.easl.dev");
+    // The sanitized `next` is still carried as the magic-link callbackURL.
+    expect(html).toContain(`data-next="${next}"`);
+  });
+
+  it("names the slug for path-based routing (local dev / previews)", async () => {
+    const res = await SELF.fetch(
+      "http://localhost/auth/login?next=" + encodeURIComponent("http://localhost/s/my-slug"),
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("This easl is private");
+    expect(html).toContain("my-slug");
+  });
+
+  it("falls back to generic copy on a direct visit with no next", async () => {
+    const res = await SELF.fetch("http://localhost/auth/login");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Sign in to easl");
+    expect(html).not.toContain("This easl is private");
   });
 });
