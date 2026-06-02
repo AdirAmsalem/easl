@@ -1,5 +1,5 @@
 import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
-import { magicLink } from "better-auth/plugins";
+import { magicLink, deviceAuthorization } from "better-auth/plugins";
 import { apiKey } from "@better-auth/api-key";
 import type { Env } from "../types";
 import { makeEmailSender, type EmailSender } from "./email";
@@ -26,6 +26,13 @@ export const AUTH_BASE_PATH = "/auth";
 
 /** Bearer API-key prefix. Keys look like `easl_<random>`. */
 export const API_KEY_PREFIX = "easl_";
+
+/**
+ * OAuth device-flow client id the easl CLI identifies as (`easl login --device`).
+ * The deviceAuthorization plugin's `validateClient` rejects any other id, so a
+ * random caller can't open device-flow sessions against this account namespace.
+ */
+export const DEVICE_CLIENT_ID = "easl-cli";
 
 /** Magic links expire after 15 minutes. */
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
@@ -180,6 +187,29 @@ export function makeAuth(env: Env, opts: MakeAuthOptions = {}): EaslAuth {
         // global IP+path limiter above is our abuse control; raise these if a per-key
         // quota is ever wanted.
         rateLimit: { enabled: false },
+      }),
+      // OAuth 2.0 Device Authorization Grant (RFC 8628) — powers `easl login
+      // --device` for headless/remote boxes (no loopback callback; the CLI polls).
+      // The CLI calls /device/code, the user approves at `verificationUri` after a
+      // magic-link sign-in, then the CLI exchanges the approved session for an
+      // `easl_` API key via /api-key/create (see auth/device.ts + the CLI command).
+      deviceAuthorization({
+        // Codes expire after 10 min — long enough to open the page, sign in, and
+        // approve; short enough to bound a leaked/guessed user code.
+        expiresIn: "10m",
+        // Minimum CLI poll interval the token endpoint enforces (slow_down beyond it).
+        interval: "5s",
+        // 8 chars from better-auth's unambiguous A–Z2–9 charset (no 0/O/1/I/L):
+        // 32^8 ≈ 1.1e12 combos, infeasible to brute-force within the 10-min TTL.
+        userCodeLength: 8,
+        // Only the easl CLI may open a device flow; reject any other client id.
+        validateClient: (clientId) => clientId === DEVICE_CLIENT_ID,
+        // The human approval page, served by the worker at /device on the api
+        // origin (auth/device.ts). The CLI shows this URL (+ ?user_code=…).
+        verificationUri: `${baseURL}/device`,
+        // Required by the plugin's options parser (its `schema` field isn't marked
+        // optional in 1.6.13); empty → mergeSchema keeps the default deviceCode model.
+        schema: {},
       }),
     ],
   } satisfies BetterAuthOptions;

@@ -17,4 +17,8 @@ export const BETTER_AUTH_SCHEMA: readonly string[] = [
   // `easl login` consent-click handshake (marker nonce + CSRF synchronizer token).
   `CREATE TABLE IF NOT EXISTS "cli_handshake_nonce" ("nonce" text NOT NULL PRIMARY KEY, "expires_at" integer NOT NULL, "created_at" integer NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS "cli_csrf_token" ("token" text NOT NULL PRIMARY KEY, "session_id" text NOT NULL, "expires_at" integer NOT NULL, "created_at" integer NOT NULL)`,
+  // Mirror of migrations/0005_device_authorization.sql — RFC 8628 device-flow store
+  // (`easl login --device`). The deviceAuthorization plugin reads/writes this model.
+  `CREATE TABLE IF NOT EXISTS "deviceCode" ("id" text NOT NULL PRIMARY KEY, "deviceCode" text NOT NULL UNIQUE, "userCode" text NOT NULL, "userId" text REFERENCES "user" ("id") ON DELETE cascade, "expiresAt" date NOT NULL, "status" text NOT NULL, "lastPolledAt" date, "pollingInterval" integer, "clientId" text, "scope" text)`,
+  `CREATE INDEX IF NOT EXISTS "idx_deviceCode_userCode" ON "deviceCode" ("userCode")`,
 ];

@@ -719,10 +719,10 @@ describe("CLI login handshake: consent-click flow", () => {
     expect(second.status).toBe(403);
   });
 
-  it("caps + rotates CLI keys: a second authorize revokes the first key (no key sprawl)", async () => {
+  it("does not revoke prior CLI keys on a second authorize (multi-device: keys coexist)", async () => {
     const { sent, sender } = recordingSender();
     const auth = makeAuth(testEnv, { emailSender: sender });
-    const email = "rotate-cli@example.com";
+    const email = "multi-device-cli@example.com";
     const cookie = await signInAndGetCookie(auth, email, sent);
     const app = probeApp();
 
@@ -748,15 +748,17 @@ describe("CLI login handshake: consent-click flow", () => {
     const key1 = await handshake(51100);
     expect(await keyResolves(key1)).toBe(true);
 
+    // A second login (e.g. another machine) mints a fresh key WITHOUT revoking the
+    // first — both stay valid so one account can be used from many devices at once.
     const key2 = await handshake(51101);
     expect(await keyResolves(key2)).toBe(true);
-    expect(await keyResolves(key1)).toBe(false);
+    expect(await keyResolves(key1)).toBe(true);
 
     const listRes = await auth.handler(
       new Request("https://api.easl.dev/auth/api-key/list", { headers: { cookie } }),
     );
     const listed = await listRes.json<{ apiKeys: Array<{ id: string; name: string | null }> }>();
-    expect(listed.apiKeys.filter((k) => k.name === "easl-cli").length).toBe(1);
+    expect(listed.apiKeys.filter((k) => k.name === "easl-cli").length).toBe(2);
   });
 
   it("GET bounces back to the sign-in page (preserving cli_port + cli_state) when no session is present", async () => {
@@ -878,5 +880,124 @@ describe("login page wiring for the CLI handshake", () => {
     const blocked = await fire();
     expect(blocked.status).toBe(429);
     expect(await blocked.text()).not.toContain("cli-callback");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OAuth 2.0 Device Authorization Grant (RFC 8628) — `easl login --device`.
+// Drives the full headless flow through the REAL worker routes: the CLI's
+// /auth/device/code + /auth/device/token, the human's /device page +
+// /device/approve, and the CLI's session→API-key exchange. Proves a remote box
+// can sign in with no loopback callback and that the minted key acts as the user.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
+
+async function requestDeviceCode(): Promise<{
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  interval: number;
+}> {
+  const res = await SELF.fetch("http://localhost/auth/device/code", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: "easl-cli" }),
+  });
+  expect(res.status).toBe(200);
+  return res.json();
+}
+
+function pollDeviceToken(deviceCode: string): Promise<Response> {
+  return SELF.fetch("http://localhost/auth/device/token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ grant_type: DEVICE_GRANT, device_code: deviceCode, client_id: "easl-cli" }),
+  });
+}
+
+describe("device authorization flow (easl login --device)", () => {
+  it("code → approve → token → API key, and the key authenticates as the user", async () => {
+    const { sent, sender } = recordingSender();
+    const auth = makeAuth(testEnv, { emailSender: sender });
+    const email = "device-flow@example.com";
+    const cookie = await signInAndGetCookie(auth, email, sent);
+
+    // 1. CLI requests a device + user code (no loopback — it will just poll).
+    const { device_code, user_code, verification_uri } = await requestDeviceCode();
+    expect(device_code).toBeTruthy();
+    expect(user_code).toBeTruthy();
+    expect(verification_uri).toBe("https://api.easl.dev/device");
+
+    // 2. Human opens the verification page (signed in) → claims the code + consent UI.
+    const page = await SELF.fetch(
+      `http://localhost/device?user_code=${encodeURIComponent(user_code)}`,
+      { headers: { cookie } },
+    );
+    expect(page.status).toBe(200);
+    const pageHtml = await page.text();
+    expect(pageHtml).toContain("Authorize the easl CLI");
+    expect(pageHtml).toContain(user_code);
+
+    // 3. Human approves (same-origin form POST).
+    const approve = await SELF.fetch("http://localhost/device/approve", {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "https://api.easl.dev",
+      },
+      body: new URLSearchParams({ userCode: user_code }).toString(),
+    });
+    expect(approve.status).toBe(200);
+    expect(await approve.text()).toContain("authorized");
+
+    // 4. CLI polls → approved; the token endpoint returns the device session token.
+    const token = await pollDeviceToken(device_code);
+    expect(token.status).toBe(200);
+    const tokenBody = await token.json<{ access_token?: string; token_type?: string }>();
+    expect(tokenBody.access_token).toBeTruthy();
+    expect(tokenBody.token_type).toBe("Bearer");
+
+    // 5. CLI exchanges that device session token for an easl_ API key.
+    const keyRes = await SELF.fetch("http://localhost/device/cli-key", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ device_token: tokenBody.access_token }),
+    });
+    expect(keyRes.status).toBe(200);
+    const key = (await keyRes.json<{ key?: string }>()).key;
+    expect(key).toMatch(/^easl_/);
+
+    // 6. The minted key authenticates as the signed-in user.
+    const app = probeApp();
+    const who = await app.request(
+      "http://localhost/whoami",
+      { headers: { authorization: `Bearer ${key}` } },
+      testEnv,
+    );
+    expect((await who.json<{ user: { email?: string } | null }>()).user?.email).toBe(email);
+  });
+
+  it("bounces an anonymous visitor of /device to the magic-link sign-in page", async () => {
+    const { user_code } = await requestDeviceCode();
+    const res = await SELF.fetch(
+      `http://localhost/device?user_code=${encodeURIComponent(user_code)}`,
+      { redirect: "manual" },
+    );
+    expect(res.status).toBe(302);
+    const loc = res.headers.get("location")!;
+    expect(loc).toContain("/auth/login");
+    expect(decodeURIComponent(loc)).toContain(`/device?user_code=${user_code}`);
+  });
+
+  it("rejects /device/approve without a session (401)", async () => {
+    const { user_code } = await requestDeviceCode();
+    const res = await SELF.fetch("http://localhost/device/approve", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://api.easl.dev" },
+      body: new URLSearchParams({ userCode: user_code }).toString(),
+    });
+    expect(res.status).toBe(401);
   });
 });

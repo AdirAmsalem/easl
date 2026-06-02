@@ -73,7 +73,7 @@ The three publish tools also accept `private` (boolean) and `password` (string).
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EASL_API_URL` | `https://api.easl.dev` | API base URL (override for self-hosted) |
-| `EASL_API_KEY` | _(none)_ | Account API key (`easl_…`). When set, sent as `Authorization: Bearer` on publish and site requests. Required for account-private publishing and `create_share_link`. Mint one with `easl auth …` / the API-key endpoints. |
+| `EASL_API_KEY` | _(none)_ | Account API key (`easl_…`). When set, sent as `Authorization: Bearer` on publish and site requests. Required for account-private publishing and `create_share_link`. Get one by running `easl login` (or `easl login --device` on a headless/remote machine) and copying it from `~/.config/easl/credentials.json`. |
 
 ## Links
 

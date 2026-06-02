@@ -9,6 +9,7 @@ import feedbackApi from "./api/feedback";
 import { mountAuth } from "./auth/handler";
 import { handleLoginPage } from "./auth/login";
 import { handleCliCallback, handleCliAuthorize } from "./auth/cli-callback";
+import { handleDevicePage, handleDeviceApprove, handleDeviceDeny, handleDeviceCliKey } from "./auth/device";
 import { serveSite } from "./serve/handler";
 import { docsPageHtml } from "./docs";
 
@@ -53,6 +54,18 @@ api.get("/auth/login", (c) => handleLoginPage(c));
 // Both registered BEFORE mountAuth so they claim this path ahead of better-auth's wildcard.
 api.get("/auth/cli-callback", (c) => handleCliCallback(c));
 api.post("/auth/cli-callback", (c) => handleCliAuthorize(c));
+
+// /device — the human approval page for the OAuth device flow (`easl login
+// --device`), the deviceAuthorization plugin's `verificationUri`. A signed-in
+// user enters/approves the code the CLI is polling on; the GET claims the code,
+// the POSTs approve/deny it. Top-level (not /auth/*) so it never collides with
+// the plugin's own /auth/device JSON endpoints, and registered here on the api app.
+api.get("/device", (c) => handleDevicePage(c));
+api.post("/device/approve", (c) => handleDeviceApprove(c));
+api.post("/device/deny", (c) => handleDeviceDeny(c));
+// POST /device/cli-key — the CLI exchanges the approved device session token
+// (from /auth/device/token) for an easl_ API key. Token-authenticated (no cookie).
+api.post("/device/cli-key", (c) => handleDeviceCliKey(c));
 
 // better-auth owns the rest of /auth/* (magic-link, sessions, api-keys). Mount
 // before the catch-all 404 and before the other sub-routers so it claims its prefix.
@@ -129,7 +142,7 @@ async function pathBasedRouting(
 ): Promise<Response> {
   const path = url.pathname;
 
-  const apiPrefixes = ["/publish", "/sites", "/health", "/feedback", "/auth"];
+  const apiPrefixes = ["/publish", "/sites", "/health", "/feedback", "/auth", "/device"];
   if (apiPrefixes.some((p) => path === p || path.startsWith(p + "/"))) {
     return api.fetch(request, env, ctx);
   }

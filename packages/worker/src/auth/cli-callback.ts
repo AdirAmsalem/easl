@@ -21,7 +21,7 @@ type Ctx = Context<{ Bindings: Env }>;
 const LOOPBACK_PATH = "/callback";
 
 /** Lifetime of the minted CLI API key: 90 days (bounds a leaked/over-minted key; re-login mints a fresh one). */
-const CLI_KEY_TTL_SECONDS = 90 * 24 * 60 * 60;
+export const CLI_KEY_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 /**
  * Name of the SameSite=Strict double-submit CSRF cookie set when the consent page
@@ -35,82 +35,7 @@ const CSRF_COOKIE_NAME = "easl_cli_csrf";
 const CSRF_TOKEN_TTL_MS = CLI_CALLBACK_MARKER_TTL_MS;
 
 /** The fixed name every CLI-handshake key is minted under (see the mint below). */
-const CLI_KEY_NAME = "easl-cli";
-
-/**
- * Max active `easl-cli` keys per account. After each mint we revoke all but the
- * newest, bounding key sprawl into a self-rotating ceiling. 1 because re-running
- * `easl login` always supersedes the prior CLI key.
- */
-const MAX_ACTIVE_CLI_KEYS = 1;
-
-type ApiKeyListEntry = { id?: unknown; name?: unknown; createdAt?: unknown };
-
-/**
- * Revoke the account's older `easl-cli` keys, keeping only the newest
- * `MAX_ACTIVE_CLI_KEYS` (runs after a fresh mint). Replays the session cookie to
- * better-auth's `/api-key/list` + `/api-key/delete` (delete enforces
- * referenceId === session.user.id, so it only touches this owner's keys).
- * Best-effort: a failure never blocks handing the new key back — we only log.
- */
-async function pruneOldCliKeys(
-  auth: EaslAuth,
-  origin: string,
-  cookie: string,
-  keepKeyId: string | undefined,
-): Promise<void> {
-  try {
-    const listRes = await auth.handler(
-      new Request(`${origin}${AUTH_BASE_PATH}/api-key/list`, { headers: { cookie } }),
-    );
-    if (!listRes.ok) {
-      console.log(JSON.stringify({ event: "cli_callback_prune_list_failed", status: listRes.status }));
-      return;
-    }
-    const listed = await listRes.json<{ apiKeys?: ApiKeyListEntry[] }>();
-    const cliKeys = (listed.apiKeys ?? [])
-      .filter((k) => typeof k.id === "string" && k.name === CLI_KEY_NAME)
-      .map((k) => ({ id: k.id as string, createdAt: toMillis(k.createdAt) }))
-      // Newest first; the just-minted key sorts to the front so it survives.
-      .sort((a, b) => b.createdAt - a.createdAt);
-
-    // Always keep the freshly-minted key even if its createdAt ties an older one.
-    const ordered = keepKeyId
-      ? [...cliKeys.filter((k) => k.id === keepKeyId), ...cliKeys.filter((k) => k.id !== keepKeyId)]
-      : cliKeys;
-
-    const toRevoke = ordered.slice(MAX_ACTIVE_CLI_KEYS);
-    for (const key of toRevoke) {
-      const delRes = await auth.handler(
-        new Request(`${origin}${AUTH_BASE_PATH}/api-key/delete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", cookie, origin },
-          body: JSON.stringify({ keyId: key.id }),
-        }),
-      );
-      if (!delRes.ok) {
-        console.log(JSON.stringify({ event: "cli_callback_prune_delete_failed", status: delRes.status }));
-      }
-    }
-    if (toRevoke.length > 0) {
-      console.log(JSON.stringify({ event: "cli_callback_keys_rotated", revoked: toRevoke.length }));
-    }
-  } catch (err) {
-    // Best-effort: never let rotation failure block the handshake.
-    console.log(JSON.stringify({ event: "cli_callback_prune_error", error: String(err) }));
-  }
-}
-
-/** Coerce a better-auth `createdAt` (Date | ISO string | epoch) to epoch ms; 0 if unknown. */
-function toMillis(value: unknown): number {
-  if (value instanceof Date) return value.getTime();
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const n = Date.parse(value);
-    return Number.isNaN(n) ? 0 : n;
-  }
-  return 0;
-}
+export const CLI_KEY_NAME = "easl-cli";
 
 /**
  * Atomically claim a CLI-callback marker nonce for single use. Returns true if THIS
@@ -401,9 +326,6 @@ export async function handleCliAuthorize(c: Ctx): Promise<Response> {
     console.error(JSON.stringify({ event: "cli_authorize_key_missing" }));
     return c.json({ error: "Could not create an API key for this session." }, 502);
   }
-
-  // Cap + rotate: revoke all but the newest `easl-cli` key for this account.
-  await pruneOldCliKeys(auth, origin, cookie, created.id);
 
   const target = new URL(loopback);
   target.searchParams.set("key", created.key);
