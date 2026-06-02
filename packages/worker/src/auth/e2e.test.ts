@@ -880,3 +880,40 @@ describe("login page wiring for the CLI handshake", () => {
     expect(await blocked.text()).not.toContain("cli-callback");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The login page is contextual: when a visitor is bounced here from a private
+// easl's account gate (GET /auth/login?next=<easl-url>), it names the easl and
+// nudges them toward the email they published from. Direct visits stay generic.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("login page contextual copy for a private-easl gate redirect", () => {
+  it("names the easl (subdomain routing) and keeps the post-login redirect target", async () => {
+    const next = "https://my-slug.easl.dev/";
+    const res = await SELF.fetch(`http://localhost/auth/login?next=${encodeURIComponent(next)}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("This easl is private");
+    expect(html).toContain("my-slug.easl.dev");
+    // The sanitized `next` is still carried as the magic-link callbackURL.
+    expect(html).toContain(`data-next="${next}"`);
+  });
+
+  it("names the slug for path-based routing (local dev / previews)", async () => {
+    const res = await SELF.fetch(
+      "http://localhost/auth/login?next=" + encodeURIComponent("http://localhost/s/my-slug"),
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("This easl is private");
+    expect(html).toContain("my-slug");
+  });
+
+  it("falls back to generic copy on a direct visit with no next", async () => {
+    const res = await SELF.fetch("http://localhost/auth/login");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Sign in to easl");
+    expect(html).not.toContain("This easl is private");
+  });
+});
