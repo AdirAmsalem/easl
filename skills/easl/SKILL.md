@@ -90,7 +90,7 @@ The CLI auto-detects non-TTY environments and outputs JSON — no `--json` flag 
 | `--template <tpl>` | `minimal`, `report`, or `dashboard` |
 | `--slug <slug>` | Custom slug (lowercase alphanumeric + hyphens, 3-48 chars) |
 | `--ttl <seconds>` | Time to live in seconds |
-| `--private` | Account-private — only you (signed in) can view. Requires `easl login`. Combine with a password flag to require both gates |
+| `--private` | Account-private — only you (signed in) can view. Requires `easl login` (on a headless/remote machine: `easl login --device`). Combine with a password flag to require both gates |
 | `--password <pw>` | Password-protect the page with a value you choose. Works with or without `--private`. Mutually exclusive with `--generate-password` |
 | `--generate-password` | Password-protect the page with a strong password easl generates and shows once. Works with or without `--private`. Mutually exclusive with `--password` |
 | `--open` | Open in browser after publishing |
@@ -130,7 +130,7 @@ easl publish board-update.md --generate-password
 # Password-protected with a chosen password
 easl publish board-update.md --password "spring-harbor-77"
 
-# Account-private (requires `easl login`); add --password to require both gates
+# Account-private (requires `easl login`; headless/remote: `easl login --device`); add --password to require both gates
 easl publish board-update.md --private
 
 # Delete a site (non-interactive)
@@ -139,6 +139,15 @@ easl delete my-chart --yes
 # CI/CD (JSON output, no TTY)
 easl publish output.json --quiet
 ```
+
+## Authentication
+
+Only the **account gate** needs auth — public and password-protected pages publish anonymously. For `--private` (CLI) / `private: true` (MCP):
+
+- **Unattended (agents, CI):** set a pre-provisioned **`EASL_API_KEY`** (`easl_…`) in the environment. No interactive step, nothing to approve — this is the right path when no human is at a browser.
+- **Interactive (a human is present):** `easl login` (browser), or `easl login --device` on a headless/remote box (SSH, container). `--device` prints a URL + code and then **blocks polling until a human approves in a browser** (~10 min timeout) — do NOT run it unattended; it will hang waiting for an approval that never comes.
+
+Get an `EASL_API_KEY` by running either login flow once and copying the key from `~/.config/easl/credentials.json`.
 
 ## When to use easl
 

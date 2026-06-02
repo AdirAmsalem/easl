@@ -273,7 +273,7 @@ async function createShareLink(args: Json): Promise<Json> {
 
   if (!API_KEY) {
     throw new Error(
-      "Share links require an account. Set EASL_API_KEY in the server environment to log in.",
+      "Share links require an account. Set EASL_API_KEY in the server environment — get a key by running `easl login` (or `easl login --device` on a headless/remote machine) and copying it from ~/.config/easl/credentials.json.",
     );
   }
 
@@ -367,6 +367,13 @@ async function apiRequest<T>(
   const raw = await res.text();
   const data = raw ? safeJson(raw) : {};
   if (!res.ok) {
+    // A 401 on an authenticated action (e.g. private:true) almost always means no
+    // EASL_API_KEY is set — point the agent at how to obtain one.
+    if (res.status === 401 && !API_KEY) {
+      throw new Error(
+        `API ${method} ${path}: 401 — this needs an account. Set EASL_API_KEY in the server environment: run \`easl login\` (or \`easl login --device\` on a headless/remote machine) and copy the key from ~/.config/easl/credentials.json.`,
+      );
+    }
     throw new Error(`API ${method} ${path}: ${res.status} - ${JSON.stringify(data ?? raw)}`);
   }
   return (data ?? {}) as T;

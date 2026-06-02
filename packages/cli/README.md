@@ -65,6 +65,7 @@ Visitors enter the password once, then stay unlocked for 30 days. The password i
 
 ```bash
 easl login                                                  # one-time browser sign-in
+easl login --device                                         # headless/remote (e.g. over SSH): approve a code in any browser
 easl publish board-update.md --private                      # only you (signed in) can view
 easl publish board-update.md --private --password "pw"      # require BOTH login AND a password
 ```
@@ -89,7 +90,7 @@ easl open <slug>       # Open site in browser
 | `get <slug>` | Get site metadata from the API |
 | `delete <slug>` / `rm` | Delete a published site (`--yes` to skip confirmation) |
 | `open [slug]` | Open a site or easl.dev in your browser |
-| `login` | Sign in (magic link) and save an API key for this machine |
+| `login` | Sign in (magic link) and save an API key for this machine. Add `--device` on a headless/remote box (no local callback — approve a code in any browser) |
 | `logout` | Remove the saved API key |
 | `auth list-keys` / `auth revoke <id>` | List or revoke your account's API keys |
 | `share <slug>` | Mint a signed share link for an account-private site (`--expires-in 7d`) |

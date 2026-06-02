@@ -153,7 +153,8 @@ Pages are public by default. Two independent, composable gates lock one down —
 easl publish board-update.md --generate-password
 # => https://cool-maze.easl.dev   password: dust-arch-fern-dark-1181
 
-easl login
+easl login                                               # browser sign-in
+easl login --device                                      # headless / remote (no browser callback; approve a code anywhere)
 easl publish board-update.md --private                  # account-private
 easl publish board-update.md --private --password "pw"   # require BOTH gates
 ```

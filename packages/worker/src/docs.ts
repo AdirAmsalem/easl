@@ -553,7 +553,7 @@ export function docsPageHtml(domain: string): string {
             <tr><td><strong>Password gate</strong></td><td>Visitors enter the password once; a signed cookie keeps them in for 30 days (sliding). A <code>private + password</code> site requires both — share-link recipients still face the password prompt</td></tr>
             <tr><td><strong>Not cached / not indexed</strong></td><td>Gated pages (account-private or password-protected) skip the edge cache, send <code>noindex</code>, and skip OG-image generation</td></tr>
             <tr><td><strong>Rotate / toggle</strong></td><td><code>PATCH /sites/:slug/privacy</code> with the owner's session/Bearer key or the claim token; rotating the password invalidates existing unlock sessions</td></tr>
-            <tr><td><strong>CLI</strong></td><td>Password-protect with <code>--password &lt;pw&gt;</code> or <code>--generate-password</code>; go account-private with <code>--private</code> (after <code>easl login</code>). Passwords are saved to <code>~/.config/easl/sites.json</code> and shown again by <code>easl open &lt;slug&gt;</code></td></tr>
+            <tr><td><strong>CLI</strong></td><td>Password-protect with <code>--password &lt;pw&gt;</code> or <code>--generate-password</code>; go account-private with <code>--private</code> (after <code>easl login</code>; on a headless/remote box use <code>easl login --device</code>). Passwords are saved to <code>~/.config/easl/sites.json</code> and shown again by <code>easl open &lt;slug&gt;</code></td></tr>
           </tbody>
         </table></div>
 
