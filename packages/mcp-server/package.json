@@ -1,6 +1,6 @@
 {
   "name": "@easl/mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "easl MCP server — turn agent output into pages worth sharing",
   "license": "MIT",
   "repository": {
