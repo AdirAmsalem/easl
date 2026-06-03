@@ -151,6 +151,15 @@ async function pathBasedRouting(
     return html(docsPageHtml(env.DOMAIN));
   }
 
+  if (path === "/robots.txt") {
+    return new Response(`User-agent: *\nAllow: /\n`, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
+  }
+
   if (path === "/install.sh") {
     const upstream = await fetch("https://raw.githubusercontent.com/AdirAmsalem/easl/main/packages/cli/install.sh");
     return new Response(upstream.body, {
