@@ -1,6 +1,7 @@
 import { b64urlDecode, b64urlEncode, constantTimeEqual } from "./crypto";
 
-const PBKDF2_ITERATIONS = 600_000;
+// Cloudflare Workers caps PBKDF2 at 100k iterations; higher throws at runtime.
+const PBKDF2_ITERATIONS = 100_000;
 const PBKDF2_KEY_LEN = 32; // bytes (256-bit derived key)
 const PBKDF2_SALT_LEN = 16; // bytes
 

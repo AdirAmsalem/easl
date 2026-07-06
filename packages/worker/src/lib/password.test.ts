@@ -18,6 +18,14 @@ describe("hashPassword + verifyPassword", () => {
     expect(hash).toMatch(/^pbkdf2\$\d+\$[A-Za-z0-9_-]+\$[A-Za-z0-9_-]+$/);
   });
 
+  // Cloudflare Workers rejects PBKDF2 above 100k iterations at runtime (→ 500 on
+  // publish), but the local workerd test runtime doesn't enforce the cap.
+  it("hashes with at most 100_000 iterations (Cloudflare Workers PBKDF2 cap)", async () => {
+    const hash = await hashPassword("anything");
+    const iters = Number(hash.split("$")[1]);
+    expect(iters).toBeLessThanOrEqual(100_000);
+  });
+
   it("produces a different salt each time (so hashes differ for same password)", async () => {
     const a = await hashPassword("same");
     const b = await hashPassword("same");
