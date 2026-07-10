@@ -2,6 +2,11 @@
 
 All notable changes to easl will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Auto-generated slugs derive from `title` when provided (e.g. `q1-budget-report-a1b2`); falls back to the adjective-noun-hex format when no title is given or the title slugifies to empty/`preview-`-reserved
+
 ## [0.1.4] - 2026-03-30
 
 ### Removed
